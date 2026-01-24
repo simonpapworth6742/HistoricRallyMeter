@@ -26,14 +26,17 @@ long countsToCentimeters(int64_t counts, long calibration) {
 }
 
 double countsPerHourToKPH(long counts_per_hour, long calibration) {
-    // counts/h * (cal/1000/1000) m/count * 1000 m/km = counts/h * cal / 1000
-    double meters_per_hour = (counts_per_hour * calibration) / 1000.0;
-    return meters_per_hour / 1000.0;  // to km/h
+    // calibration = mm per 1000 counts
+    // m/count = calibration / 1000000
+    // meters/hour = counts_per_hour * calibration / 1000000
+    // km/hour = meters/hour / 1000 = counts_per_hour * calibration / 1e9
+    return (static_cast<double>(counts_per_hour) * calibration) / 1e9;
 }
 
 long kphToCountsPerHour(double kph, long calibration) {
-    // kph * 1000 m/km / (cal/1000/1000) m/count = kph * 1000 * 1000 * 1000 / cal
-    return static_cast<long>((kph * 1000000.0) / calibration);
+    // Inverse of countsPerHourToKPH
+    // counts_per_hour = kph * 1e9 / calibration
+    return static_cast<long>((kph * 1e9) / calibration);
 }
 
 int64_t getRallyTime_ms(const RallyState& state) {

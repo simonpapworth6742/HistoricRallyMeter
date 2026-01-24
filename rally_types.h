@@ -3,7 +3,10 @@
 
 #include <cstdint>
 #include <vector>
+
+#ifndef RALLY_NO_GTK
 #include <gtk/gtk.h>
+#endif
 
 // Forward declarations
 class I2CCounter;
@@ -24,7 +27,8 @@ struct CounterPoll {
     int64_t time_ms;
 };
 
-// Application data structure
+#ifndef RALLY_NO_GTK
+// Application data structure (requires GTK)
 struct AppData {
     I2CCounter* counter1;
     I2CCounter* counter2;
@@ -79,5 +83,6 @@ struct AppData {
     int updateCount = 0;
     int64_t lastUpdateCountTime_ms = 0;
 };
+#endif // RALLY_NO_GTK
 
 #endif // RALLY_TYPES_H

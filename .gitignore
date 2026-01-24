@@ -1,6 +1,8 @@
 # Build artifacts
 *.o
 HistoricRallyMeter
+run_tests
+test_rally_config.json
 
 # IDE files
 .vscode/
