@@ -4,19 +4,19 @@ This environment is a Raspberry Pi 5 with 4GB memory connected to 3 LSI ls7866c 
     Use high-resolution chrono timers for accurate measurement
     C++  version 20
 
-The application is ment to run on dual 400x1280 screens one connected to hdmi-A-1 and the other connected to DSI-2, however during development it has an hdmi 4k screen and a single 7inch (400x1280) screen connected to DSI-2. ensure that the co-pilots display window opens full screen on the screen connected to DSI-2 or if not found then it opens as a 400x1280 window, and that the drivers display remembers its start position,size and which display it is connected to.
+The application is meant to run on dual 1280x400 screens (wide and shallow), one connected to HDMI-A-1 and the other connected to DSI-2. During development it has an HDMI 4K screen and a single 7inch (1280x400) screen connected to DSI-2. The co-pilot display window opens fullscreen on DSI-2, or if not found opens as a 1280x400 window. The driver display remembers its size and which monitor it is on.
 
 ### Display Detection Implementation
-The application reads DRM connector information from `/sys/class/drm/` to identify the DSI-2 connector. It then matches GDK monitors to connectors by resolution (400x1280 or 1280x400 when rotated).
+The application reads DRM connector information from `/sys/class/drm/` to identify the DSI-2 connector. It then matches GDK monitors to connectors by resolution (1280x400 or 400x1280 depending on rotation).
 
 **Co-pilot display:**
 - Detects DSI-2 connector and opens fullscreen on that monitor
-- If DSI-2 not found, opens as a 400x1280 window
+- If DSI-2 not found, opens as a 1280x400 window
 
 **Driver display:**
-- Default size: 1280x400 (matching waveshare display dimensions)
+- Default size: 1280x400 (matching screen dimensions)
 - Remembers window size and which monitor it was on
-- Window position cannot be saved/restored on Wayland due to compositor security limitations (positions are always reported as 0,0)
+- Window position cannot be saved/restored on Wayland due to compositor security limitations
 - Window is centered on the saved monitor at startup
 
 ### Debug Configuration
@@ -117,19 +117,18 @@ Layout notes for 1280x400 (wide, shallow display):
 - Use large fonts for speed values as they are primary information for driver
 - All elements arranged horizontally to maximize use of wide display
 
-Co-Pilots display window (400 x 1280)
+Co-Pilots display window (1280 x 400)
 
-The co-pilot display window is narrow (400px) and tall (1280px). It has four screens:
+The co-pilot display window is wide (1280px) and shallow (400px), same as the driver display. It has four screens:
 1) Stage setup
 2) Calibration
 3) TwinMaster display (default)
 4) Date and Time setup
 
-Layout notes for 400x1280 (narrow, tall display):
-- All layouts are vertically stacked
-- Buttons are full-width or arranged in columns of 2
-- Text wraps within the narrow width
-- Scrollable list for segments if needed
+Layout notes for 1280x400 (wide, shallow display):
+- All layouts use horizontal arrangement to maximize width
+- Buttons arranged in rows across the bottom
+- Information displayed in columns or horizontal sections
 
 ---
 
@@ -138,21 +137,15 @@ Layout notes for 400x1280 (narrow, tall display):
 Allows target speed, distance and AutoNext for multiple segments of a rally stage to be setup.
 
 ```
-+--------------------------------------+
-|         STAGE SETUP                  |
-+--------------------------------------+
-| Speed(KPH)  Dist(m)   Auto   Action  |
-+--------------------------------------+
-|   xx.xx    xxx,xxx    [Y]   [delete] |
-|   xx.xx    xxx,xxx    [N]   [delete] |
-|   xx.xx    xxx,xxx    [Y]   [delete] |
-|          (scrollable list)           |
-+--------------------------------------+
-| Speed: [____] Dist: [______] A:[_]   |
-|            [add more]                |
-+--------------------------------------+
-|              [back]                  |
-+--------------------------------------+
++----------------------------------------------------------------------------------------------------------+
+|                                        STAGE SETUP                                                       |
++----------------------------------------------------------------------------------------------------------+
+|  Speed(KPH)      Distance(m)      AutoNext     |  Speed(KPH)      Distance(m)      AutoNext             |
+|    xx.xx          xxx,xxx           [Y] [del]  |    xx.xx          xxx,xxx           [N] [del]          |
+|    xx.xx          xxx,xxx           [Y] [del]  |    xx.xx          xxx,xxx           [Y] [del]          |
++----------------------------------------------------------------------------------------------------------+
+|  New segment:  Speed [______] KPH    Distance [________] m    Auto [_]    [add more]          [back]    |
++----------------------------------------------------------------------------------------------------------+
 ```
 
 The target speed is in KPH and the distance is in meters.
@@ -164,22 +157,15 @@ Changes in calibration have no effect on stored segment values.
 **2) Calibration Screen**
 
 ```
-+--------------------------------------+
-|         CALIBRATION                  |
-+--------------------------------------+
-|                                      |
-|  Total distance:                     |
-|     xxx,xxx m                        |
-|                                      |
-|  Total counts:                       |
-|     xxx,xxx,xxx                      |
-|                                      |
-+--------------------------------------+
-|  Actual distance covered:            |
-|     [__________] meters              |
-+--------------------------------------+
-|    [save]            [back]          |
-+--------------------------------------+
++----------------------------------------------------------------------------------------------------------+
+|                                        CALIBRATION                                                       |
++----------------------------------------------------------------------------------------------------------+
+|   Total distance: xxx,xxx m          |          Total counts: xxx,xxx,xxx                                |
++----------------------------------------------------------------------------------------------------------+
+|   Actual distance covered:  [______________] meters                                                      |
++----------------------------------------------------------------------------------------------------------+
+|                                    [save]                              [back]                            |
++----------------------------------------------------------------------------------------------------------+
 ```
 
 Min input: 500m, Max input: 100,000m.
@@ -190,29 +176,19 @@ new_cal = (input_meters * 1000 * 1000) / total_count_diff
 **3) TwinMaster Screen (Default)**
 
 ```
-+--------------------------------------+
-|                          hh:mm:ss    |
-+--------------------------------------+
-|  Total                               |
-|     xxx,xxx m                        |
-|     from hhh:mm:ss ago     [reset]   |
-+--------------------------------------+
-|  Trip                                |
-|     xxx,xxx m                        |
-|     from hhh:mm:ss ago     [reset]   |
-+--------------------------------------+
-|  Segment xx                          |
-|     next in xxx,xxx m                |
-+--------------------------------------+
-| [segments]  [next seg]  [calibrate]  |
-+--------------------------------------+
-|           [date/time]                |
-+--------------------------------------+
++----------------------------------------------------------------------------------------------------------+
+|   Total xxx,xxx m  from hhh:mm:ss ago [reset]  |  Trip xxx,xxx m  from hhh:mm:ss ago [reset]   hh:mm:ss  |
++----------------------------------------------------------------------------------------------------------+
+|   Segment xx  -  next segment in xxx,xxx m                                                               |
++----------------------------------------------------------------------------------------------------------+
+|          [segments]           [next segment]           [calibration]           [date/time]               |
++----------------------------------------------------------------------------------------------------------+
 ```
 
 - RallyClock (hh:mm:ss) displayed at top right
-- Total/Trip show distance and elapsed time
-- Segment shows distance to end (negative if past)
+- Total and Trip shown side by side with distance and elapsed time
+- Segment info on second row
+- Navigation buttons spread across bottom row
 - segments: goes to Stage Setup
 - next segment: advances segment, resets Trip
 - calibration: goes to Calibration screen
@@ -223,26 +199,15 @@ new_cal = (input_meters * 1000 * 1000) / total_count_diff
 **4) Date/Time Setup Screen**
 
 ```
-+--------------------------------------+
-|         DATE/TIME SETUP              |
-+--------------------------------------+
-|                                      |
-|  System Clock:                       |
-|     yyyy/mm/dd                       |
-|     hh:mm:ss                         |
-|                                      |
-+--------------------------------------+
-|  Rally Clock:                        |
-|     yyyy/mm/dd                       |
-|     hh:mm:ss                         |
-|                                      |
-+--------------------------------------+
-|  Set Rally Time:                     |
-|  Date: [__________]                  |
-|  Time: [__________]                  |
-+--------------------------------------+
-|  [set and save]        [back]        |
-+--------------------------------------+
++----------------------------------------------------------------------------------------------------------+
+|                                       DATE/TIME SETUP                                                    |
++----------------------------------------------------------------------------------------------------------+
+|   System Clock:  yyyy/mm/dd  hh:mm:ss          |   Rally Clock:  yyyy/mm/dd  hh:mm:ss                    |
++----------------------------------------------------------------------------------------------------------+
+|   Set Rally Time:    Date: [__________]    Time: [__________]                                            |
++----------------------------------------------------------------------------------------------------------+
+|                                [set and save]                          [back]                            |
++----------------------------------------------------------------------------------------------------------+
 ```
 
               set and save                                          back

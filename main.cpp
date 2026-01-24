@@ -150,12 +150,12 @@ static GdkMonitor* findDsi2Monitor(GdkDisplay* display) {
             }
         }
         
-        // Fallback: check by 400x1280 resolution if no DSI-2 connector info
+        // Fallback: check by 1280x400 resolution if no DSI-2 connector info
         if (!dsi2 && !dsi2_monitor) {
-            bool is_400x1280 = (geometry.width == 400 && geometry.height == 1280) ||
-                               (geometry.width == 1280 && geometry.height == 400);
-            if (is_400x1280) {
-                std::cout << "  -> Matched by 400x1280 resolution" << std::endl;
+            bool is_1280x400 = (geometry.width == 1280 && geometry.height == 400) ||
+                               (geometry.width == 400 && geometry.height == 1280);
+            if (is_1280x400) {
+                std::cout << "  -> Matched by 1280x400 resolution" << std::endl;
                 dsi2_monitor = monitor;
             }
         }
@@ -311,10 +311,10 @@ int main(int argc, char* argv[]) {
             gtk_window_fullscreen_on_monitor(GTK_WINDOW(app_data.copilotWindow), 
                 gdk_display_get_default_screen(display), dsi2_index);
         } else {
-            // No DSI-2 display found - use 400x1280 window
-            std::cout << "No DSI-2 found, opening co-pilot as 400x1280 window" << std::endl;
-            gtk_window_set_default_size(GTK_WINDOW(app_data.copilotWindow), 400, 1280);
-            gtk_window_resize(GTK_WINDOW(app_data.copilotWindow), 400, 1280);
+            // No DSI-2 display found - use 1280x400 window
+            std::cout << "No DSI-2 found, opening co-pilot as 1280x400 window" << std::endl;
+            gtk_window_set_default_size(GTK_WINDOW(app_data.copilotWindow), 1280, 400);
+            gtk_window_resize(GTK_WINDOW(app_data.copilotWindow), 1280, 400);
         }
         
         // Position driver window (restore saved position and monitor)
