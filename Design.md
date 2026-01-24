@@ -89,93 +89,161 @@ The application will have two display windows, one for the driver and one for th
 calculation of current speed, with too little time passed since a start any speed calc will be too inaccurate to be useful, therefor within the polling loop of the counters a count should be remembered for about 2 seconds, by placing it into an array[10] of counter values and time polled, simply done on first poll the time of the poll and the value of the poll should be stored in the first position of the array. Each poll if more than 0.2 second has passed since the time in the first position of the array, then the array should be push down one, the last value lost, and the current value and time stored in the first array position. The 10th value of the array count and time should be available via class properties, to be used to calculate the current speed compared to the most recent poll, and not the value in the array position 1. If the time of the 10th position of the array is zero / empty / blank then the current speed should be shown as “--.—". Give a 20% time tolerance when checking the 10th position of the array contains a time over 80% of the total sampling period (i.e., age >= 1280ms, which is 80% of 2s minus 20% tolerance). 
 
 
-Drivers display Window
 
-The drivers display window, will show the average speed since the last reset of the Total, the current speed calculated from approximately the last 10 seconds of driving, and the average speed since the last Trip reset, and the average speed since the start of the current segment. The target speed for the current segment and how many seconds ahead or behind target average speed by calculating how many counts difference there is between the actual count now and the count that it should be based upon the time since segment start and the target speed for the segment. Along with the ETA = remaining segment distance / (last-10s average speed) to the next segment. If there is no current segment defined or more than 1000m past end of the last segment, then display “--.—” for Seg. For the next segment line of the display hide it if there is no next segment and if last-10s speed = 0: '--.—'; negative remaining: 'Over by xx:xx:xx'.
+Drivers display Window (1280 x 400)
 
- 
+The drivers display window is wide (1280px) and shallow (400px). It shows the average speed since the last reset of the Total, the current speed calculated from approximately the last 10 seconds of driving, the average speed since the last Trip reset, and the average speed since the start of the current segment. The target speed for the current segment and how many seconds ahead or behind target average speed by calculating how many counts difference there is between the actual count now and the count that it should be based upon the time since segment start and the target speed for the segment. Along with the ETA = remaining segment distance / (last-10s average speed) to the next segment. If there is no current segment defined or more than 1000m past end of the last segment, then display "--.--" for Seg. For the next segment line of the display hide it if there is no next segment and if last-10s speed = 0: '--.--'; negative remaining: 'Over by xx:xx:xx'.
 
-Seconds ahead behind formula: ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_h; diff = actual - ideal; seconds = diff / (target_counts_h / 3600.0). positive numbers means travelling to fast.
+Seconds ahead behind formula: ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_h; diff = actual - ideal; seconds = diff / (target_counts_h / 3600.0). positive numbers means travelling too fast.
 
 Updates per second is the number of times this display has been updated in a second, Rolling count of driver display render/update calls over the last full second.
 
+```
++----------------------------------------------------------------------------------------------------------+
+|   Current          Trip            Seg.           Total                                         (KPH)    |
+|    xx.xx           xx.xx          xx.xx           xx.xx                                                  |
++----------------------------------------------------------------------------------------------------------+
+|   target xx.xx   +/- hh:mm:ss       |    next: xx.xx in xxx,xxx m  ETA hh:mm:ss                          |
++----------------------------------------------------------------------------------------------------------+
+|   updates/sec: xxx                                                                          [KPH/MPH]   |
++----------------------------------------------------------------------------------------------------------+
+```
 
-Current   Trip          Seg.    Total   (<units>)
+Layout notes for 1280x400 (wide, shallow display):
+- Row 1: Speed headers spread horizontally, units indicator (KPH/MPH) on far right
+- Row 2: Four large speed values evenly distributed across width
+- Row 3: Target speed and ahead/behind on left half, next segment info on right half
+- Row 4: Updates counter on left, unit toggle button on far right
+- Use large fonts for speed values as they are primary information for driver
+- All elements arranged horizontally to maximize use of wide display
 
-xx.xx        xx.xx      xx.xx     xx.xx
+Co-Pilots display window (400 x 1280)
 
-target xx.xx  +- xxxxx seconds
+The co-pilot display window is narrow (400px) and tall (1280px). It has four screens:
+1) Stage setup
+2) Calibration
+3) TwinMaster display (default)
+4) Date and Time setup
 
-next segment speed xx.xx in xxx,xxx m after hh:mm:ss
-updates per second:xxx                                                             kph / mph
+Layout notes for 400x1280 (narrow, tall display):
+- All layouts are vertically stacked
+- Buttons are full-width or arranged in columns of 2
+- Text wraps within the narrow width
+- Scrollable list for segments if needed
 
+---
 
-make sure the <units> displays the currently selected units, and that the header row aligns with the measures below it. 
+**1) Stage Setup Screen**
 
-Co-Pilots display window
+Allows target speed, distance and AutoNext for multiple segments of a rally stage to be setup.
 
-The co-pilot display window will be where the 1) stage is setup, 2) the calibration of the distance travelled per revolution of the wheels or gearbox box sensor, 3) and the normal default screen used, while the car is moving, by the co-pilot to display the TwinMaster display, 4) Date and Time setup screen to allow adjustment of the RallyClock time to actual local time from the operating system.
+```
++--------------------------------------+
+|         STAGE SETUP                  |
++--------------------------------------+
+| Speed(KPH)  Dist(m)   Auto   Action  |
++--------------------------------------+
+|   xx.xx    xxx,xxx    [Y]   [delete] |
+|   xx.xx    xxx,xxx    [N]   [delete] |
+|   xx.xx    xxx,xxx    [Y]   [delete] |
+|          (scrollable list)           |
++--------------------------------------+
+| Speed: [____] Dist: [______] A:[_]   |
+|            [add more]                |
++--------------------------------------+
+|              [back]                  |
++--------------------------------------+
+```
 
+The target speed is in KPH and the distance is in meters.
+Counts per hour = (input_kph * 1000 * 3600) / (cal / 1000)
+Changes in calibration have no effect on stored segment values.
 
-Stage setup this will allow target speed, distance and AutoNext for multiple segments of a rally stage to be setup (buttons are underlined and in bold)
-Target avg. speed           Distance(m)     AutoNext
+---
 
-xx.xx                    xxx,xxx                Y/N                     delete
+**2) Calibration Screen**
 
-xx.xx                    xxx,xxx                Y/N                     delete
+```
++--------------------------------------+
+|         CALIBRATION                  |
++--------------------------------------+
+|                                      |
+|  Total distance:                     |
+|     xxx,xxx m                        |
+|                                      |
+|  Total counts:                       |
+|     xxx,xxx,xxx                      |
+|                                      |
++--------------------------------------+
+|  Actual distance covered:            |
+|     [__________] meters              |
++--------------------------------------+
+|    [save]            [back]          |
++--------------------------------------+
+```
 
-add more                                                                   back
+Min input: 500m, Max input: 100,000m.
+new_cal = (input_meters * 1000 * 1000) / total_count_diff
 
-              The target speed is in KPH and the distance is in meters, there is no adjust for units here yet.
+---
 
-Counts per hour = (input_kph * 1000 * 3600) / (cal / 1000) (m/h to counts/h, since cal is mm/1000 counts → m/count = cal/1e6).
+**3) TwinMaster Screen (Default)**
 
-Changes in calibration have no effect og these values.
+```
++--------------------------------------+
+|                          hh:mm:ss    |
++--------------------------------------+
+|  Total                               |
+|     xxx,xxx m                        |
+|     from hhh:mm:ss ago     [reset]   |
++--------------------------------------+
+|  Trip                                |
+|     xxx,xxx m                        |
+|     from hhh:mm:ss ago     [reset]   |
++--------------------------------------+
+|  Segment xx                          |
+|     next in xxx,xxx m                |
++--------------------------------------+
+| [segments]  [next seg]  [calibrate]  |
++--------------------------------------+
+|           [date/time]                |
++--------------------------------------+
+```
 
- 
+- RallyClock (hh:mm:ss) displayed at top right
+- Total/Trip show distance and elapsed time
+- Segment shows distance to end (negative if past)
+- segments: goes to Stage Setup
+- next segment: advances segment, resets Trip
+- calibration: goes to Calibration screen
+- reset: resets counters and time
 
+---
 
- 
+**4) Date/Time Setup Screen**
 
-2) Calibration, will use the Total distance travelled using the current calibration and allow for the RallyCalibration distance to be entered and saved. When calibration is changed the stage segments are not updated with the new calibration, and neither is any already displayed value but any update will use the new calibration. (buttons are underlined and in bold, inputs are in bold)
-
-              Total distance xxx,xxx m (xxx,xxx,xxx count)
-
-              Input Rally distance actually covered xxxxxx meters
-
-              save                                                                             back
-
-The minimum number of meters actually covered allowed is 500, the maximum is 100,000. The conversion to the calibration is as defined in the calibration section above.
-
-
-3) - the normal co-pilot display. This is a TwinMaster meter distance travelled display one with two lines of current data and several buttons. (buttons are underlined and in bold)
-
-                                                                                              hh:mm:ss
-                             Total xxx,xxx m from hhh:mm:ss ago    reset
-
-                             Trip   xxx,xxx m from hhh:mm:ss ago   reset
-
-Segment xx – next segment in xxx,xxx m
-segments      next segment               calibration                           
-
-
-The top line of the display is distance from the last total distance reset, the second line the distance from the last trip reset. Next segment always displays the distance to the end of the current segment, negative if past the end. The hh:mm:ss at the top left is the RallyClock.
-
-segments button goes to screen 1)
-
-next segment button increments to the next segment, sets the target average speed and resets the Trip as well.
-
-calibration button goes to the calibration screen
-
-reset resets the total or Trip start_counters and sets the appropriate start_time
-
-4) Date time setup screen allows the RallyClock offset to be calculated. (buttons are underlined and in bold, inputs are in bold)
-
- 
-
-              System Clock   yyyy/mm/dd      hh:mm:ss
-
-              RallyClock        yyyy/mm/dd    hh:mm:ss
+```
++--------------------------------------+
+|         DATE/TIME SETUP              |
++--------------------------------------+
+|                                      |
+|  System Clock:                       |
+|     yyyy/mm/dd                       |
+|     hh:mm:ss                         |
+|                                      |
++--------------------------------------+
+|  Rally Clock:                        |
+|     yyyy/mm/dd                       |
+|     hh:mm:ss                         |
+|                                      |
++--------------------------------------+
+|  Set Rally Time:                     |
+|  Date: [__________]                  |
+|  Time: [__________]                  |
++--------------------------------------+
+|  [set and save]        [back]        |
++--------------------------------------+
+```
 
               set and save                                          back
 
