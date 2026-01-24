@@ -156,4 +156,128 @@ reset resets the total or Trip start_counters and sets the appropriate start_tim
 
               set and save                                          back
 
- 
+## Unit Tests
+
+### I2C Counter Tests
+- Read 32-bit value from CNTR_1 at address 0x70, register 0x07
+- Read 32-bit value from CNTR_2 at address 0x71, register 0x07
+- Verify big-endian to host byte order conversion is correct
+- Verify polling returns same value if called within 5ms
+- Verify polling returns new value if called after 5ms
+
+### Config File Tests
+- Load config from valid JSON file with all fields present
+- Load config from JSON file with missing fields (defaults applied)
+- Load config when file does not exist (all defaults applied)
+- Load config with segments array containing multiple segments
+- Load config with empty segments array
+- Save config and verify all fields written correctly
+- Save config with multiple segments and verify JSON structure
+- Verify calibration defaults to 600000 when missing
+- Verify units defaults to false (KPH) when missing
+- Verify segment_current_number defaults to -1 when missing/empty segments
+
+### Distance Calculation Tests
+- Single counter mode: distance = CNTR_1 - start_cntr1
+- Dual counter mode: distance = ((CNTR_1 - start_cntr1) + (CNTR_2 - start_cntr2)) / 2
+- Verify integer math (no floating point until final display)
+- Distance in meters = (count_diff * calibration) / 1000 / 1000
+- Distance in centimetres = (count_diff * calibration) / 10000
+- Handle 32-bit counter wrap-around correctly
+
+### Calibration Tests
+- Default calibration value is 600000
+- New calibration = (input_meters * 1000 * 1000) / total_count_diff
+- Minimum input distance is 500 meters
+- Maximum input distance is 100,000 meters
+- Calibration change does not affect stored segment target speeds
+- Calibration change affects all subsequent distance/speed calculations
+
+### Speed Calculation Tests
+- Speed in counts/hour from counts and time_ms
+- Convert counts/hour to KPH: (counts_per_hour * calibration) / 1e9
+- Convert counts/hour to MPH: KPH * 100000 / 160934
+- 100 KPH displays as "62.14" MPH after unit switch
+- Average speed since Total reset
+- Average speed since Trip reset
+- Average speed since Segment start
+- Speed displays "--.--" when time elapsed is zero
+
+### Current Speed Rolling Average Tests
+- First poll stores value in array position 0
+- Array shifts down when >200ms since position 0 timestamp
+- Array does not shift if <200ms since position 0 timestamp
+- 10th position (index 9) available for speed calculation
+- get10th() returns {0,0,0} when position 9 time is zero
+- get10th() returns {0,0,0} when age < 1280ms (80% of 2s with 20% tolerance)
+- get10th() returns valid data when age >= 1280ms
+- getMostRecent() returns actual latest I2C read, not array position 0
+- Current speed = (most_recent - 10th) counts / time difference
+- Display "--.--" when 10th position is invalid
+
+### Segment Management Tests
+- Add segment with target_speed, distance, autoNext
+- Delete segment from list
+- Segment target_speed stored as counts per hour
+- Counts per hour = (input_kph * 1000 * 3600) / (calibration / 1000)
+- AutoNext=true advances segment when distance reached
+- AutoNext=false requires manual next segment button
+- Skip multiple segments if polling interval causes overshoot
+- No current segment (index -1) shows "--.--" for Seg speed
+- Past end of last segment by >1000m shows "--.--" for Seg speed
+
+### Ahead/Behind Calculation Tests
+- ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_per_hour
+- diff = actual_counts - ideal_counts
+- seconds = diff / (target_counts_per_hour / 3600.0)
+- Positive seconds means travelling too fast (ahead)
+- Negative seconds means travelling too slow (behind)
+- Display "+xxxxx" for ahead, "-xxxxx" for behind
+
+### ETA Calculation Tests
+- ETA = remaining_segment_distance / current_speed
+- Display "--.--" when current speed is zero
+- Display "Over by hh:mm:ss" when past segment end (negative remaining)
+- Format ETA as hh:mm:ss
+
+### RallyClock Tests
+- RallyClock = system_time + rallyTimeOffset_ms
+- Default rallyTimeOffset_ms is 0
+- Set and save updates rallyTimeOffset_ms correctly
+- RallyClock displays in 24-hour format (hh:mm:ss)
+
+### Reset Functionality Tests
+- Total reset sets total_start_cntr1 = current CNTR_1
+- Total reset sets total_start_cntr2 = current CNTR_2
+- Total reset sets total_start_time_ms = current time
+- Trip reset sets trip_start_cntr1/cntr2 and trip_start_time_ms
+- Next segment resets Trip counters and time
+- Next segment increments segment_current_number
+- Next segment sets segment_start counters and time
+
+### Unit Toggle Tests
+- Toggle units from KPH to MPH
+- Toggle units from MPH to KPH
+- All speed displays update on next refresh after toggle
+- Header row shows current unit selection
+
+### Display Update Tests
+- Updates per second counts render calls in last full second
+- Rolling count resets each second
+- Driver display updates all speed values each refresh
+- Co-pilot TwinMaster updates distance and time values
+
+### Time Formatting Tests
+- Format milliseconds as hh:mm:ss
+- Format milliseconds as hhh:mm:ss for durations over 99 hours
+- All times display in 24-hour format
+- Rally clock displays current time with offset applied
+
+### Edge Cases
+- Handle CNTR_1 or CNTR_2 read failure gracefully
+- Handle config file corruption (use defaults)
+- Handle zero calibration (prevent divide by zero)
+- Handle empty segments list
+- Handle segment_current_number beyond segments array bounds
+- Handle very large counter values approaching 32-bit limit
+
