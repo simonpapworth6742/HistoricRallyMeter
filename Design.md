@@ -177,22 +177,29 @@ new_cal = (input_meters * 1000 * 1000) / total_count_diff
 
 ```
 +----------------------------------------------------------------------------------------------------------+
-|   Total xxx,xxx m  from hhh:mm:ss ago [reset]  |  Trip xxx,xxx m  from hhh:mm:ss ago [reset]   hh:mm:ss  |
+|                                                                                            hh:mm:ss      |
++----------------------------------------------------------------------------------------------------------+
+|       TOTAL:  xxx,xxx m   from hhh:mm:ss ago                                       [reset]               |
++----------------------------------------------------------------------------------------------------------+
+|       Trip:   xxx,xxx m   from hhh:mm:ss ago                                       [reset]               |
 +----------------------------------------------------------------------------------------------------------+
 |   Segment xx  -  next segment in xxx,xxx m                                                               |
 +----------------------------------------------------------------------------------------------------------+
-|          [segments]           [next segment]           [calibration]           [date/time]               |
+|   [stage go]      [segments]       [next segment]       [calibration]       [date/time]                  |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
 - RallyClock (hh:mm:ss) displayed at top right
-- Total and Trip shown side by side with distance and elapsed time
-- Segment info on second row
-- Navigation buttons spread across bottom row
-- segments: goes to Stage Setup
-- next segment: advances segment, resets Trip
-- calibration: goes to Calibration screen
-- reset: resets counters and time
+- Total row displayed prominently with large font, distance and elapsed time, reset button on right
+- Trip row below Total with slightly smaller font, distance and elapsed time, reset button on right
+- Segment info on third row
+- Navigation buttons spread across bottom row:
+  - stage go: resets Total (counters + start time), Trip (counters + start time), and Segment (counters + start time) - use at start of a rally stage
+  - segments: goes to Stage Setup
+  - next segment: advances segment, resets Trip
+  - calibration: goes to Calibration screen
+  - date/time: goes to Date/Time Setup screen
+- reset buttons: reset respective counters and start time only
 
 ---
 

@@ -49,6 +49,34 @@ void on_trip_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     ConfigFile::save(*data->state);
 }
 
+void on_stage_go(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    auto current_poll = data->poller->getMostRecent();
+    int64_t current_time = getRallyTime_ms(*data->state);
+    
+    // Reset Total
+    data->state->total_start_cntr1 = current_poll.cntr1;
+    data->state->total_start_cntr2 = current_poll.cntr2;
+    data->state->total_start_time_ms = current_time;
+    
+    // Reset Trip
+    data->state->trip_start_cntr1 = current_poll.cntr1;
+    data->state->trip_start_cntr2 = current_poll.cntr2;
+    data->state->trip_start_time_ms = current_time;
+    
+    // Reset Segment
+    data->state->segment_start_cntr1 = current_poll.cntr1;
+    data->state->segment_start_cntr2 = current_poll.cntr2;
+    data->state->segment_start_time_ms = current_time;
+    
+    // Reset to first segment if segments exist
+    if (!data->state->segments.empty()) {
+        data->state->segment_current_number = 0;
+    }
+    
+    ConfigFile::save(*data->state);
+}
+
 void on_next_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     if (data->state->segment_current_number < static_cast<long>(data->state->segments.size()) - 1) {

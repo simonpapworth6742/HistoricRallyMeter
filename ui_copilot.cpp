@@ -17,7 +17,8 @@ static void applyCopilotCSS() {
         ".title-label { font-size: 20px; font-weight: bold; }"
         ".info-label { font-size: 18px; }"
         ".clock-label { font-size: 24px; font-weight: bold; }"
-        ".distance-label { font-size: 22px; font-weight: bold; }"
+        ".total-label { font-size: 32px; font-weight: bold; }"
+        ".trip-label { font-size: 24px; font-weight: bold; }"
         ".segment-label { font-size: 18px; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
@@ -50,7 +51,7 @@ void updateCopilotDisplay(AppData* data) {
     std::string total_duration = formatDuration(total_duration_ms);
     
     std::stringstream ss;
-    ss << "Total: " << total_m << " m  from " << total_duration << " ago";
+    ss << "TOTAL:  " << total_m << " m   from " << total_duration << " ago";
     gtk_label_set_text(data->totalDistLabel, ss.str().c_str());
     
     // Trip distance
@@ -62,7 +63,7 @@ void updateCopilotDisplay(AppData* data) {
     std::string trip_duration = formatDuration(trip_duration_ms);
     
     ss.str("");
-    ss << "Trip: " << trip_m << " m  from " << trip_duration << " ago";
+    ss << "Trip:   " << trip_m << " m   from " << trip_duration << " ago";
     gtk_label_set_text(data->tripDistLabel, ss.str().c_str());
     
     // Segment info
@@ -86,54 +87,60 @@ void updateCopilotDisplay(AppData* data) {
 
 // Create TwinMaster screen - horizontal layout for 1280x400
 GtkWidget* createTwinMasterScreen(AppData* data) {
-    GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_container_set_border_width(GTK_CONTAINER(screen), 15);
     
-    // Row 1: Total and Trip side by side with reset buttons
-    GtkWidget* distanceRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 40);
-    gtk_box_pack_start(GTK_BOX(screen), distanceRow, TRUE, TRUE, 0);
+    // Row 1: Total (large font) with reset button on right
+    GtkWidget* totalRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(screen), totalRow, TRUE, TRUE, 0);
     
-    // Total section
-    GtkWidget* totalBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    data->totalDistLabel = GTK_LABEL(gtk_label_new("Total: 0 m  from 00:00:00 ago"));
+    data->totalDistLabel = GTK_LABEL(gtk_label_new("TOTAL:  0 m   from 00:00:00 ago"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistLabel)), "total-label");
+    gtk_widget_set_halign(GTK_WIDGET(data->totalDistLabel), GTK_ALIGN_START);
+    
     GtkWidget* totalResetBtn = gtk_button_new_with_label("reset");
     g_signal_connect(totalResetBtn, "clicked", G_CALLBACK(on_total_reset), data);
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistLabel)), "distance-label");
-    gtk_box_pack_start(GTK_BOX(totalBox), GTK_WIDGET(data->totalDistLabel), TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(totalBox), totalResetBtn, FALSE, FALSE, 0);
     
-    // Trip section
-    GtkWidget* tripBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    data->tripDistLabel = GTK_LABEL(gtk_label_new("Trip: 0 m  from 00:00:00 ago"));
+    gtk_box_pack_start(GTK_BOX(totalRow), GTK_WIDGET(data->totalDistLabel), TRUE, TRUE, 20);
+    gtk_box_pack_end(GTK_BOX(totalRow), totalResetBtn, FALSE, FALSE, 20);
+    
+    // Row 2: Trip (smaller font) with reset button on right
+    GtkWidget* tripRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(screen), tripRow, TRUE, TRUE, 0);
+    
+    data->tripDistLabel = GTK_LABEL(gtk_label_new("Trip:   0 m   from 00:00:00 ago"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripDistLabel)), "trip-label");
+    gtk_widget_set_halign(GTK_WIDGET(data->tripDistLabel), GTK_ALIGN_START);
+    
     GtkWidget* tripResetBtn = gtk_button_new_with_label("reset");
     g_signal_connect(tripResetBtn, "clicked", G_CALLBACK(on_trip_reset), data);
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripDistLabel)), "distance-label");
-    gtk_box_pack_start(GTK_BOX(tripBox), GTK_WIDGET(data->tripDistLabel), TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(tripBox), tripResetBtn, FALSE, FALSE, 0);
     
-    gtk_box_pack_start(GTK_BOX(distanceRow), totalBox, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(distanceRow), tripBox, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(tripRow), GTK_WIDGET(data->tripDistLabel), TRUE, TRUE, 20);
+    gtk_box_pack_end(GTK_BOX(tripRow), tripResetBtn, FALSE, FALSE, 20);
     
-    // Row 2: Segment info
+    // Row 3: Segment info
     data->segmentInfoLabel = GTK_LABEL(gtk_label_new("No active segment"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->segmentInfoLabel)), "segment-label");
     gtk_widget_set_halign(GTK_WIDGET(data->segmentInfoLabel), GTK_ALIGN_START);
-    gtk_box_pack_start(GTK_BOX(screen), GTK_WIDGET(data->segmentInfoLabel), FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(screen), GTK_WIDGET(data->segmentInfoLabel), FALSE, FALSE, 5);
     
-    // Row 3: Navigation buttons spread across
-    GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+    // Row 4: Navigation buttons spread across (with stage go)
+    GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
     gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 0);
     
+    GtkWidget* stageGoBtn = gtk_button_new_with_label("stage go");
     GtkWidget* segmentsBtn = gtk_button_new_with_label("segments");
     GtkWidget* nextSegBtn = gtk_button_new_with_label("next segment");
     GtkWidget* calBtn = gtk_button_new_with_label("calibration");
     GtkWidget* datetimeBtn = gtk_button_new_with_label("date/time");
     
+    g_signal_connect(stageGoBtn, "clicked", G_CALLBACK(on_stage_go), data);
     g_signal_connect(segmentsBtn, "clicked", G_CALLBACK(on_show_segments), data);
     g_signal_connect(nextSegBtn, "clicked", G_CALLBACK(on_next_segment), data);
     g_signal_connect(calBtn, "clicked", G_CALLBACK(on_show_calibration), data);
     g_signal_connect(datetimeBtn, "clicked", G_CALLBACK(on_show_datetime), data);
     
+    gtk_box_pack_start(GTK_BOX(buttonBox), stageGoBtn, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(buttonBox), segmentsBtn, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(buttonBox), nextSegBtn, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(buttonBox), calBtn, TRUE, TRUE, 0);
