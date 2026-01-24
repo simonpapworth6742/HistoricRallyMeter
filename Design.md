@@ -19,19 +19,40 @@ The application reads DRM connector information from `/sys/class/drm/` to identi
 - Window position cannot be saved/restored on Wayland due to compositor security limitations
 - Window is centered on the saved monitor at startup
 
-### Compositor Configuration
-Raspberry Pi OS uses the labwc Wayland compositor. By default, labwc visually distinguishes inactive windows (greyed appearance). To prevent this:
+### Preventing Inactive Window Dimming
 
-Create/edit `~/.config/labwc/themerc-override`:
-```
-# Make inactive windows appear the same as active
-window.inactive.border.color: #aaaaaa
-window.inactive.title.bg.color: #e1dedb
-window.inactive.label.text.color: #000000
-window.inactive.button.unpressed.image.color: #000000
+By default, GTK3 applies a "backdrop" state to unfocused windows, which dims the content and can make text harder to read. Since this application uses two windows that need to be visible simultaneously, this dimming effect is undesirable.
+
+**Solution: GTK CSS Override**
+
+Create `~/.config/gtk-3.0/gtk.css`:
+```css
+/* Prevent GTK from changing unfocused (backdrop) window appearance */
+/* Keep the same colors as when focused */
+
+.background:backdrop {
+    background-color: @theme_bg_color;
+}
+
+*:backdrop {
+    color: @theme_fg_color;
+    -gtk-icon-effect: none;
+}
+
+label:backdrop,
+entry:backdrop,
+button:backdrop {
+    color: @theme_fg_color;
+}
 ```
 
-After changing, reconfigure labwc with: `labwc --reconfigure` or restart the session.
+This CSS override tells GTK to use the normal theme colors (foreground and background) for windows in the backdrop state, rather than the dimmed variants. The change takes effect immediately for newly launched GTK3 applications.
+
+An example file `gtk-example-gtk.css` is included in this project - copy it to `~/.config/gtk-3.0/gtk.css`.
+
+**Optional: Labwc Titlebar Theme**
+
+The labwc compositor also styles inactive window titlebars differently. To make them match active windows, create `~/.config/labwc/themerc-override` with settings that copy active window colors to inactive. After changing, run `labwc --reconfigure`.
 
 ### Debug Configuration
 VS Code/Cursor debug configuration is provided in `.vscode/`:
