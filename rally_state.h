@@ -23,6 +23,13 @@ public:
     long rallyTimeOffset_ms = 0;  // offset in milliseconds
     std::vector<Segment> segments;
     
+    // Driver window position/size (remembered across sessions)
+    int driver_window_x = -1;      // -1 = not set
+    int driver_window_y = -1;
+    int driver_window_width = 1280;
+    int driver_window_height = 400;
+    int driver_window_monitor = 0;
+    
     RallyState();
 };
 

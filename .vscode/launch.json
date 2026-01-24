@@ -1,0 +1,66 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug HistoricRallyMeter",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/HistoricRallyMeter_debug",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [
+                {
+                    "name": "DISPLAY",
+                    "value": ":0"
+                }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description": "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "Build Debug",
+            "miDebuggerPath": "/usr/bin/gdb"
+        },
+        {
+            "name": "Debug Unit Tests",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/run_tests",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "Build Tests",
+            "miDebuggerPath": "/usr/bin/gdb"
+        },
+        {
+            "name": "Attach to Process",
+            "type": "cppdbg",
+            "request": "attach",
+            "program": "${workspaceFolder}/HistoricRallyMeter_debug",
+            "processId": "${command:pickProcess}",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb"
+        }
+    ]
+}

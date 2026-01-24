@@ -272,7 +272,8 @@ GtkWidget* createDateTimeScreen(AppData* data) {
 GtkWidget* createCopilotWindow(AppData* data) {
     GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "Co-Pilot Display");
-    gtk_window_set_default_size(GTK_WINDOW(window), 600, 400);
+    // Default size matches waveshare 400x1280 display; may be overridden in main.cpp
+    gtk_window_set_default_size(GTK_WINDOW(window), 400, 1280);
     
     GtkWidget* mainBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_add(GTK_CONTAINER(window), mainBox);

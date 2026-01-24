@@ -4,6 +4,9 @@ This environment is a Raspberry Pi 5 with 4GB memory connected to 3 LSI ls7866c 
     Use high-resolution chrono timers for accurate measurement
     C++  version 20
 
+The application is ment to run on dual 400x1280 screens one connected to hdmi-A-1 and the other connected to DSI-2, however during development it has an hdmi 4k screen and a single 7inch (400x1280) screen connected to DSI-2. ensure that the co-pilots display window opens full screen on the screen connected to DSI-2 or if not found then it opens as a 400x1280 window, and that the drivers display remembers its start position,size and which display it is connected to.
+
+
 ## Build Requirements
 
 - GTK3 development libraries (`libgtk-3-dev`)
@@ -130,7 +133,7 @@ The minimum number of meters actually covered allowed is 500, the maximum is 100
                                                                                               hh:mm:ss
                              Total xxx,xxx m from hhh:mm:ss ago    reset
 
-                             Trip   xxx,xxx m from hhh:mm:ss ago     reset
+                             Trip   xxx,xxx m from hhh:mm:ss ago   reset
 
 Segment xx – next segment in xxx,xxx m
 segments      next segment               calibration                           
