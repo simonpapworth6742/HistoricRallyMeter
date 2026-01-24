@@ -273,11 +273,60 @@ reset resets the total or Trip start_counters and sets the appropriate start_tim
 - All times display in 24-hour format
 - Rally clock displays current time with offset applied
 
-### Edge Cases
-- Handle CNTR_1 or CNTR_2 read failure gracefully
-- Handle config file corruption (use defaults)
-- Handle zero calibration (prevent divide by zero)
-- Handle empty segments list
-- Handle segment_current_number beyond segments array bounds
-- Handle very large counter values approaching 32-bit limit
+### Stage Setup Screen Tests
+- Input target speed in KPH and verify stored as counts per hour
+- Input distance in meters and verify stored as counts
+- Toggle autoNext Y/N and verify boolean stored correctly
+- Add new segment to end of list
+- Delete segment from middle of list
+- Delete last segment from list
+- Verify segment list displays all segments with correct values
+- Back button returns to TwinMaster without losing unsaved changes
+
+### Calibration Screen Tests
+- Display total distance in meters using current calibration
+- Display total count difference (raw counter value)
+- Input validation rejects values below 500 meters
+- Input validation rejects values above 100,000 meters
+- Save button calculates and stores new calibration
+- Back button returns without saving changes
+- Verify calibration update does not modify existing segment target speeds
+
+### TwinMaster Screen Tests
+- Display Total distance in meters with time elapsed (hhh:mm:ss ago)
+- Display Trip distance in meters with time elapsed (hhh:mm:ss ago)
+- Display current segment number and distance to segment end
+- Display negative distance when past segment end
+- Total reset button updates counters and time, saves to JSON
+- Trip reset button updates counters and time, saves to JSON
+- Segments button navigates to Stage Setup screen
+- Next segment button advances segment and resets Trip
+- Calibration button navigates to Calibration screen
+- RallyClock displays at top in hh:mm:ss format
+
+### Date/Time Setup Screen Tests
+- Display system clock in yyyy/mm/dd hh:mm:ss format
+- Display RallyClock (with current offset) in yyyy/mm/dd hh:mm:ss format
+- Input fields accept valid date and time values
+- Calculate rallyTimeOffset = input_rally_time_ms - system_time_ms
+- Set and save button stores offset and returns to TwinMaster
+- Back button returns without saving changes
+
+### Rally-Specific Edge Cases
+- Zero counts (stationary vehicle) - speed displays as 0.00 or "--.--"
+- High speeds (200+ KPH) calculated and displayed correctly
+- Long stages (hundreds of kilometres) without precision loss
+- Short segments (2km minimum) handled correctly
+- Timing accuracy to 0.1 seconds for ahead/behind calculation
+- Rapid segment transitions when autoNext enabled at high speed
+
+### Error Handling Tests
+- I2C read failure returns previous valid value or error state
+- Invalid JSON field types use default values
+- Negative distance values rejected or handled gracefully
+- Negative speed values display as 0.00
+- Empty segment array during active rally (segment_current_number >= 0)
+- System time jumps forward handled (recalculate elapsed times)
+- System time jumps backward handled (prevent negative durations)
+- Counter overflow at 32-bit boundary (wrap-around handling)
 
