@@ -13,7 +13,7 @@ This environment is a Raspberry Pi 5 with 4GB memory connected to 3 LSI ls7866c 
 - Application excutable and name should be HistoricRallyMeter
 
 # Source code control
-The system should be stored in github Simonpapworth6742@hotmail.com HistoricCarRally repo
+The system should be stored in github simonpapworth6742/HistoricRallyMeter repo
 
 ## Application Overview
 
