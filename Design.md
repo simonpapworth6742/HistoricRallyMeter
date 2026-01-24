@@ -6,6 +6,26 @@ This environment is a Raspberry Pi 5 with 4GB memory connected to 3 LSI ls7866c 
 
 The application is ment to run on dual 400x1280 screens one connected to hdmi-A-1 and the other connected to DSI-2, however during development it has an hdmi 4k screen and a single 7inch (400x1280) screen connected to DSI-2. ensure that the co-pilots display window opens full screen on the screen connected to DSI-2 or if not found then it opens as a 400x1280 window, and that the drivers display remembers its start position,size and which display it is connected to.
 
+### Display Detection Implementation
+The application reads DRM connector information from `/sys/class/drm/` to identify the DSI-2 connector. It then matches GDK monitors to connectors by resolution (400x1280 or 1280x400 when rotated).
+
+**Co-pilot display:**
+- Detects DSI-2 connector and opens fullscreen on that monitor
+- If DSI-2 not found, opens as a 400x1280 window
+
+**Driver display:**
+- Default size: 1280x400 (matching waveshare display dimensions)
+- Remembers window size and which monitor it was on
+- Window position cannot be saved/restored on Wayland due to compositor security limitations (positions are always reported as 0,0)
+- Window is centered on the saved monitor at startup
+
+### Debug Configuration
+VS Code/Cursor debug configuration is provided in `.vscode/`:
+- `launch.json` - Debug configurations for main app and unit tests
+- `tasks.json` - Build tasks (debug, release, test, clean)
+- `c_cpp_properties.json` - IntelliSense configuration
+
+Use `make debug` to build with debug symbols (`-g -O0`), producing `HistoricRallyMeter_debug`.
 
 ## Build Requirements
 
