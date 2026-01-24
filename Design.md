@@ -19,6 +19,20 @@ The application reads DRM connector information from `/sys/class/drm/` to identi
 - Window position cannot be saved/restored on Wayland due to compositor security limitations
 - Window is centered on the saved monitor at startup
 
+### Compositor Configuration
+Raspberry Pi OS uses the labwc Wayland compositor. By default, labwc visually distinguishes inactive windows (greyed appearance). To prevent this:
+
+Create/edit `~/.config/labwc/themerc-override`:
+```
+# Make inactive windows appear the same as active
+window.inactive.border.color: #aaaaaa
+window.inactive.title.bg.color: #e1dedb
+window.inactive.label.text.color: #000000
+window.inactive.button.unpressed.image.color: #000000
+```
+
+After changing, reconfigure labwc with: `labwc --reconfigure` or restart the session.
+
 ### Debug Configuration
 VS Code/Cursor debug configuration is provided in `.vscode/`:
 - `launch.json` - Debug configurations for main app and unit tests
@@ -134,19 +148,21 @@ Layout notes for 1280x400 (wide, shallow display):
 
 **1) Stage Setup Screen**
 
-Allows target speed, distance and AutoNext for multiple segments of a rally stage to be setup.
+Allows target speed, distance and AutoNext for multiple segments of a rally stage to be setup. 
 
 ```
 +----------------------------------------------------------------------------------------------------------+
 |                                        STAGE SETUP                                                       |
 +----------------------------------------------------------------------------------------------------------+
-|  Speed(KPH)      Distance(m)      AutoNext     |  Speed(KPH)      Distance(m)      AutoNext             |
-|    xx.xx          xxx,xxx           [Y] [del]  |    xx.xx          xxx,xxx           [N] [del]          |
-|    xx.xx          xxx,xxx           [Y] [del]  |    xx.xx          xxx,xxx           [Y] [del]          |
+|  Speed(KPH)      Distance(m)      AutoNext                                                               |
+|    xx.xx          xxx,xxx           [Y] [del]                                                            |
+|    xx.xx          xxx,xxx           [Y] [del]                                                            |
 +----------------------------------------------------------------------------------------------------------+
-|  New segment:  Speed [______] KPH    Distance [________] m    Auto [_]    [add more]          [back]    |
+|  New segment:  Speed [______] KPH    Distance [________] m    Auto [_]    [add]               [back]     |
 +----------------------------------------------------------------------------------------------------------+
 ```
+The exisiting segments should have editable values and scroll if there are more than 5 rows. 
+When editing any value a numeric entry keyboard should be shown on the right of the screen.
 
 The target speed is in KPH and the distance is in meters.
 Counts per hour = (input_kph * 1000 * 3600) / (cal / 1000)
@@ -177,22 +193,22 @@ new_cal = (input_meters * 1000 * 1000) / total_count_diff
 
 ```
 +----------------------------------------------------------------------------------------------------------+
-|                                                                                            hh:mm:ss      |
+| Segment xx  -  next segment in xxx,xxx m                                                   hh:mm:ss      |
 +----------------------------------------------------------------------------------------------------------+
-|       TOTAL:  xxx,xxx m   from hhh:mm:ss ago                                       [reset]               |
+|                Total:  xxx,xxx m   from hhh:mm:ss.s ago   [reset]                                          |
 +----------------------------------------------------------------------------------------------------------+
-|       Trip:   xxx,xxx m   from hhh:mm:ss ago                                       [reset]               |
-+----------------------------------------------------------------------------------------------------------+
-|   Segment xx  -  next segment in xxx,xxx m                                                               |
+|                Trip:   xxx,xxx m   from hhh:mm:ss.s ago   [reset]                                          |
 +----------------------------------------------------------------------------------------------------------+
 |   [stage go]      [segments]       [next segment]       [calibration]       [date/time]                  |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
 - RallyClock (hh:mm:ss) displayed at top right
-- Total row displayed prominently with large font, distance and elapsed time, reset button on right
-- Trip row below Total with slightly smaller font, distance and elapsed time, reset button on right
-- Segment info on third row
+- Total row displayed prominently with large font, distance and elapsed time, reset button after.
+- Trip row below Total with same large font, distance and elapsed time, reset button after. 
+- The Trip distance value should align with the total distace value, and the hhh:mm:ss should right align on the seconds, without large gaps and 
+    the reset button should follow closely the ago.
+- Segment info on top left
 - Navigation buttons spread across bottom row:
   - stage go: resets Total (counters + start time), Trip (counters + start time), and Segment (counters + start time) - use at start of a rally stage
   - segments: goes to Stage Setup

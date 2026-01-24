@@ -159,7 +159,106 @@ void on_show_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     updateDateTimeDisplay(data);
 }
 
-// Helper function to refresh segment list
+// Create numeric keypad widget
+GtkWidget* createNumericKeypad(AppData* data) {
+    GtkWidget* keypad = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(keypad), 5);
+    gtk_grid_set_column_spacing(GTK_GRID(keypad), 5);
+    
+    const char* digits[] = {"7", "8", "9", "4", "5", "6", "1", "2", "3", ".", "0", "C"};
+    
+    for (int i = 0; i < 12; i++) {
+        GtkWidget* btn = gtk_button_new_with_label(digits[i]);
+        gtk_widget_set_size_request(btn, 50, 40);
+        
+        if (strcmp(digits[i], "C") == 0) {
+            g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_clear), data);
+        } else {
+            g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
+        }
+        
+        gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
+    }
+    
+    // Backspace button
+    GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
+    gtk_widget_set_size_request(bkspBtn, 160, 40);
+    g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
+    gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 0, 4, 3, 1);
+    
+    return keypad;
+}
+
+// Keypad callbacks
+void on_keypad_digit(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (!data->activeEntry) return;
+    
+    const char* digit = gtk_button_get_label(GTK_BUTTON(widget));
+    const char* current = gtk_entry_get_text(data->activeEntry);
+    
+    std::string new_text = std::string(current) + digit;
+    gtk_entry_set_text(data->activeEntry, new_text.c_str());
+}
+
+void on_keypad_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (!data->activeEntry) return;
+    gtk_entry_set_text(data->activeEntry, "");
+}
+
+void on_keypad_backspace(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (!data->activeEntry) return;
+    
+    const char* current = gtk_entry_get_text(data->activeEntry);
+    std::string text(current);
+    if (!text.empty()) {
+        text.pop_back();
+        gtk_entry_set_text(data->activeEntry, text.c_str());
+    }
+}
+
+gboolean on_entry_focus(GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->activeEntry = GTK_ENTRY(widget);
+    gtk_widget_show(data->numericKeypad);
+    return FALSE;
+}
+
+// Callback for when segment entry value changes
+void on_segment_entry_changed(GtkWidget* widget, gpointer user_data) {
+    int index = GPOINTER_TO_INT(user_data);
+    AppData* data = static_cast<AppData*>(g_object_get_data(G_OBJECT(widget), "app_data"));
+    if (!data || index < 0 || index >= static_cast<int>(data->state->segments.size())) return;
+    
+    const char* entry_type = static_cast<const char*>(g_object_get_data(G_OBJECT(widget), "entry_type"));
+    const char* text = gtk_entry_get_text(GTK_ENTRY(widget));
+    
+    if (text && strlen(text) > 0) {
+        if (strcmp(entry_type, "speed") == 0) {
+            double kph = std::stod(text);
+            data->state->segments[index].target_speed_counts_per_hour = kphToCountsPerHour(kph, data->state->calibration);
+        } else if (strcmp(entry_type, "distance") == 0) {
+            long meters = std::stol(text);
+            // Convert meters to counts: counts = meters * 1000000 / calibration
+            data->state->segments[index].distance_counts = (meters * 1000000L) / data->state->calibration;
+        }
+        ConfigFile::save(*data->state);
+    }
+}
+
+// Callback for when segment auto checkbox toggled
+void on_segment_auto_toggled(GtkWidget* widget, gpointer user_data) {
+    int index = GPOINTER_TO_INT(user_data);
+    AppData* data = static_cast<AppData*>(g_object_get_data(G_OBJECT(widget), "app_data"));
+    if (!data || index < 0 || index >= static_cast<int>(data->state->segments.size())) return;
+    
+    data->state->segments[index].autoNext = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+    ConfigFile::save(*data->state);
+}
+
+// Helper function to refresh segment list with editable entries
 void refreshSegmentList(AppData* data) {
     // Clear existing rows
     GList* children = gtk_container_get_children(GTK_CONTAINER(data->segmentListBox));
@@ -168,36 +267,53 @@ void refreshSegmentList(AppData* data) {
     }
     g_list_free(children);
     
-    // Add segments
+    // Add segments with editable entries
     for (size_t i = 0; i < data->state->segments.size(); i++) {
         const Segment& seg = data->state->segments[i];
         double target_kph = countsPerHourToKPH(seg.target_speed_counts_per_hour, data->state->calibration);
         long distance_m = countsToCentimeters(seg.distance_counts, data->state->calibration) / 100;
         
         GtkWidget* row = gtk_list_box_row_new();
-        GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+        GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
         gtk_container_add(GTK_CONTAINER(row), box);
         
+        // Speed entry (editable)
         std::stringstream ss;
         ss << std::fixed << std::setprecision(2) << target_kph;
-        GtkWidget* speedLabel = gtk_label_new(ss.str().c_str());
+        GtkWidget* speedEntry = gtk_entry_new();
+        gtk_entry_set_text(GTK_ENTRY(speedEntry), ss.str().c_str());
+        gtk_widget_set_size_request(speedEntry, 100, -1);
+        g_object_set_data(G_OBJECT(speedEntry), "app_data", data);
+        g_object_set_data(G_OBJECT(speedEntry), "entry_type", (gpointer)"speed");
+        g_signal_connect(speedEntry, "changed", G_CALLBACK(on_segment_entry_changed), GINT_TO_POINTER(i));
+        g_signal_connect(speedEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
         
+        // Distance entry (editable)
         ss.str("");
         ss << distance_m;
-        GtkWidget* distLabel = gtk_label_new(ss.str().c_str());
+        GtkWidget* distEntry = gtk_entry_new();
+        gtk_entry_set_text(GTK_ENTRY(distEntry), ss.str().c_str());
+        gtk_widget_set_size_request(distEntry, 100, -1);
+        g_object_set_data(G_OBJECT(distEntry), "app_data", data);
+        g_object_set_data(G_OBJECT(distEntry), "entry_type", (gpointer)"distance");
+        g_signal_connect(distEntry, "changed", G_CALLBACK(on_segment_entry_changed), GINT_TO_POINTER(i));
+        g_signal_connect(distEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
         
-        ss.str("");
-        ss << (seg.autoNext ? "Y" : "N");
-        GtkWidget* autoLabel = gtk_label_new(ss.str().c_str());
+        // Auto checkbox (editable)
+        GtkWidget* autoCheck = gtk_check_button_new();
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(autoCheck), seg.autoNext);
+        g_object_set_data(G_OBJECT(autoCheck), "app_data", data);
+        g_signal_connect(autoCheck, "toggled", G_CALLBACK(on_segment_auto_toggled), GINT_TO_POINTER(i));
         
-        GtkWidget* deleteBtn = gtk_button_new_with_label("delete");
+        // Delete button
+        GtkWidget* deleteBtn = gtk_button_new_with_label("del");
         g_object_set_data(G_OBJECT(deleteBtn), "app_data", data);
         g_signal_connect(deleteBtn, "clicked", G_CALLBACK(on_delete_segment), GINT_TO_POINTER(i));
         
-        gtk_box_pack_start(GTK_BOX(box), speedLabel, TRUE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(box), distLabel, TRUE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(box), autoLabel, FALSE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(box), deleteBtn, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(box), speedEntry, FALSE, FALSE, 5);
+        gtk_box_pack_start(GTK_BOX(box), distEntry, FALSE, FALSE, 5);
+        gtk_box_pack_start(GTK_BOX(box), autoCheck, FALSE, FALSE, 15);
+        gtk_box_pack_start(GTK_BOX(box), deleteBtn, FALSE, FALSE, 5);
         
         gtk_list_box_insert(data->segmentListBox, row, -1);
         gtk_widget_show_all(row);

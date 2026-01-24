@@ -62,10 +62,13 @@ struct AppData {
     
     // Stage setup screen
     GtkWidget* stageSetupScreen;
+    GtkWidget* stageSetupMainBox;  // Main horizontal container
     GtkListBox* segmentListBox;
     GtkEntry* targetSpeedEntry;
     GtkEntry* distanceEntry;
     GtkCheckButton* autoNextCheck;
+    GtkWidget* numericKeypad;      // Numeric keypad container
+    GtkEntry* activeEntry;         // Currently focused entry for keypad input
     
     // Calibration screen
     GtkWidget* calibrationScreen;

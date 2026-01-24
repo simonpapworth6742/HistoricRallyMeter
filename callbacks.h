@@ -22,5 +22,12 @@ void refreshSegmentList(AppData* data);
 void updateCalibrationDisplay(AppData* data);
 void updateDateTimeDisplay(AppData* data);
 gboolean update_display(gpointer user_data);
+void on_keypad_digit(GtkWidget* widget, gpointer user_data);
+void on_keypad_clear(GtkWidget* widget, gpointer user_data);
+void on_keypad_backspace(GtkWidget* widget, gpointer user_data);
+gboolean on_entry_focus(GtkWidget* widget, GdkEvent* event, gpointer user_data);
+void on_segment_entry_changed(GtkWidget* widget, gpointer user_data);
+void on_segment_auto_toggled(GtkWidget* widget, gpointer user_data);
+GtkWidget* createNumericKeypad(AppData* data);
 
 #endif // CALLBACKS_H

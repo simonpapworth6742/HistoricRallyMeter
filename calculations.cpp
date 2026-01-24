@@ -56,11 +56,12 @@ std::string formatTime(int64_t time_ms) {
 
 std::string formatDuration(int64_t duration_ms) {
     int64_t total_seconds = duration_ms / 1000;
+    int tenths = (duration_ms % 1000) / 100;
     int hours = total_seconds / 3600;
     int minutes = (total_seconds % 3600) / 60;
     int seconds = total_seconds % 60;
-    char buf[20];
-    snprintf(buf, sizeof(buf), "%02d:%02d:%02d", hours, minutes, seconds);
+    char buf[24];
+    snprintf(buf, sizeof(buf), "%03d:%02d:%02d.%d", hours, minutes, seconds, tenths);
     return std::string(buf);
 }
 
