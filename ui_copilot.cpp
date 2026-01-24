@@ -189,11 +189,11 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(headerBox), header3, FALSE, FALSE, 5);
     gtk_box_pack_start(GTK_BOX(headerBox), gtk_label_new(""), FALSE, FALSE, 5);
     
-    // Scrollable list for segments (max ~3 rows visible)
+    // Scrollable list for segments
     GtkWidget* scrolled = gtk_scrolled_window_new(NULL, NULL);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), 
-                                   GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-    gtk_widget_set_size_request(scrolled, -1, 120);  // ~3 rows height
+                                   GTK_POLICY_NEVER, GTK_POLICY_ALWAYS);
+    gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scrolled), 150);
     gtk_box_pack_start(GTK_BOX(leftBox), scrolled, TRUE, TRUE, 0);
     
     data->segmentListBox = GTK_LIST_BOX(gtk_list_box_new());

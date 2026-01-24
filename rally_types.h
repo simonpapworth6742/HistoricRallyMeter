@@ -13,10 +13,10 @@ class I2CCounter;
 class RallyState;
 class CounterPoller;
 
-// Segment structure
+// Segment structure (high precision)
 struct Segment {
-    long target_speed_counts_per_hour = 0;  // counts per hour
-    long distance_counts = 0;               // distance in counts
+    double target_speed_counts_per_hour = 0.0;  // counts per hour (high precision)
+    double distance_counts = 0.0;                // distance in counts (high precision)
     bool autoNext = false;
 };
 

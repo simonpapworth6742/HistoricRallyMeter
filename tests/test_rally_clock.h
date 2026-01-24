@@ -163,7 +163,7 @@ public:
             int64_t duration_ms = 3723000;  // 1h 2m 3s
             
             std::string formatted = formatDuration(duration_ms);
-            ASSERT_STR_EQ(formatted, "01:02:03");
+            ASSERT_STR_EQ(formatted, "001:02:03.0");
             
             return true;
         });

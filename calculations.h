@@ -10,14 +10,17 @@
 int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_t cntr2,
                                   uint64_t start1, uint64_t start2);
 
+// Convert counts to meters using calibration (high precision)
+double countsToMeters(int64_t counts, long calibration);
+
 // Convert counts to centimeters using calibration
 long countsToCentimeters(int64_t counts, long calibration);
 
-// Convert counts per hour to KPH
-double countsPerHourToKPH(long counts_per_hour, long calibration);
+// Convert counts per hour to KPH (high precision)
+double countsPerHourToKPH(double counts_per_hour, long calibration);
 
-// Convert KPH to counts per hour
-long kphToCountsPerHour(double kph, long calibration);
+// Convert KPH to counts per hour (high precision)
+double kphToCountsPerHour(double kph, long calibration);
 
 // Get rally time (system time + offset)
 int64_t getRallyTime_ms(const RallyState& state);
@@ -36,9 +39,9 @@ double calculateCurrentSpeed(const RallyState& state, const CounterPoll& current
 double calculateAverageSpeed(const RallyState& state, int64_t start_time_ms, 
                             int64_t current_time_ms, int64_t count_diff);
 
-// Calculate seconds ahead/behind target
+// Calculate seconds ahead/behind target (high precision)
 double calculateAheadBehind(const RallyState& state, int64_t current_time_ms,
-                          int64_t segment_start_time, long target_counts_per_hour,
+                          int64_t segment_start_time, double target_counts_per_hour,
                           int64_t actual_counts);
 
 #endif // CALCULATIONS_H

@@ -36,8 +36,8 @@ public:
             state.total_start_cntr2 = 2000;
             state.segment_current_number = 2;
             state.rallyTimeOffset_ms = 3600000;
-            state.segments.push_back({100, 5000, true});
-            state.segments.push_back({120, 8000, false});
+            state.segments.push_back({100.0, 5000.0, true});
+            state.segments.push_back({120.0, 8000.0, false});
             
             ASSERT_TRUE(state.units);
             ASSERT_EQ(state.calibration, 750000);
@@ -45,10 +45,10 @@ public:
             ASSERT_EQ(state.segment_current_number, 2);
             ASSERT_EQ(state.rallyTimeOffset_ms, 3600000);
             ASSERT_EQ(state.segments.size(), 2u);
-            ASSERT_EQ(state.segments[0].target_speed_counts_per_hour, 100);
-            ASSERT_EQ(state.segments[0].distance_counts, 5000);
+            ASSERT_NEAR(state.segments[0].target_speed_counts_per_hour, 100.0, 0.001);
+            ASSERT_NEAR(state.segments[0].distance_counts, 5000.0, 0.001);
             ASSERT_TRUE(state.segments[0].autoNext);
-            ASSERT_EQ(state.segments[1].target_speed_counts_per_hour, 120);
+            ASSERT_NEAR(state.segments[1].target_speed_counts_per_hour, 120.0, 0.001);
             ASSERT_FALSE(state.segments[1].autoNext);
             
             return true;
@@ -93,15 +93,15 @@ public:
         suite->addTest("Load JSON with multiple segments", []() {
             // Test that segments vector can hold multiple segments correctly
             std::vector<Segment> segments;
-            segments.push_back({50, 1000, true});
-            segments.push_back({60, 2000, false});
-            segments.push_back({70, 3000, true});
+            segments.push_back({50.0, 1000.0, true});
+            segments.push_back({60.0, 2000.0, false});
+            segments.push_back({70.0, 3000.0, true});
             
             ASSERT_EQ(segments.size(), 3u);
-            ASSERT_EQ(segments[0].target_speed_counts_per_hour, 50);
-            ASSERT_EQ(segments[1].target_speed_counts_per_hour, 60);
-            ASSERT_EQ(segments[2].target_speed_counts_per_hour, 70);
-            ASSERT_EQ(segments[0].distance_counts, 1000);
+            ASSERT_NEAR(segments[0].target_speed_counts_per_hour, 50.0, 0.001);
+            ASSERT_NEAR(segments[1].target_speed_counts_per_hour, 60.0, 0.001);
+            ASSERT_NEAR(segments[2].target_speed_counts_per_hour, 70.0, 0.001);
+            ASSERT_NEAR(segments[0].distance_counts, 1000.0, 0.001);
             ASSERT_TRUE(segments[0].autoNext);
             ASSERT_FALSE(segments[1].autoNext);
             

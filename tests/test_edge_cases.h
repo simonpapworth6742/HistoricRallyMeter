@@ -141,9 +141,9 @@ public:
             
             // 2km = 2000m, with 0.6m/count = 3333 counts
             Segment seg;
-            seg.distance_counts = 3333;
+            seg.distance_counts = 3333.0;
             
-            long cm = countsToCentimeters(seg.distance_counts, state.calibration);
+            long cm = countsToCentimeters(static_cast<int64_t>(seg.distance_counts), state.calibration);
             long meters = cm / 100;
             
             // Should be ~2000m
@@ -249,16 +249,16 @@ public:
         // Test rapid segment transitions
         suite->addTest("Rapid segment transitions at high speed", []() {
             RallyState state;
-            state.segments.push_back({100000, 100, true});   // Very short
-            state.segments.push_back({100000, 100, true});
-            state.segments.push_back({100000, 100, true});
+            state.segments.push_back({100000.0, 100.0, true});   // Very short
+            state.segments.push_back({100000.0, 100.0, true});
+            state.segments.push_back({100000.0, 100.0, true});
             state.segment_current_number = 0;
             
             // At high speed, might cover multiple segments in one poll
-            int64_t distance_covered = 500;  // 5x the segment distance
+            double distance_covered = 500.0;  // 5x the segment distance
             
             int new_segment = 0;
-            int64_t cumulative = 0;
+            double cumulative = 0.0;
             for (size_t i = 0; i < state.segments.size(); i++) {
                 cumulative += state.segments[i].distance_counts;
                 if (distance_covered >= cumulative && state.segments[i].autoNext) {

@@ -143,7 +143,7 @@ public:
             int64_t eta_ms = 3661000;  // 1 hour, 1 minute, 1 second
             
             std::string formatted = formatDuration(eta_ms);
-            ASSERT_STR_EQ(formatted, "01:01:01");
+            ASSERT_STR_EQ(formatted, "001:01:01.0");
             
             return true;
         });

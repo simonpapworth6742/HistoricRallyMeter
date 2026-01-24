@@ -19,24 +19,31 @@ int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_
     }
 }
 
+// High precision: counts to meters
+double countsToMeters(int64_t counts, long calibration) {
+    // calibration = mm per 1000 counts
+    // meters = counts * (calibration / 1000) / 1000 = counts * calibration / 1e6
+    return (static_cast<double>(counts) * calibration) / 1e6;
+}
+
 long countsToCentimeters(int64_t counts, long calibration) {
     // meters = (counts * calibration) / 1000 / 1000
     // centimeters = (counts * calibration) / 1000 / 10
     return (counts * calibration) / 10000;
 }
 
-double countsPerHourToKPH(long counts_per_hour, long calibration) {
+double countsPerHourToKPH(double counts_per_hour, long calibration) {
     // calibration = mm per 1000 counts
     // m/count = calibration / 1000000
     // meters/hour = counts_per_hour * calibration / 1000000
     // km/hour = meters/hour / 1000 = counts_per_hour * calibration / 1e9
-    return (static_cast<double>(counts_per_hour) * calibration) / 1e9;
+    return (counts_per_hour * calibration) / 1e9;
 }
 
-long kphToCountsPerHour(double kph, long calibration) {
+double kphToCountsPerHour(double kph, long calibration) {
     // Inverse of countsPerHourToKPH
     // counts_per_hour = kph * 1e9 / calibration
-    return static_cast<long>((kph * 1e9) / calibration);
+    return (kph * 1e9) / calibration;
 }
 
 int64_t getRallyTime_ms(const RallyState& state) {
@@ -111,15 +118,17 @@ double calculateAverageSpeed(const RallyState& state, int64_t start_time_ms,
 }
 
 double calculateAheadBehind(const RallyState& state, int64_t current_time_ms,
-                          int64_t segment_start_time, long target_counts_per_hour,
+                          int64_t segment_start_time, double target_counts_per_hour,
                           int64_t actual_counts) {
-    if (state.segment_current_number < 0 || target_counts_per_hour == 0) {
+    if (state.segment_current_number < 0 || target_counts_per_hour == 0.0) {
         return 0.0;
     }
     
-    int64_t time_ms_since_segment = current_time_ms - segment_start_time;
-    double ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_per_hour;
-    double diff = actual_counts - ideal_counts;
-    double seconds = diff / (target_counts_per_hour / 3600.0);
+    // High precision calculation
+    double time_hours_since_segment = static_cast<double>(current_time_ms - segment_start_time) / 3600000.0;
+    double ideal_counts = time_hours_since_segment * target_counts_per_hour;
+    double diff = static_cast<double>(actual_counts) - ideal_counts;
+    double counts_per_second = target_counts_per_hour / 3600.0;
+    double seconds = diff / counts_per_second;
     return seconds;
 }

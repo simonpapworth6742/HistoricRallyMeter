@@ -3,6 +3,7 @@
 #include <fstream>
 #include <string>
 #include <sstream>
+#include <iomanip>
 
 static int64_t extractLong(const std::string& line) {
     size_t pos = line.find(':');
@@ -14,6 +15,18 @@ static int64_t extractLong(const std::string& line) {
         return std::stoll(val);
     }
     return 0;
+}
+
+static double extractDouble(const std::string& line) {
+    size_t pos = line.find(':');
+    if (pos != std::string::npos) {
+        std::string val = line.substr(pos + 1);
+        // Remove trailing comma if present
+        size_t comma = val.find(',');
+        if (comma != std::string::npos) val = val.substr(0, comma);
+        return std::stod(val);
+    }
+    return 0.0;
 }
 
 static bool extractBool(const std::string& line) {
@@ -54,9 +67,9 @@ void ConfigFile::load(RallyState& state) {
                 in_segments = false;
             } else if (in_segment_obj) {
                 if (line.find("\"target_speed_counts_per_hour\"") != std::string::npos) {
-                    current_segment.target_speed_counts_per_hour = extractLong(line);
+                    current_segment.target_speed_counts_per_hour = extractDouble(line);
                 } else if (line.find("\"distance_counts\"") != std::string::npos) {
-                    current_segment.distance_counts = extractLong(line);
+                    current_segment.distance_counts = extractDouble(line);
                 } else if (line.find("\"autoNext\"") != std::string::npos) {
                     current_segment.autoNext = extractBool(line);
                 }
@@ -135,6 +148,7 @@ void ConfigFile::save(const RallyState& state) {
     file << "  \"segments\": [\n";
     for (size_t i = 0; i < state.segments.size(); i++) {
         file << "    {\n";
+        file << std::fixed << std::setprecision(6);
         file << "      \"target_speed_counts_per_hour\": " << state.segments[i].target_speed_counts_per_hour << ",\n";
         file << "      \"distance_counts\": " << state.segments[i].distance_counts << ",\n";
         file << "      \"autoNext\": " << (state.segments[i].autoNext ? "true" : "false") << "\n";

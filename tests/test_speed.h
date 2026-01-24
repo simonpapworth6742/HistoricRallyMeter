@@ -30,9 +30,9 @@ public:
             long calibration = 600000;
             double kph = 60.0;
             
-            long counts_per_hour = kphToCountsPerHour(kph, calibration);
+            double counts_per_hour = kphToCountsPerHour(kph, calibration);
             // 60 * 1000000 / 600000 = 100000
-            ASSERT_EQ(counts_per_hour, 100000);
+            ASSERT_NEAR(counts_per_hour, 100000.0, 0.001);
             
             return true;
         });

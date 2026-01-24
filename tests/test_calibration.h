@@ -70,15 +70,15 @@ public:
             
             // Add segment with target speed stored as counts per hour
             Segment seg;
-            seg.target_speed_counts_per_hour = 100000;  // Stored value
-            seg.distance_counts = 50000;
+            seg.target_speed_counts_per_hour = 100000.0;  // Stored value
+            seg.distance_counts = 50000.0;
             state.segments.push_back(seg);
             
             // Change calibration
             state.calibration = 800000;
             
             // Segment speed should be unchanged (still in counts/hour)
-            ASSERT_EQ(state.segments[0].target_speed_counts_per_hour, 100000);
+            ASSERT_NEAR(state.segments[0].target_speed_counts_per_hour, 100000.0, 0.001);
             
             return true;
         });

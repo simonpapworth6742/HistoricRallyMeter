@@ -15,15 +15,15 @@ public:
             RallyState state;
             
             Segment seg;
-            seg.target_speed_counts_per_hour = 50000;
-            seg.distance_counts = 10000;
+            seg.target_speed_counts_per_hour = 50000.0;
+            seg.distance_counts = 10000.0;
             seg.autoNext = true;
             
             state.segments.push_back(seg);
             
             ASSERT_EQ(state.segments.size(), 1u);
-            ASSERT_EQ(state.segments[0].target_speed_counts_per_hour, 50000);
-            ASSERT_EQ(state.segments[0].distance_counts, 10000);
+            ASSERT_NEAR(state.segments[0].target_speed_counts_per_hour, 50000.0, 0.001);
+            ASSERT_NEAR(state.segments[0].distance_counts, 10000.0, 0.001);
             ASSERT_TRUE(state.segments[0].autoNext);
             
             return true;
@@ -33,16 +33,16 @@ public:
         suite->addTest("Delete segment from list", []() {
             RallyState state;
             
-            state.segments.push_back({100, 1000, true});
-            state.segments.push_back({200, 2000, false});
-            state.segments.push_back({300, 3000, true});
+            state.segments.push_back({100.0, 1000.0, true});
+            state.segments.push_back({200.0, 2000.0, false});
+            state.segments.push_back({300.0, 3000.0, true});
             
             // Delete middle segment
             state.segments.erase(state.segments.begin() + 1);
             
             ASSERT_EQ(state.segments.size(), 2u);
-            ASSERT_EQ(state.segments[0].target_speed_counts_per_hour, 100);
-            ASSERT_EQ(state.segments[1].target_speed_counts_per_hour, 300);
+            ASSERT_NEAR(state.segments[0].target_speed_counts_per_hour, 100.0, 0.001);
+            ASSERT_NEAR(state.segments[1].target_speed_counts_per_hour, 300.0, 0.001);
             
             return true;
         });
@@ -56,15 +56,15 @@ public:
             // = (60 * 1000 * 3600) / (600000 / 1000)
             // = 216000000 / 600 = 360000? No wait...
             // Actually: (kph * 1000000) / calibration
-            long counts_per_hour = kphToCountsPerHour(input_kph, calibration);
+            double counts_per_hour = kphToCountsPerHour(input_kph, calibration);
             // 60 * 1000000 / 600000 = 100000
             
-            ASSERT_EQ(counts_per_hour, 100000);
+            ASSERT_NEAR(counts_per_hour, 100000.0, 0.001);
             
             Segment seg;
             seg.target_speed_counts_per_hour = counts_per_hour;
             
-            ASSERT_EQ(seg.target_speed_counts_per_hour, 100000);
+            ASSERT_NEAR(seg.target_speed_counts_per_hour, 100000.0, 0.001);
             
             return true;
         });
@@ -74,9 +74,9 @@ public:
             long calibration = 600000;
             double kph = 100.0;
             
-            long counts_h = kphToCountsPerHour(kph, calibration);
-            // 100 * 1000000 / 600000 = 166666
-            ASSERT_NEAR(counts_h, 166666, 1);
+            double counts_h = kphToCountsPerHour(kph, calibration);
+            // 100 * 1e9 / 600000 = 166666.666...
+            ASSERT_NEAR(counts_h, 166666.666, 1.0);
             
             return true;
         });
@@ -84,16 +84,16 @@ public:
         // Test autoNext advances segment
         suite->addTest("AutoNext=true advances segment when distance reached", []() {
             RallyState state;
-            state.segments.push_back({100000, 1000, true});   // 1000 counts, autoNext
-            state.segments.push_back({120000, 2000, false});
+            state.segments.push_back({100000.0, 1000.0, true});   // 1000 counts, autoNext
+            state.segments.push_back({120000.0, 2000.0, false});
             state.segment_current_number = 0;
             state.segment_start_cntr1 = 0;
             
             // Simulate distance covered
             uint64_t current_cntr1 = 1500;  // > 1000 counts
-            int64_t segment_counts = state.segments[0].distance_counts;
+            double segment_counts = state.segments[0].distance_counts;
             
-            bool should_advance = (current_cntr1 - state.segment_start_cntr1) >= (uint64_t)segment_counts;
+            bool should_advance = (current_cntr1 - state.segment_start_cntr1) >= segment_counts;
             
             ASSERT_TRUE(should_advance);
             ASSERT_TRUE(state.segments[0].autoNext);
@@ -104,7 +104,7 @@ public:
         // Test autoNext=false requires manual
         suite->addTest("AutoNext=false requires manual next segment button", []() {
             RallyState state;
-            state.segments.push_back({100000, 1000, false});  // autoNext = false
+            state.segments.push_back({100000.0, 1000.0, false});  // autoNext = false
             state.segment_current_number = 0;
             
             // Even if distance exceeded, should NOT auto-advance
@@ -116,16 +116,16 @@ public:
         // Test skip multiple segments
         suite->addTest("Skip multiple segments if polling lag", []() {
             RallyState state;
-            state.segments.push_back({100000, 100, true});   // 100 counts
-            state.segments.push_back({100000, 100, true});   // 100 counts
-            state.segments.push_back({100000, 100, true});   // 100 counts
+            state.segments.push_back({100000.0, 100.0, true});   // 100 counts
+            state.segments.push_back({100000.0, 100.0, true});   // 100 counts
+            state.segments.push_back({100000.0, 100.0, true});   // 100 counts
             state.segment_current_number = 0;
             state.segment_start_cntr1 = 0;
             
             // Distance covered = 350 counts (spans first 3 segments)
-            int64_t distance_covered = 350;
+            double distance_covered = 350.0;
             int segments_to_skip = 0;
-            int64_t cumulative = 0;
+            double cumulative = 0.0;
             
             for (size_t i = state.segment_current_number; i < state.segments.size(); i++) {
                 cumulative += state.segments[i].distance_counts;
@@ -154,19 +154,19 @@ public:
         suite->addTest("Past end of last segment by >1000m shows --.--", []() {
             RallyState state;
             state.calibration = 600000;  // 0.6m per count
-            state.segments.push_back({100000, 10000, false});  // 10000 counts = 6000m
+            state.segments.push_back({100000.0, 10000.0, false});  // 10000 counts = 6000m
             state.segment_current_number = 0;
             state.segment_start_cntr1 = 0;
             
             // Current position: 10000 + 2000 counts = 12000 counts (1200m past end)
-            uint64_t current_counts = 12000;
-            int64_t segment_end = state.segments[0].distance_counts;
-            int64_t distance_past = current_counts - segment_end;  // 2000 counts
+            double current_counts = 12000.0;
+            double segment_end = state.segments[0].distance_counts;
+            double distance_past = current_counts - segment_end;  // 2000 counts
             
             // Convert to meters: 2000 * 0.6 = 1200m
-            long meters_past = (distance_past * state.calibration) / 1000000;
+            double meters_past = (distance_past * state.calibration) / 1000000.0;
             
-            bool should_show_dashes = (meters_past > 1000);
+            bool should_show_dashes = (meters_past > 1000.0);
             ASSERT_TRUE(should_show_dashes);
             
             return true;

@@ -97,8 +97,10 @@ void updateDriverDisplay(AppData* data) {
         int64_t seg_count_diff = calculateDistanceCounts(*data->state,
             current_poll.cntr1, current_poll.cntr2,
             data->state->segment_start_cntr1, data->state->segment_start_cntr2);
-        int64_t remaining_counts = current_seg.distance_counts - seg_count_diff;
-        long remaining_m = countsToCentimeters(remaining_counts, data->state->calibration) / 100;
+        
+        // High precision: remaining distance in meters
+        double remaining_counts = current_seg.distance_counts - static_cast<double>(seg_count_diff);
+        double remaining_m = countsToMeters(static_cast<int64_t>(remaining_counts), data->state->calibration);
         
         // Get next segment target speed
         const Segment& next_seg = data->state->segments[data->state->segment_current_number + 1];
@@ -108,26 +110,28 @@ void updateDriverDisplay(AppData* data) {
         }
         
         if (current_speed > 0 && current_speed != -1) {
+            // High precision ETA calculation
             double speed_m_per_s = current_speed;
             if (data->state->units) {
-                speed_m_per_s = speed_m_per_s * 1.60934;
+                speed_m_per_s = speed_m_per_s * 1.60934;  // MPH to km/h
             }
-            speed_m_per_s = speed_m_per_s / 3.6;
-            int64_t eta_seconds = static_cast<int64_t>(remaining_m / speed_m_per_s);
+            speed_m_per_s = speed_m_per_s / 3.6;  // km/h to m/s
+            double eta_seconds = remaining_m / speed_m_per_s;
+            
             if (eta_seconds < 0) {
                 ss.str("");
-                ss << "Over by " << formatDuration(-eta_seconds * 1000);
+                ss << "Over by " << formatDuration(static_cast<int64_t>(-eta_seconds * 1000));
                 gtk_label_set_text(data->nextSegLabel, ss.str().c_str());
             } else {
                 ss.str("");
                 ss << "next: " << std::fixed << std::setprecision(2) << next_target 
-                   << " in " << remaining_m << " m  ETA " << formatDuration(eta_seconds * 1000);
+                   << " in " << static_cast<long>(remaining_m) << " m  ETA " << formatDuration(static_cast<int64_t>(eta_seconds * 1000));
                 gtk_label_set_text(data->nextSegLabel, ss.str().c_str());
             }
         } else {
             ss.str("");
             ss << "next: " << std::fixed << std::setprecision(2) << next_target 
-               << " in " << remaining_m << " m  ETA --:--:--";
+               << " in " << static_cast<long>(remaining_m) << " m  ETA --:--:--";
             gtk_label_set_text(data->nextSegLabel, ss.str().c_str());
         }
     } else {

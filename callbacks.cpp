@@ -240,9 +240,9 @@ void on_segment_entry_changed(GtkWidget* widget, gpointer user_data) {
             double kph = std::stod(text);
             data->state->segments[index].target_speed_counts_per_hour = kphToCountsPerHour(kph, data->state->calibration);
         } else if (strcmp(entry_type, "distance") == 0) {
-            long meters = std::stol(text);
-            // Convert meters to counts: counts = meters * 1000000 / calibration
-            data->state->segments[index].distance_counts = (meters * 1000000L) / data->state->calibration;
+            double meters = std::stod(text);
+            // Convert meters to counts (high precision): counts = meters * 1e6 / calibration
+            data->state->segments[index].distance_counts = (meters * 1e6) / data->state->calibration;
         }
         ConfigFile::save(*data->state);
     }
@@ -367,11 +367,11 @@ void on_add_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     
     if (speed_str && dist_str && strlen(speed_str) > 0 && strlen(dist_str) > 0) {
         double target_kph = std::stod(speed_str);
-        long distance_m = std::stol(dist_str);
+        double distance_m = std::stod(dist_str);
         
-        // Convert to counts
-        long target_counts_per_hour = kphToCountsPerHour(target_kph, data->state->calibration);
-        long distance_counts = (distance_m * 1000000) / data->state->calibration;  // meters to counts
+        // Convert to counts (high precision)
+        double target_counts_per_hour = kphToCountsPerHour(target_kph, data->state->calibration);
+        double distance_counts = (distance_m * 1e6) / data->state->calibration;  // meters to counts
         
         Segment seg;
         seg.target_speed_counts_per_hour = target_counts_per_hour;

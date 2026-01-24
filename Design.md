@@ -99,8 +99,8 @@ long segment_current_number – the current segment of the stage so defining the
  
 long rallyTimeOffset – ms offset of rally time to operating system time, defaults to 0
 structure segment[]  - Stage segments contain target speed over distance segments of the stage, and if manual or automatic progression to the next segment is required. Defaults to no segments.
-long target_speed – stored in number of counts per hour via the calibration.
-long distance – number of counts for the segment
+double target_speed – stored in number of counts per hour via the calibration (high precision floating point).
+double distance – number of counts for the segment (high precision floating point).
 Boolean autoNext – True =  when the distance of this segment has been reached the next segment is started automatically, changing the segment_current value and segment_start counter as well as resetting the trip counter values, false = the next segment button on the co-pilots TwinMaster display must be pressed to advance to the next segment, setting the segment_current, segment_counters and Trip counters
  
 
@@ -129,7 +129,7 @@ Drivers display Window (1280 x 400)
 
 The drivers display window is wide (1280px) and shallow (400px). It shows the average speed since the last reset of the Total, the current speed calculated from approximately the last 10 seconds of driving, the average speed since the last Trip reset, and the average speed since the start of the current segment. The target speed for the current segment and how many seconds ahead or behind target average speed by calculating how many counts difference there is between the actual count now and the count that it should be based upon the time since segment start and the target speed for the segment. Along with the ETA = remaining segment distance / (last-10s average speed) to the next segment. If there is no current segment defined or more than 1000m past end of the last segment, then display "--.--" for Seg. For the next segment line of the display hide it if there is no next segment and if last-10s speed = 0: '--.--'; negative remaining: 'Over by xx:xx:xx'.
 
-Seconds ahead behind formula: ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_h; diff = actual - ideal; seconds = diff / (target_counts_h / 3600.0). positive numbers means travelling too fast.
+Seconds ahead behind formula (high precision): ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_h; diff = actual - ideal; seconds = diff / (target_counts_h / 3600.0). positive numbers means travelling too fast. All target speed and ETA calculations use high precision (double) floating point arithmetic throughout.
 
 Updates per second is the number of times this display has been updated in a second, Rolling count of driver display render/update calls over the last full second.
 
@@ -273,6 +273,7 @@ new_cal = (input_meters * 1000 * 1000) / total_count_diff
 - Load config with empty segments array
 - Save config and verify all fields written correctly
 - Save config with multiple segments and verify JSON structure
+- Segment target_speed_counts_per_hour and distance_counts saved as double with 6 decimal places
 - Verify calibration defaults to 600000 when missing
 - Verify units defaults to false (KPH) when missing
 - Verify segment_current_number defaults to -1 when missing/empty segments
@@ -295,8 +296,10 @@ new_cal = (input_meters * 1000 * 1000) / total_count_diff
 
 ### Speed Calculation Tests
 - Speed in counts/hour from counts and time_ms
-- Convert counts/hour to KPH: (counts_per_hour * calibration) / 1e9
+- Convert counts/hour to KPH: (counts_per_hour * calibration) / 1e9 (high precision double)
 - Convert counts/hour to MPH: KPH * 100000 / 160934
+- kphToCountsPerHour() returns double for high precision
+- countsToMeters() returns double for high precision distance calculations
 - 100 KPH displays as "62.14" MPH after unit switch
 - Average speed since Total reset
 - Average speed since Trip reset
@@ -318,8 +321,10 @@ new_cal = (input_meters * 1000 * 1000) / total_count_diff
 ### Segment Management Tests
 - Add segment with target_speed, distance, autoNext
 - Delete segment from list
-- Segment target_speed stored as counts per hour
-- Counts per hour = (input_kph * 1000 * 3600) / (calibration / 1000)
+- Segment target_speed stored as counts per hour (double, high precision)
+- Segment distance stored as counts (double, high precision)
+- Config file saves segment values with 6 decimal places
+- Counts per hour = kphToCountsPerHour(input_kph, calibration) - returns double
 - AutoNext=true advances segment when distance reached
 - AutoNext=false requires manual next segment button
 - Skip multiple segments if polling interval causes overshoot
@@ -327,6 +332,7 @@ new_cal = (input_meters * 1000 * 1000) / total_count_diff
 - Past end of last segment by >1000m shows "--.--" for Seg speed
 
 ### Ahead/Behind Calculation Tests
+- All calculations use high precision (double) floating point
 - ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_per_hour
 - diff = actual_counts - ideal_counts
 - seconds = diff / (target_counts_per_hour / 3600.0)
@@ -335,7 +341,9 @@ new_cal = (input_meters * 1000 * 1000) / total_count_diff
 - Display "+xxxxx" for ahead, "-xxxxx" for behind
 
 ### ETA Calculation Tests
+- All calculations use high precision (double) floating point
 - ETA = remaining_segment_distance / current_speed
+- remaining_segment_distance calculated in meters using countsToMeters()
 - Display "--.--" when current speed is zero
 - Display "Over by hh:mm:ss" when past segment end (negative remaining)
 - Format ETA as hh:mm:ss
@@ -374,8 +382,8 @@ new_cal = (input_meters * 1000 * 1000) / total_count_diff
 - Rally clock displays current time with offset applied
 
 ### Stage Setup Screen Tests
-- Input target speed in KPH and verify stored as counts per hour
-- Input distance in meters and verify stored as counts
+- Input target speed in KPH (decimal allowed) and verify stored as counts per hour (double)
+- Input distance in meters (decimal allowed) and verify stored as counts (double)
 - Toggle autoNext Y/N and verify boolean stored correctly
 - Add new segment to end of list
 - Delete segment from middle of list
@@ -415,9 +423,9 @@ new_cal = (input_meters * 1000 * 1000) / total_count_diff
 ### Rally-Specific Edge Cases
 - Zero counts (stationary vehicle) - speed displays as 0.00 or "--.--"
 - High speeds (200+ KPH) calculated and displayed correctly
-- Long stages (hundreds of kilometres) without precision loss
+- Long stages (hundreds of kilometres) without precision loss (high precision double throughout)
 - Short segments (2km minimum) handled correctly
-- Timing accuracy to 0.1 seconds for ahead/behind calculation
+- Timing accuracy to 0.1 seconds for ahead/behind calculation (high precision)
 - Rapid segment transitions when autoNext enabled at high speed
 
 ### Error Handling Tests
