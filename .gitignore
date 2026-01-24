@@ -1,0 +1,11 @@
+# Build artifacts
+*.o
+HistoricRallyMeter
+
+# IDE files
+.vscode/
+*.swp
+*~
+
+# Config files with runtime data (not secrets, but user-specific)
+rally_config.json
