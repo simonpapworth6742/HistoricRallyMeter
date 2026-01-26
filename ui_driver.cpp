@@ -77,17 +77,22 @@ void updateDriverDisplay(AppData* data) {
         ss.str("");
         if (seconds >= 0) {
             ss << "+";
+        } else {
+            ss << "-";
         }
-        int total_sec = static_cast<int>(std::abs(seconds));
+        double abs_seconds = std::abs(seconds);
+        int total_sec = static_cast<int>(abs_seconds);
+        int hundredths = static_cast<int>((abs_seconds - total_sec) * 100);
         int hours = total_sec / 3600;
         int mins = (total_sec % 3600) / 60;
         int secs = total_sec % 60;
         ss << std::setfill('0') << std::setw(2) << hours << ":"
-           << std::setw(2) << mins << ":" << std::setw(2) << secs;
+           << std::setw(2) << mins << ":" << std::setw(2) << secs 
+           << "." << std::setw(2) << hundredths;
         gtk_label_set_text(data->aheadBehindLabel, ss.str().c_str());
     } else {
         gtk_label_set_text(data->targetSpeedLabel, "--.--");
-        gtk_label_set_text(data->aheadBehindLabel, "--:--:--");
+        gtk_label_set_text(data->aheadBehindLabel, "--:--:--.--");
     }
     
     // Next segment info

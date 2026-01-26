@@ -138,9 +138,9 @@ Updates per second is the number of times this display has been updated in a sec
 |   Current          Trip            Seg.           Total                                         (KPH)    |
 |    xx.xx           xx.xx          xx.xx           xx.xx                                                  |
 +----------------------------------------------------------------------------------------------------------+
-|   target xx.xx   +/- hh:mm:ss       |    next: xx.xx in xxx,xxx m  ETA hh:mm:ss                          |
+|   target xx.xx   +/- hh:mm:ss.ss    |    next: xx.xx in xxx,xxx m  ETA hh:mm:ss                          |
 +----------------------------------------------------------------------------------------------------------+
-|   updates/sec: xxx                                                                          [KPH/MPH]   |
+|   updates/sec: xxx                                                                          [KPH/MPH]    |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
@@ -216,9 +216,9 @@ new_cal = (input_meters * 1000 * 1000) / total_count_diff
 +----------------------------------------------------------------------------------------------------------+
 | Segment xx  -  next segment in xxx,xxx m                                                   hh:mm:ss      |
 +----------------------------------------------------------------------------------------------------------+
-|                Total:  xxx,xxx m   from hhh:mm:ss.s ago   [reset]                                          |
+|                Total:  xxx,xxx m   from hhh:mm:ss.s ago   [reset]                                        |
 +----------------------------------------------------------------------------------------------------------+
-|                Trip:   xxx,xxx m   from hhh:mm:ss.s ago   [reset]                                          |
+|                Trip:   xxx,xxx m   from hhh:mm:ss.s ago   [reset]                                        |
 +----------------------------------------------------------------------------------------------------------+
 |   [stage go]      [segments]       [next segment]       [calibration]       [date/time]                  |
 +----------------------------------------------------------------------------------------------------------+
