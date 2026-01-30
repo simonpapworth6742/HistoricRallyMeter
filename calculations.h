@@ -39,9 +39,16 @@ double calculateCurrentSpeed(const RallyState& state, const CounterPoll& current
 double calculateAverageSpeed(const RallyState& state, int64_t start_time_ms, 
                             int64_t current_time_ms, int64_t count_diff);
 
-// Calculate seconds ahead/behind target (high precision)
+// Calculate seconds ahead/behind target (high precision) - single segment
 double calculateAheadBehind(const RallyState& state, int64_t current_time_ms,
                           int64_t segment_start_time, double target_counts_per_hour,
                           int64_t actual_counts);
+
+// Calculate ideal counts from stage start accounting for all segment speeds
+double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elapsed_ms);
+
+// Calculate seconds ahead/behind from stage start (accounts for all segments)
+double calculateAheadBehindFromStageStart(const RallyState& state, int64_t current_time_ms,
+                                          int64_t actual_counts_from_stage_start);
 
 #endif // CALCULATIONS_H

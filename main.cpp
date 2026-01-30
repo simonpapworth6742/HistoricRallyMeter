@@ -134,9 +134,14 @@ static GdkMonitor* findDsi2Monitor(GdkDisplay* display) {
         GdkRectangle geometry;
         gdk_monitor_get_geometry(monitor, &geometry);
         
+        const char* model = gdk_monitor_get_model(monitor);
+        const char* manufacturer = gdk_monitor_get_manufacturer(monitor);
+        
         std::cout << "  Monitor " << i << ": "
                   << geometry.width << "x" << geometry.height
                   << " at (" << geometry.x << "," << geometry.y << ")"
+                  << " model=" << (model ? model : "null")
+                  << " mfr=" << (manufacturer ? manufacturer : "null")
                   << std::endl;
         
         // Match monitor to DSI-2 connector by resolution
@@ -291,25 +296,28 @@ int main(int argc, char* argv[]) {
         GdkMonitor* dsi2_monitor = findDsi2Monitor(display);
         
         // Position co-pilot window on DSI-2
+        int dsi2_index = -1;
         if (dsi2_monitor) {
             // Find the monitor index for DSI-2
-            int dsi2_index = 0;
-            int n_monitors = gdk_display_get_n_monitors(display);
-            for (int i = 0; i < n_monitors; i++) {
+            int n_mons = gdk_display_get_n_monitors(display);
+            for (int i = 0; i < n_mons; i++) {
                 if (gdk_display_get_monitor(display, i) == dsi2_monitor) {
                     dsi2_index = i;
                     break;
                 }
             }
             
-            // Position and fullscreen on DSI-2 monitor
+            // Position on DSI-2 monitor
             GdkRectangle geometry;
             gdk_monitor_get_geometry(dsi2_monitor, &geometry);
             std::cout << "Positioning co-pilot window on monitor " << dsi2_index 
                       << " at (" << geometry.x << "," << geometry.y << ")" << std::endl;
+            
+            // Set window size to match monitor
+            gtk_window_set_default_size(GTK_WINDOW(app_data.copilotWindow), 
+                                        geometry.width, geometry.height);
+            // Move before showing (may help on some compositors)
             gtk_window_move(GTK_WINDOW(app_data.copilotWindow), geometry.x, geometry.y);
-            gtk_window_fullscreen_on_monitor(GTK_WINDOW(app_data.copilotWindow), 
-                gdk_display_get_default_screen(display), dsi2_index);
         } else {
             // No DSI-2 display found - use 1280x400 window
             std::cout << "No DSI-2 found, opening co-pilot as 1280x400 window" << std::endl;
@@ -406,6 +414,13 @@ int main(int argc, char* argv[]) {
         // Show windows
         gtk_widget_show_all(app_data.driverWindow);
         gtk_widget_show_all(app_data.copilotWindow);
+        
+        // Fullscreen co-pilot on DSI-2 AFTER showing (required for Wayland)
+        if (dsi2_monitor && dsi2_index >= 0) {
+            std::cout << "Fullscreening co-pilot on monitor " << dsi2_index << std::endl;
+            gtk_window_fullscreen_on_monitor(GTK_WINDOW(app_data.copilotWindow), 
+                gdk_display_get_default_screen(display), dsi2_index);
+        }
         
         // Set up timer (10ms = 100Hz)
         g_timeout_add(10, update_display, &app_data);

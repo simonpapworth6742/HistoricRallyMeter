@@ -44,6 +44,7 @@ struct AppData {
     GtkLabel* totalSpeedLabel;
     GtkLabel* targetSpeedLabel;
     GtkLabel* aheadBehindLabel;
+    GtkLabel* speedAdjustArrowsLabel;
     GtkLabel* nextSegLabel;
     GtkLabel* updatesPerSecLabel;
     GtkLabel* unitsLabel;  // Shows KPH or MPH in header

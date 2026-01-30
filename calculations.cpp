@@ -132,3 +132,70 @@ double calculateAheadBehind(const RallyState& state, int64_t current_time_ms,
     double seconds = diff / counts_per_second;
     return seconds;
 }
+
+double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elapsed_ms) {
+    if (state.segment_current_number < 0 || state.segments.empty()) {
+        return 0.0;
+    }
+    
+    double ideal_counts = 0.0;
+    double remaining_time_s = elapsed_ms / 1000.0;
+    
+    // Go through each segment up to and including current
+    for (int i = 0; i <= state.segment_current_number && i < static_cast<int>(state.segments.size()); i++) {
+        const Segment& seg = state.segments[i];
+        
+        if (seg.target_speed_counts_per_hour <= 0.0) {
+            continue;  // Skip invalid segments
+        }
+        
+        // Time to complete this segment at target speed (in seconds)
+        // time = distance / speed = distance_counts / (counts_per_hour / 3600)
+        double segment_time_s = seg.distance_counts * 3600.0 / seg.target_speed_counts_per_hour;
+        
+        if (i < state.segment_current_number) {
+            // Completed segment - add full distance
+            ideal_counts += seg.distance_counts;
+            remaining_time_s -= segment_time_s;
+        } else {
+            // Current segment - use remaining time at this segment's speed
+            // But remaining_time_s might be negative if we're ahead, so use actual time in current segment
+            if (remaining_time_s > 0) {
+                double partial_counts = (remaining_time_s / 3600.0) * seg.target_speed_counts_per_hour;
+                ideal_counts += partial_counts;
+            }
+        }
+    }
+    
+    return ideal_counts;
+}
+
+double calculateAheadBehindFromStageStart(const RallyState& state, int64_t current_time_ms,
+                                          int64_t actual_counts_from_stage_start) {
+    if (state.segment_current_number < 0 || state.segments.empty()) {
+        return 0.0;
+    }
+    
+    // Get elapsed time since stage (total) start
+    int64_t elapsed_ms = current_time_ms - state.total_start_time_ms;
+    if (elapsed_ms <= 0) {
+        return 0.0;
+    }
+    
+    // Calculate where we should ideally be
+    double ideal_counts = calculateIdealCountsFromStageStart(state, elapsed_ms);
+    
+    // Difference: positive = ahead (traveled more than ideal), negative = behind
+    double diff = static_cast<double>(actual_counts_from_stage_start) - ideal_counts;
+    
+    // Convert to seconds using current segment's target speed
+    const Segment& current_seg = state.segments[state.segment_current_number];
+    if (current_seg.target_speed_counts_per_hour <= 0.0) {
+        return 0.0;
+    }
+    
+    double counts_per_second = current_seg.target_speed_counts_per_hour / 3600.0;
+    double seconds = diff / counts_per_second;
+    
+    return seconds;
+}

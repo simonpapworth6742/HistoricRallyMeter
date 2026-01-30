@@ -68,12 +68,11 @@ void updateDriverDisplay(AppData* data) {
         ss << std::fixed << std::setprecision(2) << target_kph;
         gtk_label_set_text(data->targetSpeedLabel, ss.str().c_str());
         
-        // Ahead/behind
-        int64_t seg_count_diff = calculateDistanceCounts(*data->state,
+        // Ahead/behind - calculated from stage start accounting for all segment speeds
+        int64_t total_count_diff = calculateDistanceCounts(*data->state,
             current_poll.cntr1, current_poll.cntr2,
-            data->state->segment_start_cntr1, data->state->segment_start_cntr2);
-        double seconds = calculateAheadBehind(*data->state, current_time_ms,
-            data->state->segment_start_time_ms, seg.target_speed_counts_per_hour, seg_count_diff);
+            data->state->total_start_cntr1, data->state->total_start_cntr2);
+        double seconds = calculateAheadBehindFromStageStart(*data->state, current_time_ms, total_count_diff);
         ss.str("");
         if (seconds >= 0) {
             ss << "+";
@@ -90,9 +89,72 @@ void updateDriverDisplay(AppData* data) {
            << std::setw(2) << mins << ":" << std::setw(2) << secs 
            << "." << std::setw(2) << hundredths;
         gtk_label_set_text(data->aheadBehindLabel, ss.str().c_str());
+        
+        // Speed adjustment arrows - only if more than 0.1 seconds off
+        GtkStyleContext* arrowCtx = gtk_widget_get_style_context(GTK_WIDGET(data->speedAdjustArrowsLabel));
+        gtk_style_context_remove_class(arrowCtx, "arrows-up");
+        gtk_style_context_remove_class(arrowCtx, "arrows-down");
+        
+        if (abs_seconds > 0.1 && target_kph > 0) {
+            // Calculate speed needed to match target in next 500 meters
+            // Time to cover 500m at target speed (in seconds)
+            double target_kph_raw = countsPerHourToKPH(seg.target_speed_counts_per_hour, data->state->calibration);
+            double target_time_s = 500.0 / (target_kph_raw / 3.6);  // 500m / (kph to m/s)
+            
+            double adjusted_time_s;
+            if (seconds < 0) {
+                // Behind - need to go faster to make up time
+                adjusted_time_s = target_time_s - abs_seconds;
+            } else {
+                // Ahead - need to go slower
+                adjusted_time_s = target_time_s + abs_seconds;
+            }
+            
+            // Prevent divide by zero or negative time
+            if (adjusted_time_s > 0.1) {
+                double needed_kph = (500.0 / adjusted_time_s) * 3.6;  // m/s to kph
+                double speed_diff = needed_kph - target_kph_raw;  // Positive = speed up, negative = slow down
+                
+                // Convert to display units if needed
+                if (data->state->units) {
+                    speed_diff = speed_diff * 0.621371;  // kph to mph
+                }
+                
+                double abs_diff = std::abs(speed_diff);
+                int num_arrows = 0;
+                if (abs_diff >= 5.0) {
+                    num_arrows = 3;
+                } else if (abs_diff >= 3.0) {
+                    num_arrows = 2;
+                } else if (abs_diff > 0) {
+                    num_arrows = 1;
+                }
+                
+                if (num_arrows > 0) {
+                    ss.str("");
+                    if (speed_diff > 0) {
+                        // Need to speed up - green up arrows
+                        for (int i = 0; i < num_arrows; i++) ss << "↑";
+                        gtk_style_context_add_class(arrowCtx, "arrows-up");
+                    } else {
+                        // Need to slow down - red down arrows
+                        for (int i = 0; i < num_arrows; i++) ss << "↓";
+                        gtk_style_context_add_class(arrowCtx, "arrows-down");
+                    }
+                    gtk_label_set_text(data->speedAdjustArrowsLabel, ss.str().c_str());
+                } else {
+                    gtk_label_set_text(data->speedAdjustArrowsLabel, "");
+                }
+            } else {
+                gtk_label_set_text(data->speedAdjustArrowsLabel, "");
+            }
+        } else {
+            gtk_label_set_text(data->speedAdjustArrowsLabel, "");
+        }
     } else {
         gtk_label_set_text(data->targetSpeedLabel, "--.--");
         gtk_label_set_text(data->aheadBehindLabel, "--:--:--.--");
+        gtk_label_set_text(data->speedAdjustArrowsLabel, "");
     }
     
     // Next segment info
@@ -162,7 +224,10 @@ static void applyDriverCSS(GtkWidget* G_GNUC_UNUSED widget) {
         ".speed-value { font-size: 48px; font-weight: bold; }"
         ".target-info { font-size: 20px; }"
         ".next-info { font-size: 18px; }"
-        ".footer-info { font-size: 14px; }",
+        ".footer-info { font-size: 14px; }"
+        ".speed-arrows { font-size: 28px; font-weight: bold; }"
+        ".arrows-up { color: #00AA00; }"
+        ".arrows-down { color: #DD0000; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -243,14 +308,17 @@ GtkWidget* createDriverWindow(AppData* data) {
     GtkWidget* targetLabel = gtk_label_new("target");
     data->targetSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
     data->aheadBehindLabel = GTK_LABEL(gtk_label_new("--:--:--"));
+    data->speedAdjustArrowsLabel = GTK_LABEL(gtk_label_new(""));
     
     gtk_style_context_add_class(gtk_widget_get_style_context(targetLabel), "target-info");
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->targetSpeedLabel)), "target-info");
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->aheadBehindLabel)), "target-info");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->speedAdjustArrowsLabel)), "speed-arrows");
     
     gtk_box_pack_start(GTK_BOX(targetBox), targetLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(targetBox), GTK_WIDGET(data->targetSpeedLabel), FALSE, FALSE, 10);
     gtk_box_pack_start(GTK_BOX(targetBox), GTK_WIDGET(data->aheadBehindLabel), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(targetBox), GTK_WIDGET(data->speedAdjustArrowsLabel), FALSE, FALSE, 5);
     
     // Right side: next segment info
     data->nextSegLabel = GTK_LABEL(gtk_label_new(""));

@@ -104,7 +104,7 @@ double distance – number of counts for the segment (high precision floating po
 Boolean autoNext – True =  when the distance of this segment has been reached the next segment is started automatically, changing the segment_current value and segment_start counter as well as resetting the trip counter values, false = the next segment button on the co-pilots TwinMaster display must be pressed to advance to the next segment, setting the segment_current, segment_counters and Trip counters
  
 
-The system has two counters available CNTR_1 and CNTR_2, when configured to use one gearbox counter then the distance since total, trip or segment  will be the value of the current CNTR_1 minus the total / trip / segment start_cntr1. If configured to two wheel then the distance since total, tip or segment will be ( (CNTR_1 - the total / trip / segment start_cntr1) + (CNTR_2 - the total / trip / segment start_cntr2) ) then divided by 2. Use integer maths.
+The system has two counters available CNTR_1 and CNTR_2, when configured to use one gearbox counter then the distance since total, trip or segment  will be the value of the current CNTR_1 minus the total / trip / segment start_cntr1. If configured to two wheel then the distance since total, trip or segment will be ( (CNTR_1 - the total / trip / segment start_cntr1) + (CNTR_2 - the total / trip / segment start_cntr2) ) then divided by 2. Use integer maths, this caculated counter should be called CNTR_A
 
 Calibration, As the wheels / gearbox rotate and the car moves forward, the amount the car travels in meters per counter increment has to be set via calibration. It is expected that there could be as few as one counter increment per wheel revolution and as many as sixteen. To ensure accuracy the calibration will be stored as the number of millimetres travelled per 1000 counts. Meters travelled = (count_diff * calibration) / 1000 / 1000. Keeping the calibration as a larger number enables integer maths to calculate speeds and distance travelled in centimetres. When updating the calibration new_cal = (input_meters * 1000 * 1000) / total_count_diff (to match mm/1000 counts).
 
@@ -112,7 +112,6 @@ Calibration, As the wheels / gearbox rotate and the car moves forward, the amoun
 
 Calculation of speed and display of speed / target speed. Taking account of the formula for two wheel counting vs gearbox counting the difference in counted distance travelled from a (total / trip /segment start multiplied by the calibration) and divided by 10000 = centimetres travelled. centimetres travelled divided by the time taken since the start gives a speed, and allow for integer maths for all but the final conversion to KPH or MPH, all speeds will be calculated for display from the counts travelled / time taken and then converted to KPH or MPH. There are 100,000 cm in a kilometre and 160,934 cm in a Mile. if current speed is 100 km/h, switching to MHP will display on next update "62.14" mph
 
- 
 
 As the car is moving the counters will be polled regularly, but not more than every 5ms, if polled in less than 5ms the function will return the same result as last time. When a segment distance has been covered and autoNext is enabled the segment should move to the next segment, or subsequent segment if polling interval means more than one segment has been passed, if there is one.
 
@@ -127,9 +126,9 @@ calculation of current speed, with too little time passed since a start any spee
 
 Drivers display Window (1280 x 400)
 
-The drivers display window is wide (1280px) and shallow (400px). It shows the average speed since the last reset of the Total, the current speed calculated from approximately the last 10 seconds of driving, the average speed since the last Trip reset, and the average speed since the start of the current segment. The target speed for the current segment and how many seconds ahead or behind target average speed by calculating how many counts difference there is between the actual count now and the count that it should be based upon the time since segment start and the target speed for the segment. Along with the ETA = remaining segment distance / (last-10s average speed) to the next segment. If there is no current segment defined or more than 1000m past end of the last segment, then display "--.--" for Seg. For the next segment line of the display hide it if there is no next segment and if last-10s speed = 0: '--.--'; negative remaining: 'Over by xx:xx:xx'.
+The drivers display window is wide (1280px) and shallow (400px). It shows the average speed since the last reset of the Total, the current speed calculated from approximately the last 10 seconds of driving, the average speed since the last Trip reset, and the average speed since the start of the current segment. The target speed for the current segment and how many seconds ahead or behind target average speed by calculating how many counts difference there is between the actual count now and the count that it should be based upon the time since stage start taking account of the differing speeds in segments already completed and the target speed for the current segment. Along with the ETA = remaining segment distance / (last-10s average speed) to the next segment. If there is no current segment defined or more than 1000m past end of the last segment, then display "--.--" for Seg. For the next segment line of the display hide it if there is no next segment and if last-10s speed = 0: '--.--'; negative remaining: 'Over by xx:xx:xx'.
 
-Seconds ahead behind formula (high precision): ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_h; diff = actual - ideal; seconds = diff / (target_counts_h / 3600.0). positive numbers means travelling too fast. All target speed and ETA calculations use high precision (double) floating point arithmetic throughout.
+Seconds ahead/behind formula (high precision): ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_h; diff = actual - ideal; seconds = diff / (target_counts_h / 3600.0). positive numbers means travelling too fast. All target speed and ETA calculations use high precision (double) floating point arithmetic throughout. If more than +- 0.1 ahead/behind then after the seconds ahead/behind value caculate the increase in speed needed to exactly match the target in the next 500 meters, Use up to 3 large green up arrows to indicate the requirement to speed up, and up to 3 large red down arrow to show the requirment to slow down. If between speed up / slow down less than 3 kph an hour show one arrow, between 3 and 5 show two arrows and more than 5 show 3 arrows. 
 
 Updates per second is the number of times this display has been updated in a second, Rolling count of driver display render/update calls over the last full second.
 
@@ -138,7 +137,7 @@ Updates per second is the number of times this display has been updated in a sec
 |   Current          Trip            Seg.           Total                                         (KPH)    |
 |    xx.xx           xx.xx          xx.xx           xx.xx                                                  |
 +----------------------------------------------------------------------------------------------------------+
-|   target xx.xx   +/- hh:mm:ss.ss    |    next: xx.xx in xxx,xxx m  ETA hh:mm:ss                          |
+|   target xx.xx   +/- hh:mm:ss.ss ↑↑↑↓↓↓   |        next: xx.xx in xxx,xxx m  ETA hh:mm:ss                |
 +----------------------------------------------------------------------------------------------------------+
 |   updates/sec: xxx                                                                          [KPH/MPH]    |
 +----------------------------------------------------------------------------------------------------------+
@@ -193,20 +192,23 @@ Changes in calibration have no effect on stored segment values.
 
 **2) Calibration Screen**
 
+The start button should zero the counts and total distance covered values on the display, and remember the actual CNTR_1 and CNTR_2 values
+The display should update the distances and counters every 10 ms while this screen is shown, but not when it is not
 ```
 +----------------------------------------------------------------------------------------------------------+
 |                                        CALIBRATION                                                       |
 +----------------------------------------------------------------------------------------------------------+
-|   Total distance: xxx,xxx m          |          Total counts: xxx,xxx,xxx                                |
+|   Total distance: xxx,xxx m  (counts caluated :CNTR_A   1:CNTR_1   2:CNTR_2)                                                   |
 +----------------------------------------------------------------------------------------------------------+
 |   Actual distance covered:  [______________] meters                                                      |
 +----------------------------------------------------------------------------------------------------------+
-|                                    [save]                              [back]                            |
+|     [start]                         [save]                                                      [back]   |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
 Min input: 500m, Max input: 100,000m.
 new_cal = (input_meters * 1000 * 1000) / total_count_diff
+When editing any value a numeric entry keyboard should be shown on the right of the screen, the same as the stage setup screen.
 
 ---
 
