@@ -40,7 +40,6 @@ struct AppData {
     GtkWidget* driverWindow;
     GtkLabel* currentSpeedLabel;
     GtkLabel* tripSpeedLabel;
-    GtkLabel* segSpeedLabel;
     GtkLabel* totalSpeedLabel;
     GtkLabel* targetSpeedLabel;
     GtkLabel* aheadBehindLabel;
@@ -49,6 +48,10 @@ struct AppData {
     GtkLabel* updatesPerSecLabel;
     GtkLabel* unitsLabel;  // Shows KPH or MPH in header
     GtkButton* unitToggleBtn;
+    
+    // Rally gauge
+    GtkWidget* rallyGaugeDrawingArea;
+    double aheadBehindSeconds = 0.0;  // Current ahead/behind value for gauge needle
     
     // Co-pilot window
     GtkWidget* copilotWindow;
@@ -73,9 +76,16 @@ struct AppData {
     
     // Calibration screen
     GtkWidget* calibrationScreen;
+    GtkWidget* calibrationMainBox;  // Main horizontal container for keypad
     GtkLabel* totalDistCalLabel;
     GtkLabel* totalCountCalLabel;
     GtkEntry* rallyDistEntry;
+    GtkWidget* calibrationKeypad;   // Numeric keypad for calibration
+    
+    // Calibration baseline values (set when "start" is pressed)
+    uint64_t cal_start_cntr1 = 0;
+    uint64_t cal_start_cntr2 = 0;
+    bool cal_started = false;  // True once "start" has been pressed
     
     // Date/Time setup screen
     GtkWidget* dateTimeScreen;

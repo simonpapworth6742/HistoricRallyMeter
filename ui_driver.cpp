@@ -7,6 +7,158 @@
 #include <sstream>
 #include <cmath>
 
+// Draw the rally gauge
+static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    
+    GtkAllocation alloc;
+    gtk_widget_get_allocation(widget, &alloc);
+    
+    double width = alloc.width;
+    double height = alloc.height;
+    
+    // Gauge dimensions - semicircle
+    double centerX = width / 2;
+    double centerY = height - 10;  // Bottom of drawing area with margin
+    double radius = std::min(width / 2, height) - 20;
+    
+    // Background
+    cairo_set_source_rgb(cr, 0.1, 0.1, 0.1);
+    cairo_paint(cr);
+    
+    // Draw gauge arc background (dark gray)
+    cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
+    cairo_set_line_width(cr, 15);
+    cairo_arc(cr, centerX, centerY, radius, M_PI, 2 * M_PI);
+    cairo_stroke(cr);
+    
+    // Draw colored sections
+    // Left side (behind/slow) - gradient from yellow to red
+    // Right side (ahead/fast) - gradient from yellow to red
+    
+    // Green zone in center (±2 seconds)
+    cairo_set_source_rgb(cr, 0.0, 0.8, 0.0);
+    cairo_set_line_width(cr, 12);
+    double green_angle = (2.0 / 10.0) * (M_PI / 2);  // 2 seconds out of 10
+    cairo_arc(cr, centerX, centerY, radius, M_PI + M_PI/2 - green_angle, M_PI + M_PI/2 + green_angle);
+    cairo_stroke(cr);
+    
+    // Yellow zones (2-5 seconds each side)
+    cairo_set_source_rgb(cr, 1.0, 0.8, 0.0);
+    double yellow_start = (2.0 / 10.0) * (M_PI / 2);
+    double yellow_end = (5.0 / 10.0) * (M_PI / 2);
+    // Left yellow (behind)
+    cairo_arc(cr, centerX, centerY, radius, M_PI + M_PI/2 - yellow_end, M_PI + M_PI/2 - yellow_start);
+    cairo_stroke(cr);
+    // Right yellow (ahead)
+    cairo_arc(cr, centerX, centerY, radius, M_PI + M_PI/2 + yellow_start, M_PI + M_PI/2 + yellow_end);
+    cairo_stroke(cr);
+    
+    // Red zones (5-10 seconds each side)
+    cairo_set_source_rgb(cr, 0.9, 0.1, 0.1);
+    double red_start = (5.0 / 10.0) * (M_PI / 2);
+    double red_end = M_PI / 2;
+    // Left red (behind)
+    cairo_arc(cr, centerX, centerY, radius, M_PI, M_PI + M_PI/2 - red_start);
+    cairo_stroke(cr);
+    // Right red (ahead)
+    cairo_arc(cr, centerX, centerY, radius, M_PI + M_PI/2 + red_start, 2 * M_PI);
+    cairo_stroke(cr);
+    
+    // Draw tick marks and labels
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    cairo_set_line_width(cr, 2);
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 14);
+    
+    // Draw major ticks at -10, -5, 0, +5, +10
+    for (int sec = -10; sec <= 10; sec += 5) {
+        double angle = M_PI + M_PI/2 + (sec / 10.0) * (M_PI / 2);
+        double inner_r = radius - 25;
+        double outer_r = radius + 5;
+        
+        double x1 = centerX + inner_r * cos(angle);
+        double y1 = centerY + inner_r * sin(angle);
+        double x2 = centerX + outer_r * cos(angle);
+        double y2 = centerY + outer_r * sin(angle);
+        
+        cairo_move_to(cr, x1, y1);
+        cairo_line_to(cr, x2, y2);
+        cairo_stroke(cr);
+        
+        // Label
+        char label[10];
+        if (sec == 0) {
+            snprintf(label, sizeof(label), "0");
+        } else if (sec > 0) {
+            snprintf(label, sizeof(label), "+%d", sec);
+        } else {
+            snprintf(label, sizeof(label), "%d", sec);
+        }
+        
+        cairo_text_extents_t extents;
+        cairo_text_extents(cr, label, &extents);
+        double label_r = radius + 20;
+        double lx = centerX + label_r * cos(angle) - extents.width/2;
+        double ly = centerY + label_r * sin(angle) + extents.height/2;
+        cairo_move_to(cr, lx, ly);
+        cairo_show_text(cr, label);
+    }
+    
+    // Draw minor ticks every second
+    cairo_set_line_width(cr, 1);
+    for (int sec = -10; sec <= 10; sec++) {
+        if (sec % 5 == 0) continue;  // Skip major ticks
+        double angle = M_PI + M_PI/2 + (sec / 10.0) * (M_PI / 2);
+        double inner_r = radius - 15;
+        double outer_r = radius + 2;
+        
+        double x1 = centerX + inner_r * cos(angle);
+        double y1 = centerY + inner_r * sin(angle);
+        double x2 = centerX + outer_r * cos(angle);
+        double y2 = centerY + outer_r * sin(angle);
+        
+        cairo_move_to(cr, x1, y1);
+        cairo_line_to(cr, x2, y2);
+        cairo_stroke(cr);
+    }
+    
+    // Draw needle
+    double seconds = data->aheadBehindSeconds;
+    // Clamp to ±10 seconds
+    if (seconds > 10.0) seconds = 10.0;
+    if (seconds < -10.0) seconds = -10.0;
+    
+    double needle_angle = M_PI + M_PI/2 + (seconds / 10.0) * (M_PI / 2);
+    double needle_length = radius - 35;
+    
+    // Needle shadow
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.5);
+    cairo_set_line_width(cr, 6);
+    cairo_move_to(cr, centerX + 2, centerY + 2);
+    cairo_line_to(cr, centerX + 2 + needle_length * cos(needle_angle), 
+                  centerY + 2 + needle_length * sin(needle_angle));
+    cairo_stroke(cr);
+    
+    // Needle
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    cairo_set_line_width(cr, 4);
+    cairo_move_to(cr, centerX, centerY);
+    cairo_line_to(cr, centerX + needle_length * cos(needle_angle), 
+                  centerY + needle_length * sin(needle_angle));
+    cairo_stroke(cr);
+    
+    // Needle center hub
+    cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
+    cairo_arc(cr, centerX, centerY, 8, 0, 2 * M_PI);
+    cairo_fill(cr);
+    cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
+    cairo_arc(cr, centerX, centerY, 8, 0, 2 * M_PI);
+    cairo_stroke(cr);
+    
+    return FALSE;
+}
+
 void updateDriverDisplay(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
     auto tenth_poll = data->poller->get10th();
@@ -32,20 +184,6 @@ void updateDriverDisplay(AppData* data) {
     ss << std::fixed << std::setprecision(2) << trip_speed;
     gtk_label_set_text(data->tripSpeedLabel, ss.str().c_str());
     
-    // Segment average speed
-    if (data->state->segment_current_number >= 0) {
-        int64_t seg_count_diff = calculateDistanceCounts(*data->state,
-            current_poll.cntr1, current_poll.cntr2,
-            data->state->segment_start_cntr1, data->state->segment_start_cntr2);
-        double seg_speed = calculateAverageSpeed(*data->state,
-            data->state->segment_start_time_ms, current_time_ms, seg_count_diff);
-        ss.str("");
-        ss << std::fixed << std::setprecision(2) << seg_speed;
-        gtk_label_set_text(data->segSpeedLabel, ss.str().c_str());
-    } else {
-        gtk_label_set_text(data->segSpeedLabel, "--.--");
-    }
-    
     // Total average speed
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
@@ -69,10 +207,15 @@ void updateDriverDisplay(AppData* data) {
         gtk_label_set_text(data->targetSpeedLabel, ss.str().c_str());
         
         // Ahead/behind - calculated from stage start accounting for all segment speeds
-        int64_t total_count_diff = calculateDistanceCounts(*data->state,
+        int64_t total_count_diff_ab = calculateDistanceCounts(*data->state,
             current_poll.cntr1, current_poll.cntr2,
             data->state->total_start_cntr1, data->state->total_start_cntr2);
-        double seconds = calculateAheadBehindFromStageStart(*data->state, current_time_ms, total_count_diff);
+        double seconds = calculateAheadBehindFromStageStart(*data->state, current_time_ms, total_count_diff_ab);
+        
+        // Store for gauge
+        data->aheadBehindSeconds = seconds;
+        
+        // Format as mm:ss.s (not hh:mm:ss.ss)
         ss.str("");
         if (seconds >= 0) {
             ss << "+";
@@ -81,13 +224,11 @@ void updateDriverDisplay(AppData* data) {
         }
         double abs_seconds = std::abs(seconds);
         int total_sec = static_cast<int>(abs_seconds);
-        int hundredths = static_cast<int>((abs_seconds - total_sec) * 100);
-        int hours = total_sec / 3600;
-        int mins = (total_sec % 3600) / 60;
+        int tenths = static_cast<int>((abs_seconds - total_sec) * 10);
+        int mins = total_sec / 60;
         int secs = total_sec % 60;
-        ss << std::setfill('0') << std::setw(2) << hours << ":"
-           << std::setw(2) << mins << ":" << std::setw(2) << secs 
-           << "." << std::setw(2) << hundredths;
+        ss << std::setfill('0') << std::setw(2) << mins << ":"
+           << std::setw(2) << secs << "." << tenths;
         gtk_label_set_text(data->aheadBehindLabel, ss.str().c_str());
         
         // Speed adjustment arrows - only if more than 0.1 seconds off
@@ -97,27 +238,22 @@ void updateDriverDisplay(AppData* data) {
         
         if (abs_seconds > 0.1 && target_kph > 0) {
             // Calculate speed needed to match target in next 500 meters
-            // Time to cover 500m at target speed (in seconds)
             double target_kph_raw = countsPerHourToKPH(seg.target_speed_counts_per_hour, data->state->calibration);
-            double target_time_s = 500.0 / (target_kph_raw / 3.6);  // 500m / (kph to m/s)
+            double target_time_s = 500.0 / (target_kph_raw / 3.6);
             
             double adjusted_time_s;
             if (seconds < 0) {
-                // Behind - need to go faster to make up time
                 adjusted_time_s = target_time_s - abs_seconds;
             } else {
-                // Ahead - need to go slower
                 adjusted_time_s = target_time_s + abs_seconds;
             }
             
-            // Prevent divide by zero or negative time
             if (adjusted_time_s > 0.1) {
-                double needed_kph = (500.0 / adjusted_time_s) * 3.6;  // m/s to kph
-                double speed_diff = needed_kph - target_kph_raw;  // Positive = speed up, negative = slow down
+                double needed_kph = (500.0 / adjusted_time_s) * 3.6;
+                double speed_diff = needed_kph - target_kph_raw;
                 
-                // Convert to display units if needed
                 if (data->state->units) {
-                    speed_diff = speed_diff * 0.621371;  // kph to mph
+                    speed_diff = speed_diff * 0.621371;
                 }
                 
                 double abs_diff = std::abs(speed_diff);
@@ -133,11 +269,9 @@ void updateDriverDisplay(AppData* data) {
                 if (num_arrows > 0) {
                     ss.str("");
                     if (speed_diff > 0) {
-                        // Need to speed up - green up arrows
                         for (int i = 0; i < num_arrows; i++) ss << "↑";
                         gtk_style_context_add_class(arrowCtx, "arrows-up");
                     } else {
-                        // Need to slow down - red down arrows
                         for (int i = 0; i < num_arrows; i++) ss << "↓";
                         gtk_style_context_add_class(arrowCtx, "arrows-down");
                     }
@@ -151,10 +285,15 @@ void updateDriverDisplay(AppData* data) {
         } else {
             gtk_label_set_text(data->speedAdjustArrowsLabel, "");
         }
+        
+        // Redraw gauge
+        gtk_widget_queue_draw(data->rallyGaugeDrawingArea);
     } else {
         gtk_label_set_text(data->targetSpeedLabel, "--.--");
-        gtk_label_set_text(data->aheadBehindLabel, "--:--:--.--");
+        gtk_label_set_text(data->aheadBehindLabel, "--:--.--");
         gtk_label_set_text(data->speedAdjustArrowsLabel, "");
+        data->aheadBehindSeconds = 0.0;
+        gtk_widget_queue_draw(data->rallyGaugeDrawingArea);
     }
     
     // Next segment info
@@ -165,11 +304,9 @@ void updateDriverDisplay(AppData* data) {
             current_poll.cntr1, current_poll.cntr2,
             data->state->segment_start_cntr1, data->state->segment_start_cntr2);
         
-        // High precision: remaining distance in meters
         double remaining_counts = current_seg.distance_counts - static_cast<double>(seg_count_diff);
         double remaining_m = countsToMeters(static_cast<int64_t>(remaining_counts), data->state->calibration);
         
-        // Get next segment target speed
         const Segment& next_seg = data->state->segments[data->state->segment_current_number + 1];
         double next_target = countsPerHourToKPH(next_seg.target_speed_counts_per_hour, data->state->calibration);
         if (data->state->units) {
@@ -177,12 +314,11 @@ void updateDriverDisplay(AppData* data) {
         }
         
         if (current_speed > 0 && current_speed != -1) {
-            // High precision ETA calculation
             double speed_m_per_s = current_speed;
             if (data->state->units) {
-                speed_m_per_s = speed_m_per_s * 1.60934;  // MPH to km/h
+                speed_m_per_s = speed_m_per_s * 1.60934;
             }
-            speed_m_per_s = speed_m_per_s / 3.6;  // km/h to m/s
+            speed_m_per_s = speed_m_per_s / 3.6;
             double eta_seconds = remaining_m / speed_m_per_s;
             
             if (eta_seconds < 0) {
@@ -220,14 +356,15 @@ void updateDriverDisplay(AppData* data) {
 static void applyDriverCSS(GtkWidget* G_GNUC_UNUSED widget) {
     GtkCssProvider* provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
-        ".speed-header { font-size: 24px; font-weight: bold; }"
-        ".speed-value { font-size: 48px; font-weight: bold; }"
-        ".target-info { font-size: 20px; }"
+        ".speed-header { font-size: 28px; font-weight: bold; }"
+        ".speed-value { font-size: 64px; font-weight: bold; font-family: monospace; }"
+        ".target-info { font-size: 22px; font-weight: bold; }"
+        ".ahead-behind { font-size: 28px; font-weight: bold; font-family: monospace; }"
         ".next-info { font-size: 18px; }"
         ".footer-info { font-size: 14px; }"
-        ".speed-arrows { font-size: 28px; font-weight: bold; }"
-        ".arrows-up { color: #00AA00; }"
-        ".arrows-down { color: #DD0000; }",
+        ".speed-arrows { font-size: 36px; font-weight: bold; }"
+        ".arrows-up { color: #00CC00; }"
+        ".arrows-down { color: #EE0000; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -243,102 +380,114 @@ GtkWidget* createDriverWindow(AppData* data) {
     
     applyDriverCSS(window);
     
-    GtkWidget* mainBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_container_set_border_width(GTK_CONTAINER(mainBox), 10);
+    GtkWidget* mainBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_container_set_border_width(GTK_CONTAINER(mainBox), 5);
     gtk_container_add(GTK_CONTAINER(window), mainBox);
     
-    // Row 1: Speed headers with units on far right
+    // Main content: left side speeds, right side gauge
+    GtkWidget* contentBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(mainBox), contentBox, TRUE, TRUE, 0);
+    
+    // Left side: Speed displays
+    GtkWidget* speedsBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_pack_start(GTK_BOX(contentBox), speedsBox, TRUE, TRUE, 0);
+    
+    // Speed headers
     GtkWidget* headerBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_box_pack_start(GTK_BOX(mainBox), headerBox, FALSE, FALSE, 5);
+    gtk_box_pack_start(GTK_BOX(speedsBox), headerBox, FALSE, FALSE, 0);
     
     GtkWidget* currentHeader = gtk_label_new("Current");
     GtkWidget* tripHeader = gtk_label_new("Trip");
-    GtkWidget* segHeader = gtk_label_new("Seg.");
     GtkWidget* totalHeader = gtk_label_new("Total");
-    data->unitsLabel = GTK_LABEL(gtk_label_new(data->state->units ? "(MPH)" : "(KPH)"));
     
     gtk_style_context_add_class(gtk_widget_get_style_context(currentHeader), "speed-header");
     gtk_style_context_add_class(gtk_widget_get_style_context(tripHeader), "speed-header");
-    gtk_style_context_add_class(gtk_widget_get_style_context(segHeader), "speed-header");
     gtk_style_context_add_class(gtk_widget_get_style_context(totalHeader), "speed-header");
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->unitsLabel)), "speed-header");
     
     gtk_widget_set_halign(currentHeader, GTK_ALIGN_CENTER);
     gtk_widget_set_halign(tripHeader, GTK_ALIGN_CENTER);
-    gtk_widget_set_halign(segHeader, GTK_ALIGN_CENTER);
     gtk_widget_set_halign(totalHeader, GTK_ALIGN_CENTER);
-    gtk_widget_set_halign(GTK_WIDGET(data->unitsLabel), GTK_ALIGN_END);
     
     gtk_box_pack_start(GTK_BOX(headerBox), currentHeader, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(headerBox), tripHeader, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(headerBox), segHeader, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(headerBox), totalHeader, TRUE, TRUE, 0);
-    gtk_box_pack_end(GTK_BOX(headerBox), GTK_WIDGET(data->unitsLabel), FALSE, FALSE, 20);
     
-    // Row 2: Large speed values spread across width
-    GtkWidget* speedsBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_box_pack_start(GTK_BOX(mainBox), speedsBox, TRUE, TRUE, 5);
+    // Speed values
+    GtkWidget* valuesBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_pack_start(GTK_BOX(speedsBox), valuesBox, TRUE, TRUE, 0);
     
     data->currentSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
     data->tripSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
-    data->segSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
     data->totalSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
     
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->currentSpeedLabel)), "speed-value");
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripSpeedLabel)), "speed-value");
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->segSpeedLabel)), "speed-value");
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalSpeedLabel)), "speed-value");
     
     gtk_widget_set_halign(GTK_WIDGET(data->currentSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_halign(GTK_WIDGET(data->tripSpeedLabel), GTK_ALIGN_CENTER);
-    gtk_widget_set_halign(GTK_WIDGET(data->segSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_halign(GTK_WIDGET(data->totalSpeedLabel), GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(GTK_WIDGET(data->currentSpeedLabel), GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(GTK_WIDGET(data->tripSpeedLabel), GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(GTK_WIDGET(data->totalSpeedLabel), GTK_ALIGN_CENTER);
     
-    gtk_box_pack_start(GTK_BOX(speedsBox), GTK_WIDGET(data->currentSpeedLabel), TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(speedsBox), GTK_WIDGET(data->tripSpeedLabel), TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(speedsBox), GTK_WIDGET(data->segSpeedLabel), TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(speedsBox), GTK_WIDGET(data->totalSpeedLabel), TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(valuesBox), GTK_WIDGET(data->currentSpeedLabel), TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(valuesBox), GTK_WIDGET(data->tripSpeedLabel), TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(valuesBox), GTK_WIDGET(data->totalSpeedLabel), TRUE, TRUE, 0);
     
-    // Row 3: Target + ahead/behind on left, next segment info on right
-    GtkWidget* middleBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
-    gtk_box_pack_start(GTK_BOX(mainBox), middleBox, FALSE, FALSE, 5);
+    // Right side: Rally gauge and info
+    GtkWidget* gaugeBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_widget_set_size_request(gaugeBox, 450, -1);
+    gtk_box_pack_end(GTK_BOX(contentBox), gaugeBox, FALSE, FALSE, 10);
     
-    // Left side: target and ahead/behind
-    GtkWidget* targetBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget* targetLabel = gtk_label_new("target");
+    // Units label at top right
+    data->unitsLabel = GTK_LABEL(gtk_label_new(data->state->units ? "(MPH)" : "(KPH)"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->unitsLabel)), "speed-header");
+    gtk_widget_set_halign(GTK_WIDGET(data->unitsLabel), GTK_ALIGN_END);
+    gtk_box_pack_start(GTK_BOX(gaugeBox), GTK_WIDGET(data->unitsLabel), FALSE, FALSE, 0);
+    
+    // Rally gauge drawing area
+    data->rallyGaugeDrawingArea = gtk_drawing_area_new();
+    gtk_widget_set_size_request(data->rallyGaugeDrawingArea, 400, 180);
+    g_signal_connect(data->rallyGaugeDrawingArea, "draw", G_CALLBACK(on_gauge_draw), data);
+    gtk_box_pack_start(GTK_BOX(gaugeBox), data->rallyGaugeDrawingArea, TRUE, TRUE, 0);
+    
+    // Target speed and ahead/behind below gauge
+    GtkWidget* targetInfoBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_set_halign(targetInfoBox, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(gaugeBox), targetInfoBox, FALSE, FALSE, 0);
+    
+    GtkWidget* targetLabel = gtk_label_new("target:");
     data->targetSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
-    data->aheadBehindLabel = GTK_LABEL(gtk_label_new("--:--:--"));
+    data->aheadBehindLabel = GTK_LABEL(gtk_label_new("--:--.--"));
     data->speedAdjustArrowsLabel = GTK_LABEL(gtk_label_new(""));
     
     gtk_style_context_add_class(gtk_widget_get_style_context(targetLabel), "target-info");
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->targetSpeedLabel)), "target-info");
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->aheadBehindLabel)), "target-info");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->aheadBehindLabel)), "ahead-behind");
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->speedAdjustArrowsLabel)), "speed-arrows");
     
-    gtk_box_pack_start(GTK_BOX(targetBox), targetLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(targetBox), GTK_WIDGET(data->targetSpeedLabel), FALSE, FALSE, 10);
-    gtk_box_pack_start(GTK_BOX(targetBox), GTK_WIDGET(data->aheadBehindLabel), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(targetBox), GTK_WIDGET(data->speedAdjustArrowsLabel), FALSE, FALSE, 5);
+    gtk_box_pack_start(GTK_BOX(targetInfoBox), targetLabel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(targetInfoBox), GTK_WIDGET(data->targetSpeedLabel), FALSE, FALSE, 5);
+    gtk_box_pack_start(GTK_BOX(targetInfoBox), GTK_WIDGET(data->aheadBehindLabel), FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(targetInfoBox), GTK_WIDGET(data->speedAdjustArrowsLabel), FALSE, FALSE, 5);
     
-    // Right side: next segment info
-    data->nextSegLabel = GTK_LABEL(gtk_label_new(""));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextSegLabel)), "next-info");
-    gtk_widget_set_halign(GTK_WIDGET(data->nextSegLabel), GTK_ALIGN_END);
-    
-    gtk_box_pack_start(GTK_BOX(middleBox), targetBox, FALSE, FALSE, 20);
-    gtk_box_pack_end(GTK_BOX(middleBox), GTK_WIDGET(data->nextSegLabel), TRUE, TRUE, 20);
-    
-    // Row 4: Updates counter on left, unit toggle button on far right
+    // Bottom row: Updates counter, next segment, unit toggle
     GtkWidget* footerBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(mainBox), footerBox, FALSE, FALSE, 5);
+    gtk_box_pack_end(GTK_BOX(mainBox), footerBox, FALSE, FALSE, 5);
     
     data->updatesPerSecLabel = GTK_LABEL(gtk_label_new("updates/sec: 0"));
+    data->nextSegLabel = GTK_LABEL(gtk_label_new(""));
     data->unitToggleBtn = GTK_BUTTON(gtk_button_new_with_label(data->state->units ? "MPH" : "KPH"));
     
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->updatesPerSecLabel)), "footer-info");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextSegLabel)), "next-info");
     
-    gtk_box_pack_start(GTK_BOX(footerBox), GTK_WIDGET(data->updatesPerSecLabel), FALSE, FALSE, 20);
-    gtk_box_pack_end(GTK_BOX(footerBox), GTK_WIDGET(data->unitToggleBtn), FALSE, FALSE, 20);
+    gtk_widget_set_halign(GTK_WIDGET(data->nextSegLabel), GTK_ALIGN_CENTER);
+    
+    gtk_box_pack_start(GTK_BOX(footerBox), GTK_WIDGET(data->updatesPerSecLabel), FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(footerBox), GTK_WIDGET(data->nextSegLabel), TRUE, TRUE, 0);
+    gtk_box_pack_end(GTK_BOX(footerBox), GTK_WIDGET(data->unitToggleBtn), FALSE, FALSE, 10);
     
     return window;
 }

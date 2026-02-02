@@ -36,8 +36,22 @@ void updateCopilotDisplay(AppData* data) {
     std::string rally_time = formatTime(current_time_ms);
     gtk_label_set_text(data->copilotRallyClockLabel, rally_time.c_str());
     
-    // Only update if TwinMaster screen is visible
+    // Check which screen is visible
     GtkWidget* visible_child = gtk_stack_get_visible_child(data->copilotStack);
+    
+    // Update calibration screen if visible (continuous updates per design)
+    if (visible_child == data->calibrationScreen) {
+        updateCalibrationDisplay(data);
+        return;
+    }
+    
+    // Update date/time screen if visible (for live clock display)
+    if (visible_child == data->dateTimeScreen) {
+        updateDateTimeDisplay(data);
+        return;
+    }
+    
+    // Only update TwinMaster if it's visible
     if (visible_child != data->twinMasterScreen) {
         return;
     }
@@ -241,7 +255,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
 
 // Create Calibration screen - horizontal layout for 1280x400
 GtkWidget* createCalibrationScreen(AppData* data) {
-    GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 15);
+    GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_container_set_border_width(GTK_CONTAINER(screen), 15);
     
     // Title
@@ -249,45 +263,58 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(titleLabel), "title-label");
     gtk_box_pack_start(GTK_BOX(screen), titleLabel, FALSE, FALSE, 0);
     
-    // Row 1: Distance and counts side by side
-    GtkWidget* infoRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 40);
-    gtk_box_pack_start(GTK_BOX(screen), infoRow, TRUE, TRUE, 0);
+    // Main horizontal container: left side for info, right side for keypad
+    data->calibrationMainBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(screen), data->calibrationMainBox, TRUE, TRUE, 0);
     
-    data->totalDistCalLabel = GTK_LABEL(gtk_label_new("Total distance: 0 m"));
-    data->totalCountCalLabel = GTK_LABEL(gtk_label_new("Total counts: 0"));
+    // Left side: info and input
+    GtkWidget* leftBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_box_pack_start(GTK_BOX(data->calibrationMainBox), leftBox, TRUE, TRUE, 0);
     
+    // Row 1: Distance with counter breakdown
+    // Format: "Total distance: xxx,xxx m  (counts calculated: CNTR_A  1: CNTR_1  2: CNTR_2)"
+    data->totalDistCalLabel = GTK_LABEL(gtk_label_new("Total distance: 0 m  (counts calculated: 0   1: 0   2: 0)"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistCalLabel)), "info-label");
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalCountCalLabel)), "info-label");
+    gtk_widget_set_halign(GTK_WIDGET(data->totalDistCalLabel), GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(leftBox), GTK_WIDGET(data->totalDistCalLabel), FALSE, FALSE, 5);
     
-    gtk_box_pack_start(GTK_BOX(infoRow), GTK_WIDGET(data->totalDistCalLabel), TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(infoRow), GTK_WIDGET(data->totalCountCalLabel), TRUE, TRUE, 0);
-    
-    // Row 2: Input field spread across
+    // Row 2: Input field
     GtkWidget* inputRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(screen), inputRow, FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(leftBox), inputRow, FALSE, FALSE, 10);
     
     GtkWidget* inputLabel = gtk_label_new("Actual distance covered:");
     data->rallyDistEntry = GTK_ENTRY(gtk_entry_new());
-    gtk_entry_set_placeholder_text(data->rallyDistEntry, "meters");
-    gtk_widget_set_size_request(GTK_WIDGET(data->rallyDistEntry), 200, -1);
+    gtk_entry_set_placeholder_text(data->rallyDistEntry, "500-100000");
+    gtk_widget_set_size_request(GTK_WIDGET(data->rallyDistEntry), 150, -1);
+    g_signal_connect(data->rallyDistEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     GtkWidget* unitLabel = gtk_label_new("meters");
     
-    gtk_box_pack_start(GTK_BOX(inputRow), inputLabel, FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(inputRow), inputLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(inputRow), GTK_WIDGET(data->rallyDistEntry), FALSE, FALSE, 10);
     gtk_box_pack_start(GTK_BOX(inputRow), unitLabel, FALSE, FALSE, 0);
     
-    // Row 3: Buttons
+    // Row 3: Buttons (start, save, back)
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
-    gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(leftBox), buttonBox, FALSE, FALSE, 10);
     
+    GtkWidget* startBtn = gtk_button_new_with_label("start");
     GtkWidget* saveBtn = gtk_button_new_with_label("save");
     GtkWidget* backBtn = gtk_button_new_with_label("back");
     
+    g_signal_connect(startBtn, "clicked", G_CALLBACK(on_calibration_start), data);
     g_signal_connect(saveBtn, "clicked", G_CALLBACK(on_save_calibration), data);
     g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
     
+    gtk_box_pack_start(GTK_BOX(buttonBox), startBtn, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(buttonBox), saveBtn, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(buttonBox), backBtn, TRUE, TRUE, 0);
+    
+    // Right side: numeric keypad
+    data->calibrationKeypad = createNumericKeypad(data);
+    gtk_box_pack_end(GTK_BOX(data->calibrationMainBox), data->calibrationKeypad, FALSE, FALSE, 10);
+    
+    // Hide totalCountCalLabel - we're using totalDistCalLabel for everything
+    data->totalCountCalLabel = GTK_LABEL(gtk_label_new(""));
     
     return screen;
 }

@@ -16,6 +16,7 @@ void on_show_twinmaster(GtkWidget* widget, gpointer user_data);
 void on_show_datetime(GtkWidget* widget, gpointer user_data);
 void on_add_segment(GtkWidget* widget, gpointer user_data);
 void on_delete_segment(GtkWidget* widget, gpointer user_data);
+void on_calibration_start(GtkWidget* widget, gpointer user_data);
 void on_save_calibration(GtkWidget* widget, gpointer user_data);
 void on_save_datetime(GtkWidget* widget, gpointer user_data);
 void refreshSegmentList(AppData* data);

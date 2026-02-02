@@ -144,6 +144,11 @@ void on_show_segments(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 void on_show_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     gtk_stack_set_visible_child_name(data->copilotStack, "calibration");
+    
+    // Reset calibration state when entering screen
+    data->cal_started = false;
+    data->activeEntry = data->rallyDistEntry;  // Set active entry for keypad
+    
     // Update calibration display
     updateCalibrationDisplay(data);
 }
@@ -320,16 +325,49 @@ void refreshSegmentList(AppData* data) {
     }
 }
 
+// Callback for calibration start button
+void on_calibration_start(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    auto current_poll = data->poller->getMostRecent();
+    
+    // Remember baseline counter values
+    data->cal_start_cntr1 = current_poll.cntr1;
+    data->cal_start_cntr2 = current_poll.cntr2;
+    data->cal_started = true;
+    
+    // Update display immediately
+    updateCalibrationDisplay(data);
+}
+
 // Helper function to update calibration display
 void updateCalibrationDisplay(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
-    int64_t total_count_diff = calculateDistanceCounts(*data->state,
-        current_poll.cntr1, current_poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2);
-    long total_m = countsToCentimeters(total_count_diff, data->state->calibration) / 100;
     
+    // Calculate counts from calibration start (or total start if not started)
+    uint64_t start_cntr1 = data->cal_started ? data->cal_start_cntr1 : data->state->total_start_cntr1;
+    uint64_t start_cntr2 = data->cal_started ? data->cal_start_cntr2 : data->state->total_start_cntr2;
+    
+    // Individual counter differences
+    int64_t cntr1_diff = current_poll.cntr1 - start_cntr1;
+    int64_t cntr2_diff = current_poll.cntr2 - start_cntr2;
+    
+    // CNTR_A (calculated) - average if two counters, or just cntr1 if single
+    int64_t cntr_a;
+    if (data->state->counters) {
+        // Two wheel counters - average
+        cntr_a = (cntr1_diff + cntr2_diff) / 2;
+    } else {
+        // Single gearbox counter
+        cntr_a = cntr1_diff;
+    }
+    
+    // Distance in meters
+    long total_m = countsToCentimeters(cntr_a, data->state->calibration) / 100;
+    
+    // Format: "Total distance: xxx,xxx m  (counts calculated: CNTR_A  1: CNTR_1  2: CNTR_2)"
     std::stringstream ss;
-    ss << "Total distance " << total_m << " m (" << total_count_diff << " count)";
+    ss << "Total distance: " << total_m << " m  (counts calculated: " << cntr_a 
+       << "   1: " << cntr1_diff << "   2: " << cntr2_diff << ")";
     gtk_label_set_text(data->totalDistCalLabel, ss.str().c_str());
 }
 
@@ -414,17 +452,23 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         
         if (rally_distance_m >= 500 && rally_distance_m <= 100000) {
             auto current_poll = data->poller->getMostRecent();
+            
+            // Use calibration start values if started, otherwise use total_start
+            uint64_t start_cntr1 = data->cal_started ? data->cal_start_cntr1 : data->state->total_start_cntr1;
+            uint64_t start_cntr2 = data->cal_started ? data->cal_start_cntr2 : data->state->total_start_cntr2;
+            
             int64_t total_count_diff = calculateDistanceCounts(*data->state,
                 current_poll.cntr1, current_poll.cntr2,
-                data->state->total_start_cntr1, data->state->total_start_cntr2);
+                start_cntr1, start_cntr2);
             
             if (total_count_diff > 0) {
                 // new_cal = (input_meters * 1000 * 1000) / total_count_diff
                 data->state->calibration = (rally_distance_m * 1000000) / total_count_diff;
                 ConfigFile::save(*data->state);
                 
-                // Clear entry
+                // Clear entry and reset calibration state
                 gtk_entry_set_text(data->rallyDistEntry, "");
+                data->cal_started = false;
                 updateCalibrationDisplay(data);
             }
         }

@@ -128,28 +128,42 @@ Drivers display Window (1280 x 400)
 
 The drivers display window is wide (1280px) and shallow (400px). It shows the average speed since the last reset of the Total, the current speed calculated from approximately the last 10 seconds of driving, the average speed since the last Trip reset, and the average speed since the start of the current segment. The target speed for the current segment and how many seconds ahead or behind target average speed by calculating how many counts difference there is between the actual count now and the count that it should be based upon the time since stage start taking account of the differing speeds in segments already completed and the target speed for the current segment. Along with the ETA = remaining segment distance / (last-10s average speed) to the next segment. If there is no current segment defined or more than 1000m past end of the last segment, then display "--.--" for Seg. For the next segment line of the display hide it if there is no next segment and if last-10s speed = 0: '--.--'; negative remaining: 'Over by xx:xx:xx'.
 
-Seconds ahead/behind formula (high precision): ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_h; diff = actual - ideal; seconds = diff / (target_counts_h / 3600.0). positive numbers means travelling too fast. All target speed and ETA calculations use high precision (double) floating point arithmetic throughout. If more than +- 0.1 ahead/behind then after the seconds ahead/behind value caculate the increase in speed needed to exactly match the target in the next 500 meters, Use up to 3 large green up arrows to indicate the requirement to speed up, and up to 3 large red down arrow to show the requirment to slow down. If between speed up / slow down less than 3 kph an hour show one arrow, between 3 and 5 show two arrows and more than 5 show 3 arrows. 
+Seconds ahead/behind formula (high precision): ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_h; diff = actual - ideal; seconds = diff / (target_counts_h / 3600.0). positive numbers means travelling too fast. All target speed and ETA calculations use high precision (double) floating point arithmetic throughout. If more than +- 0.1 ahead/behind then after the seconds ahead/behind value calculate the increase in speed needed to exactly match the target in the next 500 meters. Use up to 3 large green up arrows to indicate the requirement to speed up, and up to 3 large red down arrows to show the requirement to slow down. If speed adjustment needed is less than 3 kph show one arrow, between 3 and 5 show two arrows, and more than 5 show 3 arrows. 
 
 Updates per second is the number of times this display has been updated in a second, Rolling count of driver display render/update calls over the last full second.
 
+**Rally Gauge Display:**
+The ahead/behind timing is displayed as a 180-degree semicircular gauge (rally gauge style):
+- Zero (on target) at the top center (12 o'clock position)
+- +10 seconds (too fast/ahead) on the right (3 o'clock position)
+- -10 seconds (too slow/behind) on the left (9 o'clock position)
+- A needle/indicator shows the current ahead/behind position
+- Values beyond ±10 seconds pin the needle at the respective end
+- The gauge provides an intuitive visual indication - needle pointing right means slow down, needle pointing left means speed up
+
+Below the gauge, display:
+- The ahead/behind value as mm:ss.s format (e.g., "+01:23.4" or "-00:05.2")
+- Speed adjustment arrows (↑↑↑ green or ↓↓↓ red) as described above
+
 ```
 +----------------------------------------------------------------------------------------------------------+
-|   Current          Trip            Seg.           Total                                         (KPH)    |
-|    xx.xx           xx.xx          xx.xx           xx.xx                                                  |
+|   Current      Trip         Total         |              RALLY GAUGE                              (KPH)  |
+|    xx.xx       xx.xx        xx.xx         |         -10s ←───┬───→ +10s                                  |
+|                                           |              ╱   │   ╲                                       |
+|                                           |            ╱     ●     ╲      target: xx.xx                  |
+|                                           |          ╱       │       ╲    +/-mm:ss.s ↑↑↑↓↓↓             |
 +----------------------------------------------------------------------------------------------------------+
-|   target xx.xx   +/- hh:mm:ss.ss ↑↑↑↓↓↓   |        next: xx.xx in xxx,xxx m  ETA hh:mm:ss                |
-+----------------------------------------------------------------------------------------------------------+
-|   updates/sec: xxx                                                                          [KPH/MPH]    |
+|   updates/sec: xxx                                  next: xx.xx in xxx,xxx m  ETA hh:mm:ss  [KPH/MPH]    |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
 Layout notes for 1280x400 (wide, shallow display):
-- Row 1: Speed headers spread horizontally, units indicator (KPH/MPH) on far right
-- Row 2: Four large speed values evenly distributed across width
-- Row 3: Target speed and ahead/behind on left half, next segment info on right half
-- Row 4: Updates counter on left, unit toggle button on far right
+- Left side: Three speed values (Current, Trip, Total) with large fonts
+- Right side: Rally gauge with semicircular dial, target speed, and timing info
+- Bottom row: Updates counter on left, next segment info in center, unit toggle on right
+- The rally gauge should be prominently displayed as a graphical element
 - Use large fonts for speed values as they are primary information for driver
-- All elements arranged horizontally to maximize use of wide display
+- All elements arranged to maximize visibility for the driver
 
 Co-Pilots display window (1280 x 400)
 
@@ -193,7 +207,8 @@ Changes in calibration have no effect on stored segment values.
 **2) Calibration Screen**
 
 The start button should zero the counts and total distance covered values on the display, and remember the actual CNTR_1 and CNTR_2 values
-The display should update the distances and counters every 10 ms while this screen is shown, but not when it is not
+The display should update the distances and counters every 10 ms while this screen is shown, but not when it is not displayed.
+save button should update the stored calibration as defined above.
 ```
 +----------------------------------------------------------------------------------------------------------+
 |                                        CALIBRATION                                                       |
