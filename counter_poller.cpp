@@ -1,6 +1,7 @@
 #include "counter_poller.h"
 #include "i2c_counter.h"
 #include <chrono>
+#include <cstdio>
 
 CounterPoller::CounterPoller() {
     for (int i = 0; i < ARRAY_SIZE; i++) {
@@ -22,6 +23,42 @@ bool CounterPoller::poll(I2CCounter* cntr1, I2CCounter* cntr2, uint8_t reg) {
     try {
         uint32_t val1 = cntr1->readRegister(reg);
         uint32_t val2 = cntr2->readRegister(reg);
+        
+        // Spurious I2C read protection:
+        // 1. Reject reads that jump forward unreasonably far (e.g. 0xFFFF glitches)
+        // 2. Reject reads that go BACKWARDS (counter should only increment)
+        // Both indicate I2C bus errors returning corrupted data.
+        if (has_previous_read) {
+            bool bad1 = false, bad2 = false;
+            
+            if (val1 < last_good_cntr1) {
+                // Counter went backwards - always invalid
+                bad1 = true;
+            } else if ((val1 - last_good_cntr1) > MAX_COUNTER_JUMP) {
+                // Counter jumped forward too far - likely all-ones glitch
+                bad1 = true;
+            }
+            
+            if (val2 < last_good_cntr2) {
+                bad2 = true;
+            } else if ((val2 - last_good_cntr2) > MAX_COUNTER_JUMP) {
+                bad2 = true;
+            }
+            
+            if (bad1 || bad2) {
+                fprintf(stderr, "!!! BAD I2C READ REJECTED: raw c1=%u c2=%u last_good c1=%u c2=%u%s%s\n",
+                        val1, val2, last_good_cntr1, last_good_cntr2,
+                        bad1 ? " [c1 BAD]" : "", bad2 ? " [c2 BAD]" : "");
+                // Substitute last known good value for any bad counter
+                if (bad1) val1 = last_good_cntr1;
+                if (bad2) val2 = last_good_cntr2;
+            }
+        }
+        
+        // Update last known good values
+        last_good_cntr1 = val1;
+        last_good_cntr2 = val2;
+        has_previous_read = true;
         
         // Design: "Each poll if more than 0.2 second has passed since the time in the
         // first position of the array, then the array should be push down one, the last

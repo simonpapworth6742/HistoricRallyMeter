@@ -6,8 +6,9 @@
 #include <iomanip>
 #include <sstream>
 #include <cmath>
+#include <cstdio>
 
-// Draw the rally gauge
+// Draw the rally gauge (GaugePilot RallyMaster style)
 static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     
@@ -17,65 +18,55 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     double width = alloc.width;
     double height = alloc.height;
     
-    // Gauge dimensions - semicircle
+    // Gauge dimensions - semicircle with ±20 second scale
     double centerX = width / 2;
-    double centerY = height - 10;  // Bottom of drawing area with margin
-    double radius = std::min(width / 2, height) - 20;
+    double centerY = height - 15;
+    double radius = std::min(width / 2, height) - 25;
     
-    // Background
-    cairo_set_source_rgb(cr, 0.1, 0.1, 0.1);
+    // Background - dark
+    cairo_set_source_rgb(cr, 0.05, 0.05, 0.05);
     cairo_paint(cr);
     
-    // Draw gauge arc background (dark gray)
-    cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
-    cairo_set_line_width(cr, 15);
+    // Draw outer bezel ring
+    cairo_set_source_rgb(cr, 0.25, 0.25, 0.25);
+    cairo_set_line_width(cr, 4);
+    cairo_arc(cr, centerX, centerY, radius + 18, M_PI, 2 * M_PI);
+    cairo_stroke(cr);
+    
+    // Draw gauge arc background (dark)
+    cairo_set_source_rgb(cr, 0.12, 0.12, 0.12);
+    cairo_set_line_width(cr, 28);
     cairo_arc(cr, centerX, centerY, radius, M_PI, 2 * M_PI);
     cairo_stroke(cr);
     
-    // Draw colored sections
-    // Left side (behind/slow) - gradient from yellow to red
-    // Right side (ahead/fast) - gradient from yellow to red
+    // Draw yellow/gold graduated arc
+    // The arc gets brighter yellow towards the edges (more off-target)
+    for (int i = 0; i <= 40; i++) {
+        double sec = -20.0 + i;  // -20 to +20
+        double angle = M_PI + M_PI/2 + (sec / 20.0) * (M_PI / 2);
+        double next_angle = M_PI + M_PI/2 + ((sec + 1) / 20.0) * (M_PI / 2);
+        
+        // Color intensity based on distance from center
+        double intensity = std::abs(sec) / 20.0;
+        double r = 0.85 * (0.3 + 0.7 * intensity);
+        double g = 0.65 * (0.3 + 0.7 * intensity);
+        double b = 0.0;
+        
+        cairo_set_source_rgb(cr, r, g, b);
+        cairo_set_line_width(cr, 12);
+        cairo_arc(cr, centerX, centerY, radius, angle, next_angle);
+        cairo_stroke(cr);
+    }
     
-    // Green zone in center (±2 seconds)
-    cairo_set_source_rgb(cr, 0.0, 0.8, 0.0);
-    cairo_set_line_width(cr, 12);
-    double green_angle = (2.0 / 10.0) * (M_PI / 2);  // 2 seconds out of 10
-    cairo_arc(cr, centerX, centerY, radius, M_PI + M_PI/2 - green_angle, M_PI + M_PI/2 + green_angle);
-    cairo_stroke(cr);
+    // Draw tick marks - white
+    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
     
-    // Yellow zones (2-5 seconds each side)
-    cairo_set_source_rgb(cr, 1.0, 0.8, 0.0);
-    double yellow_start = (2.0 / 10.0) * (M_PI / 2);
-    double yellow_end = (5.0 / 10.0) * (M_PI / 2);
-    // Left yellow (behind)
-    cairo_arc(cr, centerX, centerY, radius, M_PI + M_PI/2 - yellow_end, M_PI + M_PI/2 - yellow_start);
-    cairo_stroke(cr);
-    // Right yellow (ahead)
-    cairo_arc(cr, centerX, centerY, radius, M_PI + M_PI/2 + yellow_start, M_PI + M_PI/2 + yellow_end);
-    cairo_stroke(cr);
-    
-    // Red zones (5-10 seconds each side)
-    cairo_set_source_rgb(cr, 0.9, 0.1, 0.1);
-    double red_start = (5.0 / 10.0) * (M_PI / 2);
-    double red_end = M_PI / 2;
-    // Left red (behind)
-    cairo_arc(cr, centerX, centerY, radius, M_PI, M_PI + M_PI/2 - red_start);
-    cairo_stroke(cr);
-    // Right red (ahead)
-    cairo_arc(cr, centerX, centerY, radius, M_PI + M_PI/2 + red_start, 2 * M_PI);
-    cairo_stroke(cr);
-    
-    // Draw tick marks and labels
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    cairo_set_line_width(cr, 2);
-    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 14);
-    
-    // Draw major ticks at -10, -5, 0, +5, +10
-    for (int sec = -10; sec <= 10; sec += 5) {
-        double angle = M_PI + M_PI/2 + (sec / 10.0) * (M_PI / 2);
-        double inner_r = radius - 25;
-        double outer_r = radius + 5;
+    // Major ticks at 0, 5, 10, 15, 20 on each side
+    cairo_set_line_width(cr, 2.5);
+    for (int sec = -20; sec <= 20; sec += 5) {
+        double angle = M_PI + M_PI/2 + (sec / 20.0) * (M_PI / 2);
+        double inner_r = radius - 20;
+        double outer_r = radius + 8;
         
         double x1 = centerX + inner_r * cos(angle);
         double y1 = centerY + inner_r * sin(angle);
@@ -85,76 +76,153 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
         cairo_move_to(cr, x1, y1);
         cairo_line_to(cr, x2, y2);
         cairo_stroke(cr);
+    }
+    
+    // Minor ticks every second
+    cairo_set_line_width(cr, 1);
+    for (int sec = -20; sec <= 20; sec++) {
+        if (sec % 5 == 0) continue;
+        double angle = M_PI + M_PI/2 + (sec / 20.0) * (M_PI / 2);
+        double inner_r = radius - 10;
+        double outer_r = radius + 4;
         
-        // Label
+        double x1 = centerX + inner_r * cos(angle);
+        double y1 = centerY + inner_r * sin(angle);
+        double x2 = centerX + outer_r * cos(angle);
+        double y2 = centerY + outer_r * sin(angle);
+        
+        cairo_move_to(cr, x1, y1);
+        cairo_line_to(cr, x2, y2);
+        cairo_stroke(cr);
+    }
+    
+    // Draw labels
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 13);
+    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+    
+    // Labels at 5, 10, 15, 20 on each side (not 0)
+    int labels[] = {5, 10, 15, 20};
+    for (int i = 0; i < 4; i++) {
+        int sec = labels[i];
+        // Left side (negative/behind)
+        double angle_left = M_PI + M_PI/2 - (sec / 20.0) * (M_PI / 2);
+        double label_r = radius - 32;
         char label[10];
-        if (sec == 0) {
-            snprintf(label, sizeof(label), "0");
-        } else if (sec > 0) {
-            snprintf(label, sizeof(label), "+%d", sec);
-        } else {
-            snprintf(label, sizeof(label), "%d", sec);
-        }
+        snprintf(label, sizeof(label), "%d", sec);
         
         cairo_text_extents_t extents;
         cairo_text_extents(cr, label, &extents);
-        double label_r = radius + 20;
-        double lx = centerX + label_r * cos(angle) - extents.width/2;
-        double ly = centerY + label_r * sin(angle) + extents.height/2;
+        double lx = centerX + label_r * cos(angle_left) - extents.width/2;
+        double ly = centerY + label_r * sin(angle_left) + extents.height/2;
+        cairo_move_to(cr, lx, ly);
+        cairo_show_text(cr, label);
+        
+        // Right side (positive/ahead)
+        double angle_right = M_PI + M_PI/2 + (sec / 20.0) * (M_PI / 2);
+        lx = centerX + label_r * cos(angle_right) - extents.width/2;
+        ly = centerY + label_r * sin(angle_right) + extents.height/2;
         cairo_move_to(cr, lx, ly);
         cairo_show_text(cr, label);
     }
     
-    // Draw minor ticks every second
-    cairo_set_line_width(cr, 1);
-    for (int sec = -10; sec <= 10; sec++) {
-        if (sec % 5 == 0) continue;  // Skip major ticks
-        double angle = M_PI + M_PI/2 + (sec / 10.0) * (M_PI / 2);
-        double inner_r = radius - 15;
-        double outer_r = radius + 2;
-        
-        double x1 = centerX + inner_r * cos(angle);
-        double y1 = centerY + inner_r * sin(angle);
-        double x2 = centerX + outer_r * cos(angle);
-        double y2 = centerY + outer_r * sin(angle);
-        
-        cairo_move_to(cr, x1, y1);
-        cairo_line_to(cr, x2, y2);
-        cairo_stroke(cr);
+    // Draw "- sec" label on left and "sec +" on right
+    cairo_set_font_size(cr, 11);
+    cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+    
+    cairo_text_extents_t ext;
+    cairo_text_extents(cr, "- sec", &ext);
+    cairo_move_to(cr, centerX - radius + 5, centerY - 5);
+    cairo_show_text(cr, "- sec");
+    
+    cairo_text_extents(cr, "sec +", &ext);
+    cairo_move_to(cr, centerX + radius - ext.width - 5, centerY - 5);
+    cairo_show_text(cr, "sec +");
+    
+    // Draw center triangle marker at 0
+    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+    double tri_y = centerY - radius - 12;
+    cairo_move_to(cr, centerX, tri_y + 10);
+    cairo_line_to(cr, centerX - 6, tri_y);
+    cairo_line_to(cr, centerX + 6, tri_y);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+    
+    // Draw digital display box in center
+    double box_width = 70;
+    double box_height = 28;
+    double box_x = centerX - box_width/2;
+    double box_y = centerY - 45;
+    
+    // Box background
+    cairo_set_source_rgb(cr, 0.08, 0.08, 0.08);
+    cairo_rectangle(cr, box_x, box_y, box_width, box_height);
+    cairo_fill(cr);
+    
+    // Box border
+    cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
+    cairo_set_line_width(cr, 1.5);
+    cairo_rectangle(cr, box_x, box_y, box_width, box_height);
+    cairo_stroke(cr);
+    
+    // Digital readout - show seconds with one decimal
+    double seconds = data->aheadBehindSeconds;
+    char digital[20];
+    if (seconds >= 0) {
+        snprintf(digital, sizeof(digital), "%05.1f", std::abs(seconds));
+    } else {
+        snprintf(digital, sizeof(digital), "%05.1f", std::abs(seconds));
     }
     
-    // Draw needle
-    double seconds = data->aheadBehindSeconds;
-    // Clamp to ±10 seconds
-    if (seconds > 10.0) seconds = 10.0;
-    if (seconds < -10.0) seconds = -10.0;
+    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 18);
     
-    double needle_angle = M_PI + M_PI/2 + (seconds / 10.0) * (M_PI / 2);
-    double needle_length = radius - 35;
+    // Yellow/amber color for digital display
+    cairo_set_source_rgb(cr, 0.9, 0.75, 0.0);
+    
+    cairo_text_extents_t dext;
+    cairo_text_extents(cr, digital, &dext);
+    cairo_move_to(cr, centerX - dext.width/2, box_y + box_height/2 + dext.height/2 - 2);
+    cairo_show_text(cr, digital);
+    
+    // Draw needle
+    double needle_seconds = seconds;
+    // Clamp to ±20 seconds
+    if (needle_seconds > 20.0) needle_seconds = 20.0;
+    if (needle_seconds < -20.0) needle_seconds = -20.0;
+    
+    double needle_angle = M_PI + M_PI/2 + (needle_seconds / 20.0) * (M_PI / 2);
+    double needle_length = radius - 45;
     
     // Needle shadow
-    cairo_set_source_rgba(cr, 0, 0, 0, 0.5);
-    cairo_set_line_width(cr, 6);
+    cairo_set_source_rgba(cr, 0, 0, 0, 0.4);
+    cairo_set_line_width(cr, 5);
     cairo_move_to(cr, centerX + 2, centerY + 2);
     cairo_line_to(cr, centerX + 2 + needle_length * cos(needle_angle), 
                   centerY + 2 + needle_length * sin(needle_angle));
     cairo_stroke(cr);
     
-    // Needle
+    // Needle - white with slight taper
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    cairo_set_line_width(cr, 4);
+    cairo_set_line_width(cr, 3);
     cairo_move_to(cr, centerX, centerY);
     cairo_line_to(cr, centerX + needle_length * cos(needle_angle), 
                   centerY + needle_length * sin(needle_angle));
     cairo_stroke(cr);
     
-    // Needle center hub
-    cairo_set_source_rgb(cr, 0.8, 0.8, 0.8);
-    cairo_arc(cr, centerX, centerY, 8, 0, 2 * M_PI);
-    cairo_fill(cr);
+    // Needle hub
     cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
-    cairo_arc(cr, centerX, centerY, 8, 0, 2 * M_PI);
+    cairo_arc(cr, centerX, centerY, 10, 0, 2 * M_PI);
+    cairo_fill(cr);
+    cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
+    cairo_set_line_width(cr, 1);
+    cairo_arc(cr, centerX, centerY, 10, 0, 2 * M_PI);
     cairo_stroke(cr);
+    
+    // Center dot
+    cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
+    cairo_arc(cr, centerX, centerY, 4, 0, 2 * M_PI);
+    cairo_fill(cr);
     
     return FALSE;
 }
@@ -293,7 +361,9 @@ void updateDriverDisplay(AppData* data) {
         gtk_label_set_text(data->aheadBehindLabel, "--:--.--");
         gtk_label_set_text(data->speedAdjustArrowsLabel, "");
         data->aheadBehindSeconds = 0.0;
-        gtk_widget_queue_draw(data->rallyGaugeDrawingArea);
+        if (data->rallyGaugeDrawingArea) {
+            gtk_widget_queue_draw(data->rallyGaugeDrawingArea);
+        }
     }
     
     // Next segment info

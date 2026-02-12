@@ -80,8 +80,8 @@ void on_stage_go(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 void on_next_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     if (data->state->segment_current_number < static_cast<long>(data->state->segments.size()) - 1) {
-        data->state->segment_current_number++;
         auto current_poll = data->poller->getMostRecent();
+        data->state->segment_current_number++;
         data->state->segment_start_cntr1 = current_poll.cntr1;
         data->state->segment_start_cntr2 = current_poll.cntr2;
         data->state->segment_start_time_ms = getRallyTime_ms(*data->state);

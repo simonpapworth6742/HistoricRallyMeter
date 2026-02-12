@@ -134,6 +134,7 @@ Updates per second is the number of times this display has been updated in a sec
 
 **Rally Gauge Display:**
 The ahead/behind timing is displayed as a 180-degree semicircular gauge (rally gauge style):
+look at the example guage in gaugepilot-rallymaster-display.png
 - Zero (on target) at the top center (12 o'clock position)
 - +10 seconds (too fast/ahead) on the right (3 o'clock position)
 - -10 seconds (too slow/behind) on the left (9 o'clock position)

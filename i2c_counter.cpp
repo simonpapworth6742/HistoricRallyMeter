@@ -58,3 +58,4 @@ uint32_t I2CCounter::readRegister(uint8_t reg) {
     
     return value;
 }
+

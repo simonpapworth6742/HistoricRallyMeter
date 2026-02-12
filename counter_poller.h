@@ -15,6 +15,14 @@ private:
     int64_t last_poll_time_ms = 0;
     static constexpr int MIN_POLL_INTERVAL_MS = 5;
     
+    // Spurious I2C read protection: reject reads that jump too far from last known good value.
+    // Max allowed jump per poll interval (~5-10ms). 1000 counts ≈ 600m at default cal,
+    // which at 10ms intervals would be 216,000 km/h — far beyond any real vehicle.
+    static constexpr uint32_t MAX_COUNTER_JUMP = 1000;
+    uint32_t last_good_cntr1 = 0;
+    uint32_t last_good_cntr2 = 0;
+    bool has_previous_read = false;
+    
 public:
     CounterPoller();
     
