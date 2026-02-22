@@ -81,7 +81,7 @@ void on_stage_go(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->gaugeScaleChangeTime = 0;
     data->aheadBehindSeconds = 0.0;
     
-    if (data->toneGen) data->toneGen->setCadence(0, 0);
+    if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
     
     ConfigFile::save(*data->state);
 }

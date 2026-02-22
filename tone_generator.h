@@ -13,8 +13,10 @@ public:
     void start();
     void stop();
 
-    // Set beep cadence: tone_ms on, silence_ms off. Both 0 = silent.
-    void setCadence(int tone_ms, int silence_ms);
+    // Set beep cadence and pitch.
+    // tone_ms/silence_ms: on/off durations. Both 0 = silent.
+    // freq_hz: tone frequency in Hz (e.g. 523.25 for C5).
+    void setCadence(int tone_ms, int silence_ms, double freq_hz = 0.0);
 
 private:
     void threadFunc();
@@ -25,6 +27,7 @@ private:
     std::mutex mu_;
     int tone_ms_ = 0;
     int silence_ms_ = 0;
+    double freq_hz_ = 0.0;
 };
 
 #endif // TONE_GENERATOR_H
