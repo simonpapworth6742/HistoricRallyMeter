@@ -128,7 +128,7 @@ Drivers display Window (1280 x 400)
 
 The drivers display window is wide (1280px) and shallow (400px). It shows the average speed since the last reset of the Total, the current speed calculated from approximately the last 10 seconds of driving, the average speed since the last Trip reset, and the average speed since the start of the current segment. The target speed for the current segment and how many seconds ahead or behind target average speed by calculating how many counts difference there is between the actual count now and the count that it should be based upon the time since stage start taking account of the differing speeds in segments already completed and the target speed for the current segment. Along with the ETA = remaining segment distance / (last-10s average speed) to the next segment. If there is no current segment defined or more than 1000m past end of the last segment, then display "--.--" for Seg. For the next segment line of the display hide it if there is no next segment and if last-10s speed = 0: '--.--'; negative remaining: 'Over by xx:xx:xx'.
 
-Seconds ahead/behind formula (high precision): ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_h; diff = actual - ideal; seconds = diff / (target_counts_h / 3600.0). positive numbers means travelling too fast. All target speed and ETA calculations use high precision (double) floating point arithmetic throughout. If more than +- 0.1 ahead/behind then after the seconds ahead/behind value calculate the increase in speed needed to exactly match the target in the next 500 meters. Use up to 3 large green up arrows to indicate the requirement to speed up, and up to 3 large red down arrows to show the requirement to slow down. If speed adjustment needed is less than 3 kph show one arrow, between 3 and 5 show two arrows, and more than 5 show 3 arrows. 
+Seconds ahead/behind formula (high precision): ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_h; diff = actual - ideal; seconds = diff / (target_counts_h / 3600.0). positive numbers means travelling too fast. All target speed and ETA calculations use high precision (double) floating point arithmetic throughout. If more than +- 0.1 ahead/behind then after the seconds ahead/behind value calculate the increase in speed needed to exactly match the target in the next 500 meters. Use up to 3 green up arrows to indicate the requirement to speed up, and up to 3 red down arrows to show the requirement to slow down. If speed adjustment needed is less than 3 kph show one arrow, between 3 and 5 show two arrows, and more than 5 show 3 arrows. 
 
 Updates per second is the number of times this display has been updated in a second, Rolling count of driver display render/update calls over the last full second.
 
@@ -136,10 +136,12 @@ Updates per second is the number of times this display has been updated in a sec
 The ahead/behind timing is displayed as a 180-degree semicircular gauge (rally gauge style):
 look at the example guage in gaugepilot-rallymaster-display.png
 - Zero (on target) at the top center (12 o'clock position)
-- +10 seconds (too fast/ahead) on the right (3 o'clock position)
-- -10 seconds (too slow/behind) on the left (9 o'clock position)
+- adjust the scale on the guage based upon the current number of seconds you are ahead/ behind, have three scales +- 5 minutes (red), +-10 seconds (yellow), +- 3 seconds (green)
+- red should have a red semi circle on the guage, and the amount ahead/behind should be shown as +-hhh:mm:ss
+- yellow should have a yellow semi circle on the guage, and the amount ahead/behind should be shown as +-ss.s
+- green should have a green semi circle on the guage, and the amount ahead/behind should be shown as +-ss.s
+- the scale on the guage should wait for the ahead/behind time to be outside its scale for 2 seconds before switching to debounce
 - A needle/indicator shows the current ahead/behind position
-- Values beyond ±10 seconds pin the needle at the respective end
 - The gauge provides an intuitive visual indication - needle pointing right means slow down, needle pointing left means speed up
 
 Below the gauge, display:

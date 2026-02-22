@@ -7,45 +7,79 @@
 #include <sstream>
 #include <cmath>
 #include <cstdio>
+#include <chrono>
 
-// Auto-scaling gauge: three scales with hysteresis to avoid flickering.
-// Scale 0: ±3 seconds   (fine - when close to target)
-// Scale 1: ±10 seconds  (medium)
-// Scale 2: ±5 minutes   (coarse - when very far off)
+// Auto-scaling gauge with 2-second debounce.
+// Scale 0: ±3 seconds   (green arc)
+// Scale 1: ±10 seconds  (yellow arc)
+// Scale 2: ±5 minutes   (red arc)
+static int64_t gauge_now_ms() {
+    auto now = std::chrono::system_clock::now();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        now.time_since_epoch()).count();
+}
+
 static void updateGaugeScale(AppData* data) {
     double abs_sec = std::abs(data->aheadBehindSeconds);
-    int scale = data->gaugeScale;
+    int desired = data->gaugeScale;
 
-    // Hysteresis: scale up when value exceeds range, scale down when comfortably inside
-    switch (scale) {
-    case 0: // ±3s
-        if (abs_sec > 3.0) scale = 1;
-        break;
-    case 1: // ±10s
-        if (abs_sec > 10.0) scale = 2;
-        else if (abs_sec < 2.0) scale = 0;
-        break;
-    case 2: // ±5min
-        if (abs_sec < 8.0) scale = 1;
-        break;
+    // Determine which scale the value belongs in
+    if (abs_sec <= 3.0) desired = 0;
+    else if (abs_sec <= 10.0) desired = 1;
+    else desired = 2;
+
+    if (desired == data->gaugeScale) {
+        // Value is within current scale, cancel any pending change
+        data->gaugePendingScale = -1;
+        return;
     }
-    data->gaugeScale = scale;
+
+    // Value is outside current scale -- debounce for 2 seconds
+    int64_t now = gauge_now_ms();
+    if (data->gaugePendingScale != desired) {
+        data->gaugePendingScale = desired;
+        data->gaugeScaleChangeTime = now;
+        return;
+    }
+
+    if (now - data->gaugeScaleChangeTime >= 2000) {
+        data->gaugeScale = desired;
+        data->gaugePendingScale = -1;
+    }
 }
 
 struct GaugeScaleInfo {
-    double max_seconds;       // full-scale value in seconds
-    int major_step;           // major tick interval (in display units)
-    int minor_divisions;      // minor ticks between majors
-    int num_arc_segments;     // segments for graduated arc
-    const char* unit_label;   // "sec" or "min"
-    bool labels_in_minutes;   // show labels as minutes
+    double max_seconds;
+    int major_count;       // number of major divisions on each side
+    int minor_per_major;   // minor ticks between each major
+    double arc_r, arc_g, arc_b;  // arc colour
 };
 
 static GaugeScaleInfo getGaugeScaleInfo(int scale) {
     switch (scale) {
-    case 0:  return { 3.0,   1,  5,  30, "sec", false };
-    case 2:  return { 300.0, 1, 5,  30, "min", true  };
-    default: return { 10.0,  5,  5,  40, "sec", false };
+    case 0:  return { 3.0,    3,  5, 0.0, 0.7, 0.0 };   // green
+    case 2:  return { 300.0,  5,  6, 0.8, 0.1, 0.1 };   // red
+    default: return { 10.0,   5,  5, 0.85, 0.65, 0.0 };  // yellow
+    }
+}
+
+// Format the digital readout based on scale
+// Red (±5min): ±hhh:mm:ss   Yellow/Green (±10s/±3s): ±ss.s
+static void formatGaugeDigital(char* buf, size_t bufsize, double seconds, int scale) {
+    double abs_sec = std::abs(seconds);
+    const char* sign = seconds < 0 ? "-" : "+";
+
+    if (scale == 2) {
+        int total_sec = static_cast<int>(abs_sec + 0.5);
+        int h = total_sec / 3600;
+        int m = (total_sec % 3600) / 60;
+        int s = total_sec % 60;
+        if (h > 0)
+            snprintf(buf, bufsize, "%s%d:%02d:%02d", sign, h, m, s);
+        else
+            snprintf(buf, bufsize, "%s%02d:%02d", sign, m, s);
+    } else {
+        snprintf(buf, bufsize, "%s%.1f", sign, abs_sec);
     }
 }
 
@@ -55,10 +89,8 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
 
     GtkAllocation alloc;
     gtk_widget_get_allocation(widget, &alloc);
-
     double width = alloc.width;
     double height = alloc.height;
-
     double centerX = width / 2;
     double centerY = height - 15;
     double radius = std::min(width / 2, height) - 25;
@@ -66,7 +98,6 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     updateGaugeScale(data);
     GaugeScaleInfo si = getGaugeScaleInfo(data->gaugeScale);
     double max_val = si.max_seconds;
-    double display_max = si.labels_in_minutes ? max_val / 60.0 : max_val;
 
     // Background
     cairo_set_source_rgb(cr, 0.05, 0.05, 0.05);
@@ -84,34 +115,37 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     cairo_arc(cr, centerX, centerY, radius, M_PI, 2 * M_PI);
     cairo_stroke(cr);
 
-    // Graduated yellow/gold arc
-    int segments = si.num_arc_segments;
-    for (int i = 0; i <= segments; i++) {
-        double frac = -1.0 + (2.0 * i) / segments;
+    // Coloured graduated arc (green/yellow/red depending on scale)
+    int arc_segments = 40;
+    for (int i = 0; i <= arc_segments; i++) {
+        double frac = -1.0 + (2.0 * i) / arc_segments;
         double angle = M_PI + M_PI/2 + frac * (M_PI / 2);
-        double next_frac = -1.0 + (2.0 * (i + 1)) / segments;
+        double next_frac = -1.0 + (2.0 * (i + 1)) / arc_segments;
         double next_angle = M_PI + M_PI/2 + next_frac * (M_PI / 2);
 
-        double intensity = std::abs(frac);
-        double r = 0.85 * (0.3 + 0.7 * intensity);
-        double g = 0.65 * (0.3 + 0.7 * intensity);
-
-        cairo_set_source_rgb(cr, r, g, 0.0);
+        double intensity = 0.3 + 0.7 * std::abs(frac);
+        cairo_set_source_rgb(cr, si.arc_r * intensity, si.arc_g * intensity, si.arc_b * intensity);
         cairo_set_line_width(cr, 12);
         cairo_arc(cr, centerX, centerY, radius, angle, next_angle);
         cairo_stroke(cr);
     }
 
-    // Major ticks and labels
+    // Determine label values based on scale
+    // Scale 0 (±3s):   majors at 1,2,3 -- labels "1","2","3" (sec)
+    // Scale 1 (±10s):  majors at 2,4,6,8,10 -- labels "2","4","6","8","10" (sec)
+    // Scale 2 (±5min): majors at 1,2,3,4,5 -- labels "1","2","3","4","5" (min)
+    bool show_minutes = (data->gaugeScale == 2);
+    double label_divisor = show_minutes ? 60.0 : 1.0;
+
     cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
-    cairo_set_line_width(cr, 2.5);
     cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
     cairo_set_font_size(cr, 13);
 
-    int num_major = static_cast<int>(display_max / si.major_step);
-    for (int i = -num_major; i <= num_major; i++) {
-        double display_val = i * si.major_step;
-        double frac = display_val / display_max;
+    // Major ticks
+    double major_step_sec = max_val / si.major_count;
+    for (int i = -si.major_count; i <= si.major_count; i++) {
+        double val_sec = i * major_step_sec;
+        double frac = val_sec / max_val;
         double angle = M_PI + M_PI/2 + frac * (M_PI / 2);
 
         double x1 = centerX + (radius - 20) * cos(angle);
@@ -126,8 +160,13 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
 
         if (i == 0) continue;
 
+        double label_val = std::abs(val_sec) / label_divisor;
         char label[16];
-        snprintf(label, sizeof(label), "%d", std::abs(static_cast<int>(display_val)));
+        if (label_val == static_cast<int>(label_val))
+            snprintf(label, sizeof(label), "%d", static_cast<int>(label_val));
+        else
+            snprintf(label, sizeof(label), "%.1f", label_val);
+
         cairo_text_extents_t extents;
         cairo_text_extents(cr, label, &extents);
         double label_r = radius - 32;
@@ -139,13 +178,12 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
 
     // Minor ticks
     cairo_set_line_width(cr, 1);
-    int total_minor = num_major * si.minor_divisions;
+    int total_minor = si.major_count * si.minor_per_major;
     for (int i = -total_minor; i <= total_minor; i++) {
+        if (i % si.minor_per_major == 0) continue;
         double frac = (double)i / total_minor;
-        // Skip positions that coincide with major ticks
-        if (i % si.minor_divisions == 0) continue;
-
         double angle = M_PI + M_PI/2 + frac * (M_PI / 2);
+
         double x1 = centerX + (radius - 10) * cos(angle);
         double y1 = centerY + (radius - 10) * sin(angle);
         double x2 = centerX + (radius + 4) * cos(angle);
@@ -156,13 +194,14 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
         cairo_stroke(cr);
     }
 
-    // Unit labels: "- sec/min" on left, "sec/min +" on right
+    // Unit labels
+    const char* unit = show_minutes ? "min" : "sec";
     cairo_set_font_size(cr, 11);
     cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
 
     char left_label[16], right_label[16];
-    snprintf(left_label, sizeof(left_label), "- %s", si.unit_label);
-    snprintf(right_label, sizeof(right_label), "%s +", si.unit_label);
+    snprintf(left_label, sizeof(left_label), "- %s", unit);
+    snprintf(right_label, sizeof(right_label), "%s +", unit);
 
     cairo_text_extents_t ext;
     cairo_text_extents(cr, left_label, &ext);
@@ -183,7 +222,7 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     cairo_fill(cr);
 
     // Digital display box
-    double box_width = 70;
+    double box_width = 100;
     double box_height = 28;
     double box_x = centerX - box_width / 2;
     double box_y = centerY - 45;
@@ -191,25 +230,19 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     cairo_set_source_rgb(cr, 0.08, 0.08, 0.08);
     cairo_rectangle(cr, box_x, box_y, box_width, box_height);
     cairo_fill(cr);
-
     cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
     cairo_set_line_width(cr, 1.5);
     cairo_rectangle(cr, box_x, box_y, box_width, box_height);
     cairo_stroke(cr);
 
-    // Digital readout
+    // Digital readout - colour matches the arc
     double seconds = data->aheadBehindSeconds;
-    char digital[20];
-    if (si.labels_in_minutes) {
-        double abs_min = std::abs(seconds) / 60.0;
-        snprintf(digital, sizeof(digital), "%04.1f", abs_min);
-    } else {
-        snprintf(digital, sizeof(digital), "%05.1f", std::abs(seconds));
-    }
+    char digital[24];
+    formatGaugeDigital(digital, sizeof(digital), seconds, data->gaugeScale);
 
     cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
     cairo_set_font_size(cr, 18);
-    cairo_set_source_rgb(cr, 0.9, 0.75, 0.0);
+    cairo_set_source_rgb(cr, si.arc_r, si.arc_g, si.arc_b);
 
     cairo_text_extents_t dext;
     cairo_text_extents(cr, digital, &dext);
@@ -224,7 +257,6 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     double needle_angle = M_PI + M_PI/2 + (needle_seconds / max_val) * (M_PI / 2);
     double needle_length = radius - 45;
 
-    // Needle shadow
     cairo_set_source_rgba(cr, 0, 0, 0, 0.4);
     cairo_set_line_width(cr, 5);
     cairo_move_to(cr, centerX + 2, centerY + 2);
@@ -232,7 +264,6 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
                   centerY + 2 + needle_length * sin(needle_angle));
     cairo_stroke(cr);
 
-    // Needle
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
     cairo_set_line_width(cr, 3);
     cairo_move_to(cr, centerX, centerY);
@@ -249,7 +280,6 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     cairo_arc(cr, centerX, centerY, 10, 0, 2 * M_PI);
     cairo_stroke(cr);
 
-    // Center dot
     cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
     cairo_arc(cr, centerX, centerY, 4, 0, 2 * M_PI);
     cairo_fill(cr);
@@ -462,7 +492,7 @@ static void applyDriverCSS(GtkWidget* G_GNUC_UNUSED widget) {
         ".ahead-behind { font-size: 28px; font-weight: bold; font-family: monospace; }"
         ".next-info { font-size: 18px; }"
         ".footer-info { font-size: 14px; }"
-        ".speed-arrows { font-size: 36px; font-weight: bold; }"
+        ".speed-arrows { font-weight: bold; }"
         ".arrows-up { color: #00CC00; }"
         ".arrows-down { color: #EE0000; }",
         -1, NULL);
