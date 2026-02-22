@@ -74,6 +74,12 @@ void on_stage_go(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         data->state->segment_current_number = 0;
     }
     
+    // Reset gauge to green (±3s) scale
+    data->gaugeScale = 0;
+    data->gaugePendingScale = -1;
+    data->gaugeScaleChangeTime = 0;
+    data->aheadBehindSeconds = 0.0;
+    
     ConfigFile::save(*data->state);
 }
 

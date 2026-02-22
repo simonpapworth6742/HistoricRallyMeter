@@ -14,6 +14,10 @@
 static void applyCopilotCSS() {
     GtkCssProvider* provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
+        "window, .background { background-color: #000000; }"
+        "label { color: #FFFFFF; }"
+        "button { background-color: #333333; color: #FFFFFF; }"
+        "entry { background-color: #222222; color: #FFFFFF; }"
         ".title-label { font-size: 20px; font-weight: bold; }"
         ".info-label { font-size: 18px; }"
         ".clock-label { font-size: 24px; font-weight: bold; }"

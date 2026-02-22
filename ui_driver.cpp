@@ -360,9 +360,6 @@ void updateDriverDisplay(AppData* data) {
         gtk_label_set_text(data->aheadBehindLabel, ss.str().c_str());
         
         // Speed adjustment arrows - only if more than 0.1 seconds off
-        GtkStyleContext* arrowCtx = gtk_widget_get_style_context(GTK_WIDGET(data->speedAdjustArrowsLabel));
-        gtk_style_context_remove_class(arrowCtx, "arrows-up");
-        gtk_style_context_remove_class(arrowCtx, "arrows-down");
         
         if (abs_seconds > 0.1 && target_kph > 0) {
             // Calculate speed needed to match target in next 500 meters
@@ -376,37 +373,37 @@ void updateDriverDisplay(AppData* data) {
                 adjusted_time_s = target_time_s + abs_seconds;
             }
             
+            double speed_diff;
             if (adjusted_time_s > 0.1) {
                 double needed_kph = (500.0 / adjusted_time_s) * 3.6;
-                double speed_diff = needed_kph - target_kph_raw;
-                
-                if (data->state->units) {
-                    speed_diff = speed_diff * 0.621371;
-                }
-                
-                double abs_diff = std::abs(speed_diff);
-                int num_arrows = 0;
-                if (abs_diff >= 5.0) {
-                    num_arrows = 3;
-                } else if (abs_diff >= 3.0) {
-                    num_arrows = 2;
-                } else if (abs_diff > 0) {
-                    num_arrows = 1;
-                }
-                
-                if (num_arrows > 0) {
-                    ss.str("");
-                    if (speed_diff > 0) {
-                        for (int i = 0; i < num_arrows; i++) ss << "↑";
-                        gtk_style_context_add_class(arrowCtx, "arrows-up");
-                    } else {
-                        for (int i = 0; i < num_arrows; i++) ss << "↓";
-                        gtk_style_context_add_class(arrowCtx, "arrows-down");
-                    }
-                    gtk_label_set_text(data->speedAdjustArrowsLabel, ss.str().c_str());
-                } else {
-                    gtk_label_set_text(data->speedAdjustArrowsLabel, "");
-                }
+                speed_diff = needed_kph - target_kph_raw;
+            } else {
+                // Deficit too large to recover in 500m - max arrows in needed direction
+                speed_diff = (seconds < 0) ? 999.0 : -999.0;
+            }
+            
+            if (data->state->units) {
+                speed_diff = speed_diff * 0.621371;
+            }
+            
+            double abs_diff = std::abs(speed_diff);
+            int num_arrows = 0;
+            if (abs_diff >= 5.0) {
+                num_arrows = 3;
+            } else if (abs_diff >= 3.0) {
+                num_arrows = 2;
+            } else if (abs_diff > 0) {
+                num_arrows = 1;
+            }
+            
+            if (num_arrows > 0) {
+                ss.str("");
+                const char* color = (speed_diff > 0) ? "#00CC00" : "#EE0000";
+                const char* arrow = (speed_diff > 0) ? "↑" : "↓";
+                ss << "<span foreground=\"" << color << "\">";
+                for (int i = 0; i < num_arrows; i++) ss << arrow;
+                ss << "</span>";
+                gtk_label_set_markup(data->speedAdjustArrowsLabel, ss.str().c_str());
             } else {
                 gtk_label_set_text(data->speedAdjustArrowsLabel, "");
             }
@@ -486,15 +483,16 @@ void updateDriverDisplay(AppData* data) {
 static void applyDriverCSS(GtkWidget* G_GNUC_UNUSED widget) {
     GtkCssProvider* provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
+        "window, .background { background-color: #000000; }"
+        "label { color: #FFFFFF; }"
+        "button { background-color: #333333; color: #FFFFFF; }"
         ".speed-header { font-size: 28px; font-weight: bold; }"
         ".speed-value { font-size: 64px; font-weight: bold; font-family: monospace; }"
         ".target-info { font-size: 22px; font-weight: bold; }"
         ".ahead-behind { font-size: 28px; font-weight: bold; font-family: monospace; }"
         ".next-info { font-size: 18px; }"
         ".footer-info { font-size: 14px; }"
-        ".speed-arrows { font-weight: bold; }"
-        ".arrows-up { color: #00CC00; }"
-        ".arrows-down { color: #EE0000; }",
+        ".speed-arrows { font-weight: bold; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -522,48 +520,63 @@ GtkWidget* createDriverWindow(AppData* data) {
     GtkWidget* speedsBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_box_pack_start(GTK_BOX(contentBox), speedsBox, TRUE, TRUE, 0);
     
-    // Speed headers
-    GtkWidget* headerBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_box_pack_start(GTK_BOX(speedsBox), headerBox, FALSE, FALSE, 0);
+    // Top row: Current and Total headers
+    GtkWidget* topHeaderBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_pack_start(GTK_BOX(speedsBox), topHeaderBox, FALSE, FALSE, 0);
     
     GtkWidget* currentHeader = gtk_label_new("Current");
-    GtkWidget* tripHeader = gtk_label_new("Trip");
     GtkWidget* totalHeader = gtk_label_new("Total");
     
     gtk_style_context_add_class(gtk_widget_get_style_context(currentHeader), "speed-header");
-    gtk_style_context_add_class(gtk_widget_get_style_context(tripHeader), "speed-header");
     gtk_style_context_add_class(gtk_widget_get_style_context(totalHeader), "speed-header");
     
     gtk_widget_set_halign(currentHeader, GTK_ALIGN_CENTER);
-    gtk_widget_set_halign(tripHeader, GTK_ALIGN_CENTER);
     gtk_widget_set_halign(totalHeader, GTK_ALIGN_CENTER);
     
-    gtk_box_pack_start(GTK_BOX(headerBox), currentHeader, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(headerBox), tripHeader, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(headerBox), totalHeader, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(topHeaderBox), currentHeader, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(topHeaderBox), totalHeader, TRUE, TRUE, 0);
     
-    // Speed values
-    GtkWidget* valuesBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_box_pack_start(GTK_BOX(speedsBox), valuesBox, TRUE, TRUE, 0);
+    // Top row: Current and Total values
+    GtkWidget* topValuesBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_pack_start(GTK_BOX(speedsBox), topValuesBox, TRUE, TRUE, 0);
     
     data->currentSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
-    data->tripSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
     data->totalSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
     
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->currentSpeedLabel)), "speed-value");
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripSpeedLabel)), "speed-value");
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalSpeedLabel)), "speed-value");
     
     gtk_widget_set_halign(GTK_WIDGET(data->currentSpeedLabel), GTK_ALIGN_CENTER);
-    gtk_widget_set_halign(GTK_WIDGET(data->tripSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_halign(GTK_WIDGET(data->totalSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_valign(GTK_WIDGET(data->currentSpeedLabel), GTK_ALIGN_CENTER);
-    gtk_widget_set_valign(GTK_WIDGET(data->tripSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_valign(GTK_WIDGET(data->totalSpeedLabel), GTK_ALIGN_CENTER);
     
-    gtk_box_pack_start(GTK_BOX(valuesBox), GTK_WIDGET(data->currentSpeedLabel), TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(valuesBox), GTK_WIDGET(data->tripSpeedLabel), TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(valuesBox), GTK_WIDGET(data->totalSpeedLabel), TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(topValuesBox), GTK_WIDGET(data->currentSpeedLabel), TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(topValuesBox), GTK_WIDGET(data->totalSpeedLabel), TRUE, TRUE, 0);
+    
+    // Bottom row: Trip header and value (right-aligned under Total)
+    GtkWidget* tripHeaderBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_pack_start(GTK_BOX(speedsBox), tripHeaderBox, FALSE, FALSE, 0);
+    
+    GtkWidget* tripHeader = gtk_label_new("Trip");
+    gtk_style_context_add_class(gtk_widget_get_style_context(tripHeader), "speed-header");
+    gtk_widget_set_halign(tripHeader, GTK_ALIGN_CENTER);
+    
+    GtkWidget* tripSpacer1 = gtk_label_new("");
+    gtk_box_pack_start(GTK_BOX(tripHeaderBox), tripSpacer1, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(tripHeaderBox), tripHeader, TRUE, TRUE, 0);
+    
+    GtkWidget* tripValuesBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_pack_start(GTK_BOX(speedsBox), tripValuesBox, TRUE, TRUE, 0);
+    
+    data->tripSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripSpeedLabel)), "speed-value");
+    gtk_widget_set_halign(GTK_WIDGET(data->tripSpeedLabel), GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(GTK_WIDGET(data->tripSpeedLabel), GTK_ALIGN_CENTER);
+    
+    GtkWidget* tripSpacer2 = gtk_label_new("");
+    gtk_box_pack_start(GTK_BOX(tripValuesBox), tripSpacer2, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(tripValuesBox), GTK_WIDGET(data->tripSpeedLabel), TRUE, TRUE, 0);
     
     // Right side: Rally gauge and info
     GtkWidget* gaugeBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);

@@ -6,6 +6,7 @@
 #include <fstream>
 #include <filesystem>
 #include <vector>
+#include <algorithm>
 #include <gtk/gtk.h>
 #include "i2c_counter.h"
 #include "rally_state.h"
@@ -16,16 +17,6 @@
 #include "ui_copilot.h"
 #include "callbacks.h"
 #include "calculations.h"
-
-// Check if string contains substring (case-insensitive)
-static bool containsIgnoreCase(const std::string& haystack, const std::string& needle) {
-    if (haystack.empty() || needle.empty()) return false;
-    std::string h = haystack;
-    std::string n = needle;
-    for (auto& c : h) c = std::tolower(c);
-    for (auto& c : n) c = std::tolower(c);
-    return h.find(n) != std::string::npos;
-}
 
 // Structure to hold connector info from DRM
 struct DrmConnector {
@@ -88,91 +79,101 @@ static std::vector<DrmConnector> getDrmConnectors() {
     return connectors;
 }
 
-// Find DSI-2 connector info
-static DrmConnector* findDsi2Connector(std::vector<DrmConnector>& connectors) {
-    for (auto& conn : connectors) {
-        if (containsIgnoreCase(conn.name, "dsi-2") || containsIgnoreCase(conn.name, "dsi2")) {
-            return &conn;
+// Connector sort priority: DSI before HDMI, then by number (lowest first)
+static int connectorPriority(const std::string& name) {
+    std::string lower = name;
+    for (auto& c : lower) c = std::tolower(c);
+
+    int type_priority = 2;  // unknown types last
+    if (lower.find("dsi") != std::string::npos) type_priority = 0;
+    else if (lower.find("hdmi") != std::string::npos) type_priority = 1;
+
+    int number = 99;
+    for (size_t i = 0; i < lower.size(); i++) {
+        if (std::isdigit(lower[i])) {
+            number = std::stoi(lower.substr(i));
+            break;
         }
     }
-    // Fallback: look for any DSI connector
-    for (auto& conn : connectors) {
-        if (containsIgnoreCase(conn.name, "dsi")) {
-            return &conn;
-        }
-    }
-    return nullptr;
+    return type_priority * 100 + number;
 }
 
-// Find DSI-2 display for co-pilot window
-static GdkMonitor* findDsi2Monitor(GdkDisplay* display) {
+static bool is1280x400(int w, int h) {
+    return (w == 1280 && h == 400) || (w == 400 && h == 1280);
+}
+
+struct DisplayMatch {
+    GdkMonitor* monitor;
+    int monitor_index;
+    std::string connector_name;
+    int priority;  // lower = co-pilot gets it first
+};
+
+// Find all 1280x400 monitors, matched to DRM connectors where possible,
+// sorted by connector priority (DSI lowest, then HDMI, then by number)
+static std::vector<DisplayMatch> findSmallDisplays(GdkDisplay* display) {
     int n_monitors = gdk_display_get_n_monitors(display);
-    
-    // Get DRM connector info from system
     auto connectors = getDrmConnectors();
-    
+
     std::cout << "System connectors:" << std::endl;
     for (const auto& conn : connectors) {
-        std::cout << "  " << conn.name << ": " << conn.status 
+        std::cout << "  " << conn.name << ": " << conn.status
                   << " (" << conn.width << "x" << conn.height << ")" << std::endl;
     }
-    
-    // Find DSI-2 connector
-    DrmConnector* dsi2 = findDsi2Connector(connectors);
-    if (dsi2 && dsi2->status == "connected") {
-        std::cout << "DSI-2 connector found: " << dsi2->width << "x" << dsi2->height << std::endl;
-    } else {
-        std::cout << "DSI-2 connector not found or not connected" << std::endl;
-    }
-    
+
     std::cout << "GDK monitors (" << n_monitors << "):" << std::endl;
-    
-    GdkMonitor* dsi2_monitor = nullptr;
-    
+
+    std::vector<DisplayMatch> matches;
+
     for (int i = 0; i < n_monitors; i++) {
         GdkMonitor* monitor = gdk_display_get_monitor(display, i);
         GdkRectangle geometry;
         gdk_monitor_get_geometry(monitor, &geometry);
-        
+
         const char* model = gdk_monitor_get_model(monitor);
         const char* manufacturer = gdk_monitor_get_manufacturer(monitor);
-        
+
         std::cout << "  Monitor " << i << ": "
                   << geometry.width << "x" << geometry.height
                   << " at (" << geometry.x << "," << geometry.y << ")"
                   << " model=" << (model ? model : "null")
                   << " mfr=" << (manufacturer ? manufacturer : "null")
                   << std::endl;
-        
-        // Match monitor to DSI-2 connector by resolution
-        if (dsi2 && dsi2->status == "connected" && !dsi2_monitor) {
-            // Check if resolution matches (considering rotation)
-            bool matches_dsi2 = (geometry.width == dsi2->width && geometry.height == dsi2->height) ||
-                                (geometry.width == dsi2->height && geometry.height == dsi2->width);
-            if (matches_dsi2) {
-                std::cout << "  -> Matched to DSI-2" << std::endl;
-                dsi2_monitor = monitor;
+
+        if (!is1280x400(geometry.width, geometry.height))
+            continue;
+
+        DisplayMatch dm;
+        dm.monitor = monitor;
+        dm.monitor_index = i;
+        dm.connector_name = "";
+        dm.priority = 999;
+
+        for (auto& conn : connectors) {
+            if (conn.status != "connected") continue;
+            bool res_match = (geometry.width == conn.width && geometry.height == conn.height) ||
+                             (geometry.width == conn.height && geometry.height == conn.width);
+            if (res_match) {
+                int pri = connectorPriority(conn.name);
+                if (pri < dm.priority) {
+                    dm.priority = pri;
+                    dm.connector_name = conn.name;
+                }
             }
         }
-        
-        // Fallback: check by 1280x400 resolution if no DSI-2 connector info
-        if (!dsi2 && !dsi2_monitor) {
-            bool is_1280x400 = (geometry.width == 1280 && geometry.height == 400) ||
-                               (geometry.width == 400 && geometry.height == 1280);
-            if (is_1280x400) {
-                std::cout << "  -> Matched by 1280x400 resolution" << std::endl;
-                dsi2_monitor = monitor;
-            }
-        }
+
+        std::cout << "  -> 1280x400 display matched";
+        if (!dm.connector_name.empty())
+            std::cout << " (connector: " << dm.connector_name << ", priority " << dm.priority << ")";
+        std::cout << std::endl;
+
+        matches.push_back(dm);
     }
-    
-    if (dsi2_monitor) {
-        std::cout << "Co-pilot display: DSI-2 screen selected" << std::endl;
-        return dsi2_monitor;
-    }
-    
-    std::cout << "Co-pilot display: DSI-2 not found, will use window mode" << std::endl;
-    return nullptr;
+
+    std::sort(matches.begin(), matches.end(),
+              [](const DisplayMatch& a, const DisplayMatch& b) { return a.priority < b.priority; });
+
+    return matches;
 }
 
 // Save driver window position callback
@@ -257,6 +258,13 @@ int main(int argc, char* argv[]) {
         
         gtk_init(&argc, &argv);
         
+        // Force dark theme for both windows
+        GtkSettings* settings = gtk_settings_get_default();
+        g_object_set(settings,
+                     "gtk-theme-name", "Adwaita-dark",
+                     "gtk-application-prefer-dark-theme", TRUE,
+                     NULL);
+        
         // Load state
         RallyState state;
         ConfigFile::load(state);
@@ -291,135 +299,152 @@ int main(int argc, char* argv[]) {
         app_data.driverWindow = createDriverWindow(&app_data);
         app_data.copilotWindow = createCopilotWindow(&app_data);
         
-        // Get display info and find DSI-2 monitor
+        // Find 1280x400 displays sorted by priority (DSI first, then HDMI, lowest number first)
         GdkDisplay* display = gdk_display_get_default();
-        GdkMonitor* dsi2_monitor = findDsi2Monitor(display);
-        
-        // Position co-pilot window on DSI-2
-        int dsi2_index = -1;
-        if (dsi2_monitor) {
-            // Find the monitor index for DSI-2
-            int n_mons = gdk_display_get_n_monitors(display);
-            for (int i = 0; i < n_mons; i++) {
-                if (gdk_display_get_monitor(display, i) == dsi2_monitor) {
-                    dsi2_index = i;
-                    break;
-                }
-            }
-            
-            // Position on DSI-2 monitor
+        auto small_displays = findSmallDisplays(display);
+        bool two_small = (small_displays.size() >= 2);
+
+        std::cout << "Found " << small_displays.size() << " x 1280x400 display(s)" << std::endl;
+
+        GdkMonitor* copilot_monitor = nullptr;
+        int copilot_index = -1;
+        GdkMonitor* driver_monitor = nullptr;
+        int driver_monitor_index = -1;
+
+        if (!small_displays.empty()) {
+            copilot_monitor = small_displays[0].monitor;
+            copilot_index = small_displays[0].monitor_index;
+            std::cout << "Co-pilot assigned to monitor " << copilot_index;
+            if (!small_displays[0].connector_name.empty())
+                std::cout << " (" << small_displays[0].connector_name << ")";
+            std::cout << std::endl;
+        }
+
+        if (two_small) {
+            driver_monitor = small_displays[1].monitor;
+            driver_monitor_index = small_displays[1].monitor_index;
+            std::cout << "Driver assigned to monitor " << driver_monitor_index;
+            if (!small_displays[1].connector_name.empty())
+                std::cout << " (" << small_displays[1].connector_name << ")";
+            std::cout << std::endl;
+        }
+
+        // Position co-pilot window
+        if (copilot_monitor) {
             GdkRectangle geometry;
-            gdk_monitor_get_geometry(dsi2_monitor, &geometry);
-            std::cout << "Positioning co-pilot window on monitor " << dsi2_index 
+            gdk_monitor_get_geometry(copilot_monitor, &geometry);
+            std::cout << "Positioning co-pilot window on monitor " << copilot_index
                       << " at (" << geometry.x << "," << geometry.y << ")" << std::endl;
-            
-            // Set window size to match monitor
-            gtk_window_set_default_size(GTK_WINDOW(app_data.copilotWindow), 
+
+            gtk_window_set_default_size(GTK_WINDOW(app_data.copilotWindow),
                                         geometry.width, geometry.height);
-            // Move before showing (may help on some compositors)
             gtk_window_move(GTK_WINDOW(app_data.copilotWindow), geometry.x, geometry.y);
         } else {
-            // No DSI-2 display found - use 1280x400 window
-            std::cout << "No DSI-2 found, opening co-pilot as 1280x400 window" << std::endl;
+            std::cout << "No 1280x400 display found, opening co-pilot as 1280x400 window" << std::endl;
             gtk_window_set_default_size(GTK_WINDOW(app_data.copilotWindow), 1280, 400);
             gtk_window_resize(GTK_WINDOW(app_data.copilotWindow), 1280, 400);
         }
-        
-        // Position driver window (restore saved position and monitor)
-        std::cout << "Restoring driver window: size " 
-                  << state.driver_window_width << "x" << state.driver_window_height
-                  << " on monitor " << state.driver_window_monitor << std::endl;
-        
-        // Set size
-        gtk_window_set_default_size(GTK_WINDOW(app_data.driverWindow), 
-                                    state.driver_window_width, state.driver_window_height);
-        
-        // On Wayland, gtk_window_move doesn't work. We need to position based on monitor.
-        // Find the non-DSI2 monitor (driver's monitor) and position there
-        int n_monitors = gdk_display_get_n_monitors(display);
-        GdkMonitor* driver_monitor = nullptr;
-        int driver_monitor_index = -1;
-        
-        // First, try to use the saved monitor
-        if (state.driver_window_monitor >= 0 && state.driver_window_monitor < n_monitors) {
-            GdkMonitor* saved_monitor = gdk_display_get_monitor(display, state.driver_window_monitor);
-            if (saved_monitor && saved_monitor != dsi2_monitor) {
-                driver_monitor = saved_monitor;
-                driver_monitor_index = state.driver_window_monitor;
-            }
-        }
-        
-        // Fallback: find any monitor that isn't DSI-2
-        if (!driver_monitor) {
-            for (int i = 0; i < n_monitors; i++) {
-                GdkMonitor* mon = gdk_display_get_monitor(display, i);
-                if (mon != dsi2_monitor) {
-                    driver_monitor = mon;
-                    driver_monitor_index = i;
-                    break;
-                }
-            }
-        }
-        
-        if (driver_monitor) {
+
+        // Position driver window
+        if (two_small) {
+            // Two 1280x400 displays: driver goes fullscreen on the second one
             GdkRectangle mon_geometry;
             gdk_monitor_get_geometry(driver_monitor, &mon_geometry);
-            
-            std::cout << "Driver monitor " << driver_monitor_index 
-                      << " geometry: " << mon_geometry.width << "x" << mon_geometry.height
+            std::cout << "Two 1280x400 displays: driver fullscreen on monitor " << driver_monitor_index
                       << " at (" << mon_geometry.x << "," << mon_geometry.y << ")" << std::endl;
-            std::cout << "Saved relative position: (" << state.driver_window_x 
-                      << "," << state.driver_window_y << ")" << std::endl;
-            
-            // Saved position is relative to monitor, convert to absolute
-            int abs_x, abs_y;
-            
-            // On Wayland, (0,0) is usually invalid - it means we couldn't get real position
-            // Also validate position is within reasonable bounds
-            bool position_valid = !(state.driver_window_x == 0 && state.driver_window_y == 0) &&
-                                  state.driver_window_x >= 0 && state.driver_window_y >= 0 &&
-                                  state.driver_window_x < mon_geometry.width && 
-                                  state.driver_window_y < mon_geometry.height;
-            
-            if (position_valid) {
-                abs_x = mon_geometry.x + state.driver_window_x;
-                abs_y = mon_geometry.y + state.driver_window_y;
-                std::cout << "Using saved position" << std::endl;
-            } else {
-                // Center on monitor
-                abs_x = mon_geometry.x + (mon_geometry.width - state.driver_window_width) / 2;
-                abs_y = mon_geometry.y + (mon_geometry.height - state.driver_window_height) / 2;
-                std::cout << "Centering window (saved position invalid)" << std::endl;
+            gtk_window_set_default_size(GTK_WINDOW(app_data.driverWindow),
+                                        mon_geometry.width, mon_geometry.height);
+            gtk_window_move(GTK_WINDOW(app_data.driverWindow), mon_geometry.x, mon_geometry.y);
+        } else {
+            // Not two 1280x400 displays: restore saved size and monitor
+            std::cout << "Restoring driver window: size "
+                      << state.driver_window_width << "x" << state.driver_window_height
+                      << " on monitor " << state.driver_window_monitor << std::endl;
+
+            gtk_window_set_default_size(GTK_WINDOW(app_data.driverWindow),
+                                        state.driver_window_width, state.driver_window_height);
+
+            int n_monitors = gdk_display_get_n_monitors(display);
+
+            if (state.driver_window_monitor >= 0 && state.driver_window_monitor < n_monitors) {
+                GdkMonitor* saved_monitor = gdk_display_get_monitor(display, state.driver_window_monitor);
+                if (saved_monitor && saved_monitor != copilot_monitor) {
+                    driver_monitor = saved_monitor;
+                    driver_monitor_index = state.driver_window_monitor;
+                }
             }
-            
-            std::cout << "Positioning driver window at (" << abs_x << "," << abs_y << ")" << std::endl;
-            
-            // Position the window
-            gtk_window_move(GTK_WINDOW(app_data.driverWindow), abs_x, abs_y);
+
+            if (!driver_monitor) {
+                for (int i = 0; i < n_monitors; i++) {
+                    GdkMonitor* mon = gdk_display_get_monitor(display, i);
+                    if (mon != copilot_monitor) {
+                        driver_monitor = mon;
+                        driver_monitor_index = i;
+                        break;
+                    }
+                }
+            }
+
+            if (driver_monitor) {
+                GdkRectangle mon_geometry;
+                gdk_monitor_get_geometry(driver_monitor, &mon_geometry);
+
+                std::cout << "Driver monitor " << driver_monitor_index
+                          << " geometry: " << mon_geometry.width << "x" << mon_geometry.height
+                          << " at (" << mon_geometry.x << "," << mon_geometry.y << ")" << std::endl;
+
+                int abs_x, abs_y;
+                bool position_valid = !(state.driver_window_x == 0 && state.driver_window_y == 0) &&
+                                      state.driver_window_x >= 0 && state.driver_window_y >= 0 &&
+                                      state.driver_window_x < mon_geometry.width &&
+                                      state.driver_window_y < mon_geometry.height;
+
+                if (position_valid) {
+                    abs_x = mon_geometry.x + state.driver_window_x;
+                    abs_y = mon_geometry.y + state.driver_window_y;
+                    std::cout << "Using saved position" << std::endl;
+                } else {
+                    abs_x = mon_geometry.x + (mon_geometry.width - state.driver_window_width) / 2;
+                    abs_y = mon_geometry.y + (mon_geometry.height - state.driver_window_height) / 2;
+                    std::cout << "Centering window (saved position invalid)" << std::endl;
+                }
+
+                std::cout << "Positioning driver window at (" << abs_x << "," << abs_y << ")" << std::endl;
+                gtk_window_move(GTK_WINDOW(app_data.driverWindow), abs_x, abs_y);
+            }
         }
-        
+
         // Connect window delete handlers (save state on close)
-        g_signal_connect(app_data.driverWindow, "delete-event", 
+        g_signal_connect(app_data.driverWindow, "delete-event",
                          G_CALLBACK(on_window_close_save), &app_data);
-        g_signal_connect(app_data.copilotWindow, "delete-event", 
+        g_signal_connect(app_data.copilotWindow, "delete-event",
                          G_CALLBACK(on_window_close_save), &app_data);
-        
-        // Track driver window position changes
-        g_signal_connect(app_data.driverWindow, "configure-event",
-                         G_CALLBACK(on_driver_configure), &app_data);
-        
+
+        // Track driver window position changes (only useful when not two 1280x400 displays)
+        if (!two_small) {
+            g_signal_connect(app_data.driverWindow, "configure-event",
+                             G_CALLBACK(on_driver_configure), &app_data);
+        }
+
         // Connect button handlers
         g_signal_connect(app_data.unitToggleBtn, "clicked", G_CALLBACK(on_unit_toggle), &app_data);
-        
+
         // Show windows
         gtk_widget_show_all(app_data.driverWindow);
         gtk_widget_show_all(app_data.copilotWindow);
-        
-        // Fullscreen co-pilot on DSI-2 AFTER showing (required for Wayland)
-        if (dsi2_monitor && dsi2_index >= 0) {
-            std::cout << "Fullscreening co-pilot on monitor " << dsi2_index << std::endl;
-            gtk_window_fullscreen_on_monitor(GTK_WINDOW(app_data.copilotWindow), 
-                gdk_display_get_default_screen(display), dsi2_index);
+
+        // Fullscreen co-pilot on its monitor AFTER showing (required for Wayland)
+        if (copilot_monitor && copilot_index >= 0) {
+            std::cout << "Fullscreening co-pilot on monitor " << copilot_index << std::endl;
+            gtk_window_fullscreen_on_monitor(GTK_WINDOW(app_data.copilotWindow),
+                gdk_display_get_default_screen(display), copilot_index);
+        }
+
+        // Fullscreen driver when two 1280x400 displays
+        if (two_small && driver_monitor_index >= 0) {
+            std::cout << "Fullscreening driver on monitor " << driver_monitor_index << std::endl;
+            gtk_window_fullscreen_on_monitor(GTK_WINDOW(app_data.driverWindow),
+                gdk_display_get_default_screen(display), driver_monitor_index);
         }
         
         // Set up timer (10ms = 100Hz)

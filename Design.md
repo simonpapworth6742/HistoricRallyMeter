@@ -1,21 +1,21 @@
 ## Environment
-This environment is a Raspberry Pi 5 with 4GB memory connected to 3 LSI ls7866c 32-bit counters (CNTR_1, CNTR_2, CNTR_3) on I2C bus 1 at addresses 0x70, 0x71 and 0x72 The 32-bit counter register 0x07 and its value is big-endian. the application should be 
+This environment is a Raspberry Pi 5 with 4GB memory connected to 3 LSI ls7866c 32-bit counters (CNTR_1, CNTR_2) on I2C bus 1 at addresses 0x70 and 0x71 The 32-bit counter register 0x07 and its value is big-endian. the application should be 
     GTK3-based GUI window application with two display windows. 
     Use high-resolution chrono timers for accurate measurement
     C++  version 20
 
-The application is meant to run on dual 1280x400 screens (wide and shallow), one connected to HDMI-A-1 and the other connected to DSI-2. During development it has an HDMI 4K screen and a single 7inch (1280x400) screen connected to DSI-2. The co-pilot display window opens fullscreen on DSI-2, or if not found opens as a 1280x400 window. The driver display remembers its size and which monitor it is on.
+The application is meant to run on dual 1280x400 screens (wide and shallow), search for the two displays by matching the size. During development it has an HDMI 4K screen and two 7inch (1280x400) screen connected. The co-pilot display window opens fullscreen on DSI-2, or if not found opens as a 1280x400 window. The driver display remembers its size and which monitor it is on.
 
 ### Display Detection Implementation
 The application reads DRM connector information from `/sys/class/drm/` to identify the DSI-2 connector. It then matches GDK monitors to connectors by resolution (1280x400 or 400x1280 depending on rotation).
 
 **Co-pilot display:**
-- Detects DSI-2 connector and opens fullscreen on that monitor
+- Detects the the display by scanning DSI and then HDMI using the lowest value display for the co-pilot (dSI is lower than HDMI) and opens fullscreen on that monitor
 - If DSI-2 not found, opens as a 1280x400 window
 
 **Driver display:**
 - Default size: 1280x400 (matching screen dimensions)
-- Remembers window size and which monitor it was on
+- Remembers window size and which monitor it was on in if there are not two 1280x400 displays
 - Window position cannot be saved/restored on Wayland due to compositor security limitations
 - Window is centered on the saved monitor at startup
 
@@ -124,7 +124,7 @@ calculation of current speed, with too little time passed since a start any spee
 
 
 
-Drivers display Window (1280 x 400)
+Drivers display Window (1280 x 400) - dark theme only
 
 The drivers display window is wide (1280px) and shallow (400px). It shows the average speed since the last reset of the Total, the current speed calculated from approximately the last 10 seconds of driving, the average speed since the last Trip reset, and the average speed since the start of the current segment. The target speed for the current segment and how many seconds ahead or behind target average speed by calculating how many counts difference there is between the actual count now and the count that it should be based upon the time since stage start taking account of the differing speeds in segments already completed and the target speed for the current segment. Along with the ETA = remaining segment distance / (last-10s average speed) to the next segment. If there is no current segment defined or more than 1000m past end of the last segment, then display "--.--" for Seg. For the next segment line of the display hide it if there is no next segment and if last-10s speed = 0: '--.--'; negative remaining: 'Over by xx:xx:xx'.
 
@@ -150,11 +150,11 @@ Below the gauge, display:
 
 ```
 +----------------------------------------------------------------------------------------------------------+
-|   Current      Trip         Total         |              RALLY GAUGE                              (KPH)  |
-|    xx.xx       xx.xx        xx.xx         |         -10s ←───┬───→ +10s                                  |
+|   Current               Total             |              RALLY GAUGE                              (KPH)  |
+|    xx.xx                xx.xx             |         -10s ←───┬───→ +10s                                  |
 |                                           |              ╱   │   ╲                                       |
-|                                           |            ╱     ●     ╲      target: xx.xx                  |
-|                                           |          ╱       │       ╲    +/-mm:ss.s ↑↑↑↓↓↓             |
+|                         Trip              |            ╱     ●     ╲      target: xx.xx                  |
+|                         xx.xx             |          ╱       │       ╲    +/-mm:ss.s ↑↑↑↓↓↓              |
 +----------------------------------------------------------------------------------------------------------+
 |   updates/sec: xxx                                  next: xx.xx in xxx,xxx m  ETA hh:mm:ss  [KPH/MPH]    |
 +----------------------------------------------------------------------------------------------------------+
@@ -168,7 +168,7 @@ Layout notes for 1280x400 (wide, shallow display):
 - Use large fonts for speed values as they are primary information for driver
 - All elements arranged to maximize visibility for the driver
 
-Co-Pilots display window (1280 x 400)
+Co-Pilots display window (1280 x 400) - dark theme only
 
 The co-pilot display window is wide (1280px) and shallow (400px), same as the driver display. It has four screens:
 1) Stage setup
@@ -251,7 +251,7 @@ When editing any value a numeric entry keyboard should be shown on the right of 
     the reset button should follow closely the ago.
 - Segment info on top left
 - Navigation buttons spread across bottom row:
-  - stage go: resets Total (counters + start time), Trip (counters + start time), and Segment (counters + start time) - use at start of a rally stage
+  - stage go: resets Total (counters + start time), Trip (counters + start time), and Segment (counters + start time), and sets the drivers display guage to green - use at start of a rally stage
   - segments: goes to Stage Setup
   - next segment: advances segment, resets Trip
   - calibration: goes to Calibration screen
