@@ -52,6 +52,7 @@ struct AppData {
     // Rally gauge
     GtkWidget* rallyGaugeDrawingArea;
     double aheadBehindSeconds = 0.0;  // Current ahead/behind value for gauge needle
+    int gaugeScale = 1;  // 0=±3s, 1=±10s, 2=±5min
     
     // Co-pilot window
     GtkWidget* copilotWindow;

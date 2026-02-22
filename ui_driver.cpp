@@ -8,138 +8,172 @@
 #include <cmath>
 #include <cstdio>
 
-// Draw the rally gauge (GaugePilot RallyMaster style)
+// Auto-scaling gauge: three scales with hysteresis to avoid flickering.
+// Scale 0: ±3 seconds   (fine - when close to target)
+// Scale 1: ±10 seconds  (medium)
+// Scale 2: ±5 minutes   (coarse - when very far off)
+static void updateGaugeScale(AppData* data) {
+    double abs_sec = std::abs(data->aheadBehindSeconds);
+    int scale = data->gaugeScale;
+
+    // Hysteresis: scale up when value exceeds range, scale down when comfortably inside
+    switch (scale) {
+    case 0: // ±3s
+        if (abs_sec > 3.0) scale = 1;
+        break;
+    case 1: // ±10s
+        if (abs_sec > 10.0) scale = 2;
+        else if (abs_sec < 2.0) scale = 0;
+        break;
+    case 2: // ±5min
+        if (abs_sec < 8.0) scale = 1;
+        break;
+    }
+    data->gaugeScale = scale;
+}
+
+struct GaugeScaleInfo {
+    double max_seconds;       // full-scale value in seconds
+    int major_step;           // major tick interval (in display units)
+    int minor_divisions;      // minor ticks between majors
+    int num_arc_segments;     // segments for graduated arc
+    const char* unit_label;   // "sec" or "min"
+    bool labels_in_minutes;   // show labels as minutes
+};
+
+static GaugeScaleInfo getGaugeScaleInfo(int scale) {
+    switch (scale) {
+    case 0:  return { 3.0,   1,  5,  30, "sec", false };
+    case 2:  return { 300.0, 1, 5,  30, "min", true  };
+    default: return { 10.0,  5,  5,  40, "sec", false };
+    }
+}
+
+// Draw the rally gauge (GaugePilot RallyMaster style) with auto-scaling
 static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    
+
     GtkAllocation alloc;
     gtk_widget_get_allocation(widget, &alloc);
-    
+
     double width = alloc.width;
     double height = alloc.height;
-    
-    // Gauge dimensions - semicircle with ±20 second scale
+
     double centerX = width / 2;
     double centerY = height - 15;
     double radius = std::min(width / 2, height) - 25;
-    
-    // Background - dark
+
+    updateGaugeScale(data);
+    GaugeScaleInfo si = getGaugeScaleInfo(data->gaugeScale);
+    double max_val = si.max_seconds;
+    double display_max = si.labels_in_minutes ? max_val / 60.0 : max_val;
+
+    // Background
     cairo_set_source_rgb(cr, 0.05, 0.05, 0.05);
     cairo_paint(cr);
-    
-    // Draw outer bezel ring
+
+    // Outer bezel ring
     cairo_set_source_rgb(cr, 0.25, 0.25, 0.25);
     cairo_set_line_width(cr, 4);
     cairo_arc(cr, centerX, centerY, radius + 18, M_PI, 2 * M_PI);
     cairo_stroke(cr);
-    
-    // Draw gauge arc background (dark)
+
+    // Arc background
     cairo_set_source_rgb(cr, 0.12, 0.12, 0.12);
     cairo_set_line_width(cr, 28);
     cairo_arc(cr, centerX, centerY, radius, M_PI, 2 * M_PI);
     cairo_stroke(cr);
-    
-    // Draw yellow/gold graduated arc
-    // The arc gets brighter yellow towards the edges (more off-target)
-    for (int i = 0; i <= 40; i++) {
-        double sec = -20.0 + i;  // -20 to +20
-        double angle = M_PI + M_PI/2 + (sec / 20.0) * (M_PI / 2);
-        double next_angle = M_PI + M_PI/2 + ((sec + 1) / 20.0) * (M_PI / 2);
-        
-        // Color intensity based on distance from center
-        double intensity = std::abs(sec) / 20.0;
+
+    // Graduated yellow/gold arc
+    int segments = si.num_arc_segments;
+    for (int i = 0; i <= segments; i++) {
+        double frac = -1.0 + (2.0 * i) / segments;
+        double angle = M_PI + M_PI/2 + frac * (M_PI / 2);
+        double next_frac = -1.0 + (2.0 * (i + 1)) / segments;
+        double next_angle = M_PI + M_PI/2 + next_frac * (M_PI / 2);
+
+        double intensity = std::abs(frac);
         double r = 0.85 * (0.3 + 0.7 * intensity);
         double g = 0.65 * (0.3 + 0.7 * intensity);
-        double b = 0.0;
-        
-        cairo_set_source_rgb(cr, r, g, b);
+
+        cairo_set_source_rgb(cr, r, g, 0.0);
         cairo_set_line_width(cr, 12);
         cairo_arc(cr, centerX, centerY, radius, angle, next_angle);
         cairo_stroke(cr);
     }
-    
-    // Draw tick marks - white
+
+    // Major ticks and labels
     cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
-    
-    // Major ticks at 0, 5, 10, 15, 20 on each side
     cairo_set_line_width(cr, 2.5);
-    for (int sec = -20; sec <= 20; sec += 5) {
-        double angle = M_PI + M_PI/2 + (sec / 20.0) * (M_PI / 2);
-        double inner_r = radius - 20;
-        double outer_r = radius + 8;
-        
-        double x1 = centerX + inner_r * cos(angle);
-        double y1 = centerY + inner_r * sin(angle);
-        double x2 = centerX + outer_r * cos(angle);
-        double y2 = centerY + outer_r * sin(angle);
-        
-        cairo_move_to(cr, x1, y1);
-        cairo_line_to(cr, x2, y2);
-        cairo_stroke(cr);
-    }
-    
-    // Minor ticks every second
-    cairo_set_line_width(cr, 1);
-    for (int sec = -20; sec <= 20; sec++) {
-        if (sec % 5 == 0) continue;
-        double angle = M_PI + M_PI/2 + (sec / 20.0) * (M_PI / 2);
-        double inner_r = radius - 10;
-        double outer_r = radius + 4;
-        
-        double x1 = centerX + inner_r * cos(angle);
-        double y1 = centerY + inner_r * sin(angle);
-        double x2 = centerX + outer_r * cos(angle);
-        double y2 = centerY + outer_r * sin(angle);
-        
-        cairo_move_to(cr, x1, y1);
-        cairo_line_to(cr, x2, y2);
-        cairo_stroke(cr);
-    }
-    
-    // Draw labels
     cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
     cairo_set_font_size(cr, 13);
-    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
-    
-    // Labels at 5, 10, 15, 20 on each side (not 0)
-    int labels[] = {5, 10, 15, 20};
-    for (int i = 0; i < 4; i++) {
-        int sec = labels[i];
-        // Left side (negative/behind)
-        double angle_left = M_PI + M_PI/2 - (sec / 20.0) * (M_PI / 2);
-        double label_r = radius - 32;
-        char label[10];
-        snprintf(label, sizeof(label), "%d", sec);
-        
+
+    int num_major = static_cast<int>(display_max / si.major_step);
+    for (int i = -num_major; i <= num_major; i++) {
+        double display_val = i * si.major_step;
+        double frac = display_val / display_max;
+        double angle = M_PI + M_PI/2 + frac * (M_PI / 2);
+
+        double x1 = centerX + (radius - 20) * cos(angle);
+        double y1 = centerY + (radius - 20) * sin(angle);
+        double x2 = centerX + (radius + 8) * cos(angle);
+        double y2 = centerY + (radius + 8) * sin(angle);
+
+        cairo_set_line_width(cr, 2.5);
+        cairo_move_to(cr, x1, y1);
+        cairo_line_to(cr, x2, y2);
+        cairo_stroke(cr);
+
+        if (i == 0) continue;
+
+        char label[16];
+        snprintf(label, sizeof(label), "%d", std::abs(static_cast<int>(display_val)));
         cairo_text_extents_t extents;
         cairo_text_extents(cr, label, &extents);
-        double lx = centerX + label_r * cos(angle_left) - extents.width/2;
-        double ly = centerY + label_r * sin(angle_left) + extents.height/2;
-        cairo_move_to(cr, lx, ly);
-        cairo_show_text(cr, label);
-        
-        // Right side (positive/ahead)
-        double angle_right = M_PI + M_PI/2 + (sec / 20.0) * (M_PI / 2);
-        lx = centerX + label_r * cos(angle_right) - extents.width/2;
-        ly = centerY + label_r * sin(angle_right) + extents.height/2;
+        double label_r = radius - 32;
+        double lx = centerX + label_r * cos(angle) - extents.width / 2;
+        double ly = centerY + label_r * sin(angle) + extents.height / 2;
         cairo_move_to(cr, lx, ly);
         cairo_show_text(cr, label);
     }
-    
-    // Draw "- sec" label on left and "sec +" on right
+
+    // Minor ticks
+    cairo_set_line_width(cr, 1);
+    int total_minor = num_major * si.minor_divisions;
+    for (int i = -total_minor; i <= total_minor; i++) {
+        double frac = (double)i / total_minor;
+        // Skip positions that coincide with major ticks
+        if (i % si.minor_divisions == 0) continue;
+
+        double angle = M_PI + M_PI/2 + frac * (M_PI / 2);
+        double x1 = centerX + (radius - 10) * cos(angle);
+        double y1 = centerY + (radius - 10) * sin(angle);
+        double x2 = centerX + (radius + 4) * cos(angle);
+        double y2 = centerY + (radius + 4) * sin(angle);
+
+        cairo_move_to(cr, x1, y1);
+        cairo_line_to(cr, x2, y2);
+        cairo_stroke(cr);
+    }
+
+    // Unit labels: "- sec/min" on left, "sec/min +" on right
     cairo_set_font_size(cr, 11);
     cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
-    
+
+    char left_label[16], right_label[16];
+    snprintf(left_label, sizeof(left_label), "- %s", si.unit_label);
+    snprintf(right_label, sizeof(right_label), "%s +", si.unit_label);
+
     cairo_text_extents_t ext;
-    cairo_text_extents(cr, "- sec", &ext);
+    cairo_text_extents(cr, left_label, &ext);
     cairo_move_to(cr, centerX - radius + 5, centerY - 5);
-    cairo_show_text(cr, "- sec");
-    
-    cairo_text_extents(cr, "sec +", &ext);
+    cairo_show_text(cr, left_label);
+
+    cairo_text_extents(cr, right_label, &ext);
     cairo_move_to(cr, centerX + radius - ext.width - 5, centerY - 5);
-    cairo_show_text(cr, "sec +");
-    
-    // Draw center triangle marker at 0
+    cairo_show_text(cr, right_label);
+
+    // Center triangle marker at 0
     cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
     double tri_y = centerY - radius - 12;
     cairo_move_to(cr, centerX, tri_y + 10);
@@ -147,69 +181,65 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     cairo_line_to(cr, centerX + 6, tri_y);
     cairo_close_path(cr);
     cairo_fill(cr);
-    
-    // Draw digital display box in center
+
+    // Digital display box
     double box_width = 70;
     double box_height = 28;
-    double box_x = centerX - box_width/2;
+    double box_x = centerX - box_width / 2;
     double box_y = centerY - 45;
-    
-    // Box background
+
     cairo_set_source_rgb(cr, 0.08, 0.08, 0.08);
     cairo_rectangle(cr, box_x, box_y, box_width, box_height);
     cairo_fill(cr);
-    
-    // Box border
+
     cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
     cairo_set_line_width(cr, 1.5);
     cairo_rectangle(cr, box_x, box_y, box_width, box_height);
     cairo_stroke(cr);
-    
-    // Digital readout - show seconds with one decimal
+
+    // Digital readout
     double seconds = data->aheadBehindSeconds;
     char digital[20];
-    if (seconds >= 0) {
-        snprintf(digital, sizeof(digital), "%05.1f", std::abs(seconds));
+    if (si.labels_in_minutes) {
+        double abs_min = std::abs(seconds) / 60.0;
+        snprintf(digital, sizeof(digital), "%04.1f", abs_min);
     } else {
         snprintf(digital, sizeof(digital), "%05.1f", std::abs(seconds));
     }
-    
+
     cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
     cairo_set_font_size(cr, 18);
-    
-    // Yellow/amber color for digital display
     cairo_set_source_rgb(cr, 0.9, 0.75, 0.0);
-    
+
     cairo_text_extents_t dext;
     cairo_text_extents(cr, digital, &dext);
-    cairo_move_to(cr, centerX - dext.width/2, box_y + box_height/2 + dext.height/2 - 2);
+    cairo_move_to(cr, centerX - dext.width / 2, box_y + box_height / 2 + dext.height / 2 - 2);
     cairo_show_text(cr, digital);
-    
-    // Draw needle
+
+    // Needle
     double needle_seconds = seconds;
-    // Clamp to ±20 seconds
-    if (needle_seconds > 20.0) needle_seconds = 20.0;
-    if (needle_seconds < -20.0) needle_seconds = -20.0;
-    
-    double needle_angle = M_PI + M_PI/2 + (needle_seconds / 20.0) * (M_PI / 2);
+    if (needle_seconds > max_val) needle_seconds = max_val;
+    if (needle_seconds < -max_val) needle_seconds = -max_val;
+
+    double needle_angle = M_PI + M_PI/2 + (needle_seconds / max_val) * (M_PI / 2);
     double needle_length = radius - 45;
-    
+
     // Needle shadow
     cairo_set_source_rgba(cr, 0, 0, 0, 0.4);
     cairo_set_line_width(cr, 5);
     cairo_move_to(cr, centerX + 2, centerY + 2);
-    cairo_line_to(cr, centerX + 2 + needle_length * cos(needle_angle), 
+    cairo_line_to(cr, centerX + 2 + needle_length * cos(needle_angle),
                   centerY + 2 + needle_length * sin(needle_angle));
     cairo_stroke(cr);
-    
-    // Needle - white with slight taper
+
+    // Needle
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
     cairo_set_line_width(cr, 3);
     cairo_move_to(cr, centerX, centerY);
-    cairo_line_to(cr, centerX + needle_length * cos(needle_angle), 
+    cairo_line_to(cr, centerX + needle_length * cos(needle_angle),
                   centerY + needle_length * sin(needle_angle));
     cairo_stroke(cr);
-    
+
     // Needle hub
     cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
     cairo_arc(cr, centerX, centerY, 10, 0, 2 * M_PI);
@@ -218,12 +248,12 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     cairo_set_line_width(cr, 1);
     cairo_arc(cr, centerX, centerY, 10, 0, 2 * M_PI);
     cairo_stroke(cr);
-    
+
     // Center dot
     cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
     cairo_arc(cr, centerX, centerY, 4, 0, 2 * M_PI);
     cairo_fill(cr);
-    
+
     return FALSE;
 }
 
