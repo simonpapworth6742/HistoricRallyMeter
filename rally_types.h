@@ -42,6 +42,7 @@ struct AppData {
     GtkLabel* tripSpeedLabel;
     GtkLabel* totalSpeedLabel;
     GtkLabel* targetSpeedLabel;
+    GtkLabel* gaugeTargetLabel;    // target speed shown below gauge
     GtkLabel* aheadBehindLabel;
     GtkLabel* speedAdjustArrowsLabel;
     GtkLabel* nextSegLabel;

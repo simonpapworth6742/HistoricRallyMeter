@@ -333,6 +333,7 @@ void updateDriverDisplay(AppData* data) {
         ss.str("");
         ss << std::fixed << std::setprecision(2) << target_kph;
         gtk_label_set_text(data->targetSpeedLabel, ss.str().c_str());
+        gtk_label_set_text(data->gaugeTargetLabel, ss.str().c_str());
         
         // Ahead/behind - calculated from stage start accounting for all segment speeds
         int64_t total_count_diff_ab = calculateDistanceCounts(*data->state,
@@ -415,6 +416,7 @@ void updateDriverDisplay(AppData* data) {
         gtk_widget_queue_draw(data->rallyGaugeDrawingArea);
     } else {
         gtk_label_set_text(data->targetSpeedLabel, "--.--");
+        gtk_label_set_text(data->gaugeTargetLabel, "--.--");
         gtk_label_set_text(data->aheadBehindLabel, "--:--.--");
         gtk_label_set_text(data->speedAdjustArrowsLabel, "");
         data->aheadBehindSeconds = 0.0;
@@ -488,11 +490,13 @@ static void applyDriverCSS(GtkWidget* G_GNUC_UNUSED widget) {
         "button { background-color: #333333; color: #FFFFFF; }"
         ".speed-header { font-size: 28px; font-weight: bold; }"
         ".speed-value { font-size: 64px; font-weight: bold; font-family: monospace; }"
+        ".speed-value-xl { font-size: 80px; font-weight: bold; font-family: monospace; }"
+        ".speed-value-target { font-size: 45px; font-weight: bold; font-family: monospace; }"
         ".target-info { font-size: 22px; font-weight: bold; }"
         ".ahead-behind { font-size: 28px; font-weight: bold; font-family: monospace; }"
         ".next-info { font-size: 18px; }"
         ".footer-info { font-size: 14px; }"
-        ".speed-arrows { font-weight: bold; }",
+        ".speed-arrows { font-size: 28px; font-weight: bold; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -516,104 +520,107 @@ GtkWidget* createDriverWindow(AppData* data) {
     GtkWidget* contentBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(mainBox), contentBox, TRUE, TRUE, 0);
     
-    // Left side: Speed displays
-    GtkWidget* speedsBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    // Left side: Speed displays using a 2-column grid
+    // Column 0: Current + Target (left), Column 1: Total + Trip (right)
+    GtkWidget* speedsBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
     gtk_box_pack_start(GTK_BOX(contentBox), speedsBox, TRUE, TRUE, 0);
     
-    // Top row: Current and Total headers
-    GtkWidget* topHeaderBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_box_pack_start(GTK_BOX(speedsBox), topHeaderBox, FALSE, FALSE, 0);
+    // Left column: Current speed + arrows, Target speed
+    GtkWidget* leftCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_pack_start(GTK_BOX(speedsBox), leftCol, TRUE, TRUE, 0);
+    
+    // Current header with arrows beside it
+    GtkWidget* currentHeaderRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_halign(currentHeaderRow, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(leftCol), currentHeaderRow, FALSE, FALSE, 0);
     
     GtkWidget* currentHeader = gtk_label_new("Current");
-    GtkWidget* totalHeader = gtk_label_new("Total");
-    
     gtk_style_context_add_class(gtk_widget_get_style_context(currentHeader), "speed-header");
-    gtk_style_context_add_class(gtk_widget_get_style_context(totalHeader), "speed-header");
+    gtk_box_pack_start(GTK_BOX(currentHeaderRow), currentHeader, FALSE, FALSE, 0);
     
-    gtk_widget_set_halign(currentHeader, GTK_ALIGN_CENTER);
-    gtk_widget_set_halign(totalHeader, GTK_ALIGN_CENTER);
+    data->speedAdjustArrowsLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->speedAdjustArrowsLabel)), "speed-arrows");
+    gtk_widget_set_valign(GTK_WIDGET(data->speedAdjustArrowsLabel), GTK_ALIGN_END);
+    gtk_label_set_width_chars(data->speedAdjustArrowsLabel, 3);
+    gtk_box_pack_start(GTK_BOX(currentHeaderRow), GTK_WIDGET(data->speedAdjustArrowsLabel), FALSE, FALSE, 0);
     
-    gtk_box_pack_start(GTK_BOX(topHeaderBox), currentHeader, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(topHeaderBox), totalHeader, TRUE, TRUE, 0);
-    
-    // Top row: Current and Total values
-    GtkWidget* topValuesBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_box_pack_start(GTK_BOX(speedsBox), topValuesBox, TRUE, TRUE, 0);
-    
+    // Current speed value (fixed width, right-aligned so decimal stays put)
     data->currentSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
-    data->totalSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
-    
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->currentSpeedLabel)), "speed-value");
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalSpeedLabel)), "speed-value");
-    
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->currentSpeedLabel)), "speed-value-xl");
+    gtk_label_set_width_chars(data->currentSpeedLabel, 6);
+    gtk_label_set_xalign(data->currentSpeedLabel, 1.0);
     gtk_widget_set_halign(GTK_WIDGET(data->currentSpeedLabel), GTK_ALIGN_CENTER);
-    gtk_widget_set_halign(GTK_WIDGET(data->totalSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_valign(GTK_WIDGET(data->currentSpeedLabel), GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(leftCol), GTK_WIDGET(data->currentSpeedLabel), TRUE, TRUE, 0);
+    
+    // Target speed
+    GtkWidget* targetHeader = gtk_label_new("Target");
+    gtk_style_context_add_class(gtk_widget_get_style_context(targetHeader), "speed-header");
+    gtk_widget_set_halign(targetHeader, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(leftCol), targetHeader, FALSE, FALSE, 0);
+    
+    data->targetSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->targetSpeedLabel)), "speed-value-target");
+    gtk_label_set_width_chars(data->targetSpeedLabel, 6);
+    gtk_label_set_xalign(data->targetSpeedLabel, 1.0);
+    gtk_widget_set_halign(GTK_WIDGET(data->targetSpeedLabel), GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(GTK_WIDGET(data->targetSpeedLabel), GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(leftCol), GTK_WIDGET(data->targetSpeedLabel), TRUE, TRUE, 0);
+    
+    // Right column: Total + Trip (vertically aligned)
+    GtkWidget* rightCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_pack_start(GTK_BOX(speedsBox), rightCol, TRUE, TRUE, 0);
+    
+    GtkWidget* totalHeader = gtk_label_new("Total");
+    gtk_style_context_add_class(gtk_widget_get_style_context(totalHeader), "speed-header");
+    gtk_widget_set_halign(totalHeader, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(rightCol), totalHeader, FALSE, FALSE, 0);
+    
+    data->totalSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalSpeedLabel)), "speed-value");
+    gtk_label_set_width_chars(data->totalSpeedLabel, 6);
+    gtk_label_set_xalign(data->totalSpeedLabel, 1.0);
+    gtk_widget_set_halign(GTK_WIDGET(data->totalSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_valign(GTK_WIDGET(data->totalSpeedLabel), GTK_ALIGN_CENTER);
-    
-    gtk_box_pack_start(GTK_BOX(topValuesBox), GTK_WIDGET(data->currentSpeedLabel), TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(topValuesBox), GTK_WIDGET(data->totalSpeedLabel), TRUE, TRUE, 0);
-    
-    // Bottom row: Trip header and value (right-aligned under Total)
-    GtkWidget* tripHeaderBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_box_pack_start(GTK_BOX(speedsBox), tripHeaderBox, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(rightCol), GTK_WIDGET(data->totalSpeedLabel), TRUE, TRUE, 0);
     
     GtkWidget* tripHeader = gtk_label_new("Trip");
     gtk_style_context_add_class(gtk_widget_get_style_context(tripHeader), "speed-header");
     gtk_widget_set_halign(tripHeader, GTK_ALIGN_CENTER);
-    
-    GtkWidget* tripSpacer1 = gtk_label_new("");
-    gtk_box_pack_start(GTK_BOX(tripHeaderBox), tripSpacer1, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(tripHeaderBox), tripHeader, TRUE, TRUE, 0);
-    
-    GtkWidget* tripValuesBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_box_pack_start(GTK_BOX(speedsBox), tripValuesBox, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(rightCol), tripHeader, FALSE, FALSE, 0);
     
     data->tripSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripSpeedLabel)), "speed-value");
+    gtk_label_set_width_chars(data->tripSpeedLabel, 6);
+    gtk_label_set_xalign(data->tripSpeedLabel, 1.0);
     gtk_widget_set_halign(GTK_WIDGET(data->tripSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_valign(GTK_WIDGET(data->tripSpeedLabel), GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(rightCol), GTK_WIDGET(data->tripSpeedLabel), TRUE, TRUE, 0);
     
-    GtkWidget* tripSpacer2 = gtk_label_new("");
-    gtk_box_pack_start(GTK_BOX(tripValuesBox), tripSpacer2, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(tripValuesBox), GTK_WIDGET(data->tripSpeedLabel), TRUE, TRUE, 0);
-    
-    // Right side: Rally gauge and info
-    GtkWidget* gaugeBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_widget_set_size_request(gaugeBox, 450, -1);
+    // Right side: Rally gauge with units overlay
+    GtkWidget* gaugeBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_size_request(gaugeBox, 550, -1);
+    gtk_widget_set_valign(gaugeBox, GTK_ALIGN_START);
     gtk_box_pack_end(GTK_BOX(contentBox), gaugeBox, FALSE, FALSE, 10);
     
-    // Units label at top right
+    // Units label overlaid at top right using an overlay container
+    GtkWidget* gaugeOverlay = gtk_overlay_new();
+    gtk_box_pack_start(GTK_BOX(gaugeBox), gaugeOverlay, TRUE, TRUE, 0);
+    
+    data->rallyGaugeDrawingArea = gtk_drawing_area_new();
+    gtk_widget_set_size_request(data->rallyGaugeDrawingArea, 500, 300);
+    g_signal_connect(data->rallyGaugeDrawingArea, "draw", G_CALLBACK(on_gauge_draw), data);
+    gtk_container_add(GTK_CONTAINER(gaugeOverlay), data->rallyGaugeDrawingArea);
+    
     data->unitsLabel = GTK_LABEL(gtk_label_new(data->state->units ? "(MPH)" : "(KPH)"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->unitsLabel)), "speed-header");
     gtk_widget_set_halign(GTK_WIDGET(data->unitsLabel), GTK_ALIGN_END);
-    gtk_box_pack_start(GTK_BOX(gaugeBox), GTK_WIDGET(data->unitsLabel), FALSE, FALSE, 0);
+    gtk_widget_set_valign(GTK_WIDGET(data->unitsLabel), GTK_ALIGN_START);
+    gtk_overlay_add_overlay(GTK_OVERLAY(gaugeOverlay), GTK_WIDGET(data->unitsLabel));
     
-    // Rally gauge drawing area
-    data->rallyGaugeDrawingArea = gtk_drawing_area_new();
-    gtk_widget_set_size_request(data->rallyGaugeDrawingArea, 400, 180);
-    g_signal_connect(data->rallyGaugeDrawingArea, "draw", G_CALLBACK(on_gauge_draw), data);
-    gtk_box_pack_start(GTK_BOX(gaugeBox), data->rallyGaugeDrawingArea, TRUE, TRUE, 0);
-    
-    // Target speed and ahead/behind below gauge
-    GtkWidget* targetInfoBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_widget_set_halign(targetInfoBox, GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(gaugeBox), targetInfoBox, FALSE, FALSE, 0);
-    
-    GtkWidget* targetLabel = gtk_label_new("target:");
-    data->targetSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
-    data->aheadBehindLabel = GTK_LABEL(gtk_label_new("--:--.--"));
-    data->speedAdjustArrowsLabel = GTK_LABEL(gtk_label_new(""));
-    
-    gtk_style_context_add_class(gtk_widget_get_style_context(targetLabel), "target-info");
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->targetSpeedLabel)), "target-info");
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->aheadBehindLabel)), "ahead-behind");
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->speedAdjustArrowsLabel)), "speed-arrows");
-    
-    gtk_box_pack_start(GTK_BOX(targetInfoBox), targetLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(targetInfoBox), GTK_WIDGET(data->targetSpeedLabel), FALSE, FALSE, 5);
-    gtk_box_pack_start(GTK_BOX(targetInfoBox), GTK_WIDGET(data->aheadBehindLabel), FALSE, FALSE, 10);
-    gtk_box_pack_start(GTK_BOX(targetInfoBox), GTK_WIDGET(data->speedAdjustArrowsLabel), FALSE, FALSE, 5);
+    // Hidden labels still needed by update logic
+    data->aheadBehindLabel = GTK_LABEL(gtk_label_new(""));
+    data->gaugeTargetLabel = GTK_LABEL(gtk_label_new(""));
     
     // Bottom row: Updates counter, next segment, unit toggle
     GtkWidget* footerBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
