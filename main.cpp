@@ -17,6 +17,7 @@
 #include "ui_copilot.h"
 #include "callbacks.h"
 #include "calculations.h"
+#include "tone_generator.h"
 
 // Structure to hold connector info from DRM
 struct DrmConnector {
@@ -293,6 +294,8 @@ int main(int argc, char* argv[]) {
         app_data.register_addr = REGISTER;
         app_data.state = &state;
         app_data.poller = new CounterPoller();
+        app_data.toneGen = new ToneGenerator();
+        app_data.toneGen->start();
         app_data.lastUpdateCountTime_ms = getRallyTime_ms(state);
         
         // Create windows
@@ -452,6 +455,10 @@ int main(int argc, char* argv[]) {
         
         gtk_main();
         
+        if (app_data.toneGen) {
+            app_data.toneGen->stop();
+            delete app_data.toneGen;
+        }
         delete app_data.poller;
         return 0;
     } catch (const std::exception& e) {

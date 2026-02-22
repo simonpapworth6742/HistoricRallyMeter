@@ -3,14 +3,14 @@ CXXFLAGS_BASE = -Wall -Wextra -std=c++20 $(shell pkg-config --cflags gtk+-3.0)
 CXXFLAGS = $(CXXFLAGS_BASE) -O2
 CXXFLAGS_DEBUG = $(CXXFLAGS_BASE) -g -O0 -DDEBUG
 CXXFLAGS_TEST = -Wall -Wextra -std=c++20 -O2 -I. -DRALLY_NO_GTK
-LDFLAGS = $(shell pkg-config --libs gtk+-3.0)
+LDFLAGS = $(shell pkg-config --libs gtk+-3.0) -lasound -lpthread
 TARGET = HistoricRallyMeter
 TARGET_DEBUG = HistoricRallyMeter_debug
 TEST_TARGET = run_tests
 
 # Main application sources
 SOURCES = main.cpp i2c_counter.cpp rally_state.cpp config_file.cpp counter_poller.cpp \
-          calculations.cpp ui_driver.cpp ui_copilot.cpp callbacks.cpp
+          calculations.cpp ui_driver.cpp ui_copilot.cpp callbacks.cpp tone_generator.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 OBJECTS_DEBUG = $(SOURCES:.cpp=_debug.o)
 

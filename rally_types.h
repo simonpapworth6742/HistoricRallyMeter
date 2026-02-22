@@ -12,6 +12,7 @@
 class I2CCounter;
 class RallyState;
 class CounterPoller;
+class ToneGenerator;
 
 // Segment structure (high precision)
 struct Segment {
@@ -97,6 +98,9 @@ struct AppData {
     GtkLabel* rallyClockLabel;
     GtkEntry* dateEntry;
     GtkEntry* timeEntry;
+    
+    // Tone generator for speed adjustment alerts
+    ToneGenerator* toneGen = nullptr;
     
     int updateCount = 0;
     int64_t lastUpdateCountTime_ms = 0;

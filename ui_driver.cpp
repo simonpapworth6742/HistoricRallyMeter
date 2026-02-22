@@ -3,6 +3,7 @@
 #include "rally_types.h"
 #include "rally_state.h"
 #include "counter_poller.h"
+#include "tone_generator.h"
 #include <iomanip>
 #include <sstream>
 #include <cmath>
@@ -408,8 +409,24 @@ void updateDriverDisplay(AppData* data) {
             } else {
                 gtk_label_set_text(data->speedAdjustArrowsLabel, "");
             }
+            
+            // Tone cadence: silent if beyond ±30s, otherwise match arrow brackets
+            if (data->toneGen) {
+                if (abs_seconds > 30.0) {
+                    data->toneGen->setCadence(0, 0);
+                } else if (num_arrows >= 3) {
+                    data->toneGen->setCadence(200, 200);
+                } else if (num_arrows == 2) {
+                    data->toneGen->setCadence(500, 500);
+                } else if (num_arrows == 1) {
+                    data->toneGen->setCadence(900, 900);
+                } else {
+                    data->toneGen->setCadence(0, 0);
+                }
+            }
         } else {
             gtk_label_set_text(data->speedAdjustArrowsLabel, "");
+            if (data->toneGen) data->toneGen->setCadence(0, 0);
         }
         
         // Redraw gauge
@@ -419,6 +436,7 @@ void updateDriverDisplay(AppData* data) {
         gtk_label_set_text(data->gaugeTargetLabel, "--.--");
         gtk_label_set_text(data->aheadBehindLabel, "--:--.--");
         gtk_label_set_text(data->speedAdjustArrowsLabel, "");
+        if (data->toneGen) data->toneGen->setCadence(0, 0);
         data->aheadBehindSeconds = 0.0;
         if (data->rallyGaugeDrawingArea) {
             gtk_widget_queue_draw(data->rallyGaugeDrawingArea);

@@ -6,6 +6,7 @@
 #include "ui_driver.h"
 #include "ui_copilot.h"
 #include "counter_poller.h"
+#include "tone_generator.h"
 #include <cmath>
 #include <sstream>
 #include <iomanip>
@@ -79,6 +80,8 @@ void on_stage_go(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->gaugePendingScale = -1;
     data->gaugeScaleChangeTime = 0;
     data->aheadBehindSeconds = 0.0;
+    
+    if (data->toneGen) data->toneGen->setCadence(0, 0);
     
     ConfigFile::save(*data->state);
 }
