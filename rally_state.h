@@ -23,6 +23,10 @@ public:
     long rallyTimeOffset_ms = 0;  // offset in milliseconds
     std::vector<Segment> segments;
     
+    // Up to 5 memory slots for storing/recalling segment setups
+    static constexpr int MAX_MEMORY_SLOTS = 5;
+    std::vector<Segment> memory_slots[5];
+    
     // Driver window position/size (remembered across sessions)
     int driver_window_x = -1;      // -1 = not set
     int driver_window_y = -1;

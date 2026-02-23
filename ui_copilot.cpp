@@ -9,6 +9,7 @@
 #include <sstream>
 #include <iomanip>
 #include <ctime>
+#include <string>
 
 // Apply CSS styling
 static void applyCopilotCSS() {
@@ -23,7 +24,9 @@ static void applyCopilotCSS() {
         ".clock-label { font-size: 24px; font-weight: bold; }"
         ".total-label { font-size: 32px; font-weight: bold; font-family: monospace; }"
         ".trip-label { font-size: 32px; font-weight: bold; font-family: monospace; }"
-        ".segment-label { font-size: 18px; }",
+        ".segment-label { font-size: 18px; }"
+        ".segment-row entry, .segment-row button, .segment-row checkbutton { font-size: 18px; }"
+        ".new-segment-row label, .new-segment-row entry, .new-segment-row button, .new-segment-row checkbutton { font-size: 18px; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -188,7 +191,8 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     
     // Left side: segments list
     GtkWidget* leftBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_box_pack_start(GTK_BOX(data->stageSetupMainBox), leftBox, TRUE, TRUE, 0);
+    gtk_widget_set_size_request(leftBox, 500, -1);
+    gtk_box_pack_start(GTK_BOX(data->stageSetupMainBox), leftBox, FALSE, FALSE, 0);
     
     // Header row
     GtkWidget* headerBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
@@ -198,14 +202,13 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     GtkWidget* header2 = gtk_label_new("Distance (m)");
     GtkWidget* header3 = gtk_label_new("Auto");
     
-    gtk_widget_set_size_request(header1, 120, -1);
-    gtk_widget_set_size_request(header2, 120, -1);
-    gtk_widget_set_size_request(header3, 60, -1);
+    gtk_style_context_add_class(gtk_widget_get_style_context(header1), "segment-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(header2), "segment-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(header3), "segment-label");
     
     gtk_box_pack_start(GTK_BOX(headerBox), header1, FALSE, FALSE, 5);
-    gtk_box_pack_start(GTK_BOX(headerBox), header2, FALSE, FALSE, 5);
+    gtk_box_pack_start(GTK_BOX(headerBox), header2, FALSE, FALSE, 80);
     gtk_box_pack_start(GTK_BOX(headerBox), header3, FALSE, FALSE, 5);
-    gtk_box_pack_start(GTK_BOX(headerBox), gtk_label_new(""), FALSE, FALSE, 5);
     
     // Scrollable list for segments
     GtkWidget* scrolled = gtk_scrolled_window_new(NULL, NULL);
@@ -218,35 +221,74 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_list_box_set_selection_mode(data->segmentListBox, GTK_SELECTION_NONE);
     gtk_container_add(GTK_CONTAINER(scrolled), GTK_WIDGET(data->segmentListBox));
     
-    // Add new segment row
-    GtkWidget* addBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    // Memory columns (Set and Recall) - vertical layout between segments and keypad
+    GtkWidget* memBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_pack_start(GTK_BOX(data->stageSetupMainBox), memBox, FALSE, FALSE, 10);
+    
+    // Header row for memory columns
+    GtkWidget* memHeaderRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(memBox), memHeaderRow, FALSE, FALSE, 0);
+    GtkWidget* setHeader = gtk_label_new("Set");
+    GtkWidget* recallHeader = gtk_label_new("Recall");
+    gtk_widget_set_size_request(setHeader, 66, -1);
+    gtk_widget_set_size_request(recallHeader, 66, -1);
+    gtk_box_pack_start(GTK_BOX(memHeaderRow), setHeader, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(memHeaderRow), recallHeader, FALSE, FALSE, 0);
+    
+    // Buttons [1]-[5] in two vertical columns
+    for (int i = 1; i <= 5; i++) {
+        GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+        gtk_box_pack_start(GTK_BOX(memBox), row, FALSE, FALSE, 0);
+        
+        GtkWidget* setBtn = gtk_button_new_with_label(std::to_string(i).c_str());
+        gtk_widget_set_size_request(setBtn, 66, 43);
+        g_signal_connect(setBtn, "clicked", G_CALLBACK(on_memory_set), data);
+        g_object_set_data(G_OBJECT(setBtn), "slot", GINT_TO_POINTER(i));
+        gtk_box_pack_start(GTK_BOX(row), setBtn, FALSE, FALSE, 0);
+        
+        GtkWidget* recallBtn = gtk_button_new_with_label(std::to_string(i).c_str());
+        gtk_widget_set_size_request(recallBtn, 66, 43);
+        g_signal_connect(recallBtn, "clicked", G_CALLBACK(on_memory_recall), data);
+        g_object_set_data(G_OBJECT(recallBtn), "slot", GINT_TO_POINTER(i));
+        gtk_box_pack_start(GTK_BOX(row), recallBtn, FALSE, FALSE, 0);
+    }
+    
+    GtkWidget* clearMemBtn = gtk_button_new_with_label("clear memory");
+    g_signal_connect(clearMemBtn, "clicked", G_CALLBACK(on_memory_clear), data);
+    gtk_box_pack_start(GTK_BOX(memBox), clearMemBtn, FALSE, FALSE, 5);
+    
+    // Add new segment row (30% larger fonts and buttons)
+    GtkWidget* addBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_style_context_add_class(gtk_widget_get_style_context(addBox), "new-segment-row");
     gtk_box_pack_start(GTK_BOX(leftBox), addBox, FALSE, FALSE, 5);
     
     GtkWidget* newLabel = gtk_label_new("New:");
     data->targetSpeedEntry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_placeholder_text(data->targetSpeedEntry, "KPH");
-    gtk_widget_set_size_request(GTK_WIDGET(data->targetSpeedEntry), 100, -1);
+    gtk_widget_set_size_request(GTK_WIDGET(data->targetSpeedEntry), 100, 40);
     g_signal_connect(data->targetSpeedEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     
     data->distanceEntry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_placeholder_text(data->distanceEntry, "meters");
-    gtk_widget_set_size_request(GTK_WIDGET(data->distanceEntry), 100, -1);
+    gtk_widget_set_size_request(GTK_WIDGET(data->distanceEntry), 100, 40);
     g_signal_connect(data->distanceEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     
     data->autoNextCheck = GTK_CHECK_BUTTON(gtk_check_button_new_with_label("Auto"));
     
     GtkWidget* addBtn = gtk_button_new_with_label("add");
+    gtk_widget_set_size_request(addBtn, 60, 40);
     g_signal_connect(addBtn, "clicked", G_CALLBACK(on_add_segment), data);
     
     GtkWidget* backBtn = gtk_button_new_with_label("back");
+    gtk_widget_set_size_request(backBtn, 60, 40);
     g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
     
     gtk_box_pack_start(GTK_BOX(addBox), newLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(addBox), GTK_WIDGET(data->targetSpeedEntry), FALSE, FALSE, 5);
-    gtk_box_pack_start(GTK_BOX(addBox), GTK_WIDGET(data->distanceEntry), FALSE, FALSE, 5);
-    gtk_box_pack_start(GTK_BOX(addBox), GTK_WIDGET(data->autoNextCheck), FALSE, FALSE, 5);
-    gtk_box_pack_start(GTK_BOX(addBox), addBtn, FALSE, FALSE, 5);
-    gtk_box_pack_start(GTK_BOX(addBox), backBtn, FALSE, FALSE, 5);
+    gtk_box_pack_start(GTK_BOX(addBox), GTK_WIDGET(data->targetSpeedEntry), FALSE, FALSE, 3);
+    gtk_box_pack_start(GTK_BOX(addBox), GTK_WIDGET(data->distanceEntry), FALSE, FALSE, 3);
+    gtk_box_pack_start(GTK_BOX(addBox), GTK_WIDGET(data->autoNextCheck), FALSE, FALSE, 3);
+    gtk_box_pack_start(GTK_BOX(addBox), addBtn, FALSE, FALSE, 3);
+    gtk_box_pack_start(GTK_BOX(addBox), backBtn, FALSE, FALSE, 20);
     
     // Right side: numeric keypad (initially hidden, shown when entry focused)
     data->numericKeypad = createNumericKeypad(data);

@@ -194,19 +194,27 @@ Allows target speed, distance and AutoNext for multiple segments of a rally stag
 +----------------------------------------------------------------------------------------------------------+
 |                                        STAGE SETUP                                                       |
 +----------------------------------------------------------------------------------------------------------+
-|  Speed(KPH)      Distance(m)      AutoNext                                                               |
+|  Speed(KPH)      Distance(m)      AutoNext            Mem Set   Recall                                   |
+|    xx.xx          xxx,xxx           [Y] [del]             [1]    [1]                                     |
+|    xx.xx          xxx,xxx           [Y] [del]             [2]    [2]                                     |
+|    xx.xx          xxx,xxx           [Y] [del]             [3]    [3]                                     |
+|    xx.xx          xxx,xxx           [Y] [del]             [4]    [4]                                     |
+|    xx.xx          xxx,xxx           [Y] [del]             [5]    [5]                                     |
 |    xx.xx          xxx,xxx           [Y] [del]                                                            |
-|    xx.xx          xxx,xxx           [Y] [del]                                                            |
+|    xx.xx          xxx,xxx           [Y] [del]         [clear memory]                                     |
 +----------------------------------------------------------------------------------------------------------+
 |  New segment:  Speed [______] KPH    Distance [________] m    Auto [_]    [add]               [back]     |
 +----------------------------------------------------------------------------------------------------------+
 ```
-The exisiting segments should have editable values and scroll if there are more than 5 rows. 
-When editing any value a numeric entry keyboard should be shown on the right of the screen.
+The exisiting segments should have editable values and scroll if there are more than 5 rows, The font should be 18px.
+When editing any value a numeric entry keyboard should be shown on the right of the screen, buttons 72x58 pixels.
+The New line at the bottom should have fonts 18px, entry boxes 130x40 pixels and buttons 80x40 pixels, there should be 100px paddingbefore the back button.
 
 The target speed is in KPH and the distance is in meters.
 Counts per hour = (input_kph * 1000 * 3600) / (cal / 1000)
 Changes in calibration have no effect on stored segment values.
+
+The memory storage allows for upto five stage setups to be remembered and then recalled on request, pressing the set button for the memeory number should copy the current segment setup into that memory position in the configuration file. pressing recall and a memory number should copy that memory position from the config file into the current setup and configuration, updating the display. Memory clear, after a conformation dialog box, should remove the memory sections from the configuration file.Buttons should be 66x43 pixels.
 
 ---
 

@@ -183,7 +183,7 @@ GtkWidget* createNumericKeypad(AppData* data) {
     
     for (int i = 0; i < 12; i++) {
         GtkWidget* btn = gtk_button_new_with_label(digits[i]);
-        gtk_widget_set_size_request(btn, 50, 40);
+        gtk_widget_set_size_request(btn, 72, 58);
         
         if (strcmp(digits[i], "C") == 0) {
             g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_clear), data);
@@ -196,7 +196,7 @@ GtkWidget* createNumericKeypad(AppData* data) {
     
     // Backspace button
     GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
-    gtk_widget_set_size_request(bkspBtn, 160, 40);
+    gtk_widget_set_size_request(bkspBtn, 230, 58);
     g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
     gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 0, 4, 3, 1);
     
@@ -289,6 +289,7 @@ void refreshSegmentList(AppData* data) {
         
         GtkWidget* row = gtk_list_box_row_new();
         GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+        gtk_style_context_add_class(gtk_widget_get_style_context(box), "segment-row");
         gtk_container_add(GTK_CONTAINER(row), box);
         
         // Speed entry (editable)
@@ -296,7 +297,7 @@ void refreshSegmentList(AppData* data) {
         ss << std::fixed << std::setprecision(2) << target_kph;
         GtkWidget* speedEntry = gtk_entry_new();
         gtk_entry_set_text(GTK_ENTRY(speedEntry), ss.str().c_str());
-        gtk_widget_set_size_request(speedEntry, 100, -1);
+        gtk_widget_set_size_request(speedEntry, 100, 36);
         g_object_set_data(G_OBJECT(speedEntry), "app_data", data);
         g_object_set_data(G_OBJECT(speedEntry), "entry_type", (gpointer)"speed");
         g_signal_connect(speedEntry, "changed", G_CALLBACK(on_segment_entry_changed), GINT_TO_POINTER(i));
@@ -307,7 +308,7 @@ void refreshSegmentList(AppData* data) {
         ss << distance_m;
         GtkWidget* distEntry = gtk_entry_new();
         gtk_entry_set_text(GTK_ENTRY(distEntry), ss.str().c_str());
-        gtk_widget_set_size_request(distEntry, 100, -1);
+        gtk_widget_set_size_request(distEntry, 100, 36);
         g_object_set_data(G_OBJECT(distEntry), "app_data", data);
         g_object_set_data(G_OBJECT(distEntry), "entry_type", (gpointer)"distance");
         g_signal_connect(distEntry, "changed", G_CALLBACK(on_segment_entry_changed), GINT_TO_POINTER(i));
@@ -321,6 +322,7 @@ void refreshSegmentList(AppData* data) {
         
         // Delete button
         GtkWidget* deleteBtn = gtk_button_new_with_label("del");
+        gtk_widget_set_size_request(deleteBtn, -1, 36);
         g_object_set_data(G_OBJECT(deleteBtn), "app_data", data);
         g_signal_connect(deleteBtn, "clicked", G_CALLBACK(on_delete_segment), GINT_TO_POINTER(i));
         
@@ -450,6 +452,34 @@ void on_delete_segment(GtkWidget* widget, gpointer user_data) {
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
     }
+}
+
+void on_memory_set(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    int slot = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "slot")) - 1;
+    if (slot >= 0 && slot < RallyState::MAX_MEMORY_SLOTS) {
+        data->state->memory_slots[slot] = data->state->segments;
+        ConfigFile::save(*data->state);
+    }
+}
+
+void on_memory_recall(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    int slot = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "slot")) - 1;
+    if (slot >= 0 && slot < RallyState::MAX_MEMORY_SLOTS && !data->state->memory_slots[slot].empty()) {
+        data->state->segments = data->state->memory_slots[slot];
+        data->state->segment_current_number = data->state->segments.empty() ? -1 : 0;
+        ConfigFile::save(*data->state);
+        refreshSegmentList(data);
+    }
+}
+
+void on_memory_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+        data->state->memory_slots[i].clear();
+    }
+    ConfigFile::save(*data->state);
 }
 
 void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {

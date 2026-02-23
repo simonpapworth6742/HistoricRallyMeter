@@ -33,6 +33,33 @@ static bool extractBool(const std::string& line) {
     return line.find("true") != std::string::npos;
 }
 
+static void parseSegmentArray(std::istringstream& stream, std::vector<Segment>& out) {
+    out.clear();
+    std::string line;
+    bool in_obj = false;
+    Segment seg = {0, 0, false};
+    
+    while (std::getline(stream, line)) {
+        if (line.find('{') != std::string::npos) {
+            in_obj = true;
+            seg = {0, 0, false};
+        } else if (line.find('}') != std::string::npos && in_obj) {
+            out.push_back(seg);
+            in_obj = false;
+        } else if (line.find(']') != std::string::npos) {
+            return;
+        } else if (in_obj) {
+            if (line.find("\"target_speed_counts_per_hour\"") != std::string::npos) {
+                seg.target_speed_counts_per_hour = extractDouble(line);
+            } else if (line.find("\"distance_counts\"") != std::string::npos) {
+                seg.distance_counts = extractDouble(line);
+            } else if (line.find("\"autoNext\"") != std::string::npos) {
+                seg.autoNext = extractBool(line);
+            }
+        }
+    }
+}
+
 void ConfigFile::load(RallyState& state) {
     std::ifstream file("rally_config.json");
     if (!file.is_open()) {
@@ -45,78 +72,78 @@ void ConfigFile::load(RallyState& state) {
     
     std::istringstream stream(content);
     std::string line;
-    bool in_segments = false;
-    bool in_segment_obj = false;
-    Segment current_segment = {0, 0, false};
     
     while (std::getline(stream, line)) {
-        if (line.find("\"segments\"") != std::string::npos) {
-            in_segments = true;
-            state.segments.clear();
-            continue;
-        }
-        
-        if (in_segments) {
-            if (line.find('{') != std::string::npos) {
-                in_segment_obj = true;
-                current_segment = {0, 0, false};
-            } else if (line.find('}') != std::string::npos && in_segment_obj) {
-                state.segments.push_back(current_segment);
-                in_segment_obj = false;
-            } else if (line.find(']') != std::string::npos) {
-                in_segments = false;
-            } else if (in_segment_obj) {
-                if (line.find("\"target_speed_counts_per_hour\"") != std::string::npos) {
-                    current_segment.target_speed_counts_per_hour = extractDouble(line);
-                } else if (line.find("\"distance_counts\"") != std::string::npos) {
-                    current_segment.distance_counts = extractDouble(line);
-                } else if (line.find("\"autoNext\"") != std::string::npos) {
-                    current_segment.autoNext = extractBool(line);
-                }
-            }
-        } else {
-            // Parse non-segment fields
-            if (line.find("\"units\"") != std::string::npos) {
-                state.units = extractBool(line);
-            } else if (line.find("\"calibration\"") != std::string::npos) {
-                state.calibration = extractLong(line);
-            } else if (line.find("\"counters\"") != std::string::npos) {
-                state.counters = extractBool(line);
-            } else if (line.find("\"total_start_cntr1\"") != std::string::npos) {
-                state.total_start_cntr1 = static_cast<uint32_t>(extractLong(line));
-            } else if (line.find("\"total_start_cntr2\"") != std::string::npos) {
-                state.total_start_cntr2 = static_cast<uint32_t>(extractLong(line));
-            } else if (line.find("\"total_start_time_ms\"") != std::string::npos) {
-                state.total_start_time_ms = extractLong(line);
-            } else if (line.find("\"trip_start_cntr1\"") != std::string::npos) {
-                state.trip_start_cntr1 = static_cast<uint32_t>(extractLong(line));
-            } else if (line.find("\"trip_start_cntr2\"") != std::string::npos) {
-                state.trip_start_cntr2 = static_cast<uint32_t>(extractLong(line));
-            } else if (line.find("\"trip_start_time_ms\"") != std::string::npos) {
-                state.trip_start_time_ms = extractLong(line);
-            } else if (line.find("\"segment_start_cntr1\"") != std::string::npos) {
-                state.segment_start_cntr1 = static_cast<uint32_t>(extractLong(line));
-            } else if (line.find("\"segment_start_cntr2\"") != std::string::npos) {
-                state.segment_start_cntr2 = static_cast<uint32_t>(extractLong(line));
-            } else if (line.find("\"segment_start_time_ms\"") != std::string::npos) {
-                state.segment_start_time_ms = extractLong(line);
-            } else if (line.find("\"segment_current_number\"") != std::string::npos) {
-                state.segment_current_number = static_cast<int32_t>(extractLong(line));
-            } else if (line.find("\"rallyTimeOffset_ms\"") != std::string::npos) {
-                state.rallyTimeOffset_ms = extractLong(line);
-            } else if (line.find("\"driver_window_x\"") != std::string::npos) {
-                state.driver_window_x = static_cast<int>(extractLong(line));
-            } else if (line.find("\"driver_window_y\"") != std::string::npos) {
-                state.driver_window_y = static_cast<int>(extractLong(line));
-            } else if (line.find("\"driver_window_width\"") != std::string::npos) {
-                state.driver_window_width = static_cast<int>(extractLong(line));
-            } else if (line.find("\"driver_window_height\"") != std::string::npos) {
-                state.driver_window_height = static_cast<int>(extractLong(line));
-            } else if (line.find("\"driver_window_monitor\"") != std::string::npos) {
-                state.driver_window_monitor = static_cast<int>(extractLong(line));
-            }
+        if (line.find("\"segments\"") != std::string::npos && line.find("\"memory_") == std::string::npos) {
+            parseSegmentArray(stream, state.segments);
+        } else if (line.find("\"memory_1\"") != std::string::npos) {
+            parseSegmentArray(stream, state.memory_slots[0]);
+        } else if (line.find("\"memory_2\"") != std::string::npos) {
+            parseSegmentArray(stream, state.memory_slots[1]);
+        } else if (line.find("\"memory_3\"") != std::string::npos) {
+            parseSegmentArray(stream, state.memory_slots[2]);
+        } else if (line.find("\"memory_4\"") != std::string::npos) {
+            parseSegmentArray(stream, state.memory_slots[3]);
+        } else if (line.find("\"memory_5\"") != std::string::npos) {
+            parseSegmentArray(stream, state.memory_slots[4]);
+        } else if (line.find("\"units\"") != std::string::npos) {
+            state.units = extractBool(line);
+        } else if (line.find("\"calibration\"") != std::string::npos) {
+            state.calibration = extractLong(line);
+        } else if (line.find("\"counters\"") != std::string::npos) {
+            state.counters = extractBool(line);
+        } else if (line.find("\"total_start_cntr1\"") != std::string::npos) {
+            state.total_start_cntr1 = static_cast<uint32_t>(extractLong(line));
+        } else if (line.find("\"total_start_cntr2\"") != std::string::npos) {
+            state.total_start_cntr2 = static_cast<uint32_t>(extractLong(line));
+        } else if (line.find("\"total_start_time_ms\"") != std::string::npos) {
+            state.total_start_time_ms = extractLong(line);
+        } else if (line.find("\"trip_start_cntr1\"") != std::string::npos) {
+            state.trip_start_cntr1 = static_cast<uint32_t>(extractLong(line));
+        } else if (line.find("\"trip_start_cntr2\"") != std::string::npos) {
+            state.trip_start_cntr2 = static_cast<uint32_t>(extractLong(line));
+        } else if (line.find("\"trip_start_time_ms\"") != std::string::npos) {
+            state.trip_start_time_ms = extractLong(line);
+        } else if (line.find("\"segment_start_cntr1\"") != std::string::npos) {
+            state.segment_start_cntr1 = static_cast<uint32_t>(extractLong(line));
+        } else if (line.find("\"segment_start_cntr2\"") != std::string::npos) {
+            state.segment_start_cntr2 = static_cast<uint32_t>(extractLong(line));
+        } else if (line.find("\"segment_start_time_ms\"") != std::string::npos) {
+            state.segment_start_time_ms = extractLong(line);
+        } else if (line.find("\"segment_current_number\"") != std::string::npos) {
+            state.segment_current_number = static_cast<int32_t>(extractLong(line));
+        } else if (line.find("\"rallyTimeOffset_ms\"") != std::string::npos) {
+            state.rallyTimeOffset_ms = extractLong(line);
+        } else if (line.find("\"driver_window_x\"") != std::string::npos) {
+            state.driver_window_x = static_cast<int>(extractLong(line));
+        } else if (line.find("\"driver_window_y\"") != std::string::npos) {
+            state.driver_window_y = static_cast<int>(extractLong(line));
+        } else if (line.find("\"driver_window_width\"") != std::string::npos) {
+            state.driver_window_width = static_cast<int>(extractLong(line));
+        } else if (line.find("\"driver_window_height\"") != std::string::npos) {
+            state.driver_window_height = static_cast<int>(extractLong(line));
+        } else if (line.find("\"driver_window_monitor\"") != std::string::npos) {
+            state.driver_window_monitor = static_cast<int>(extractLong(line));
         }
     }
+}
+
+static void writeSegmentArray(std::ofstream& file, const std::string& name,
+                              const std::vector<Segment>& segs, bool trailing_comma) {
+    file << "  \"" << name << "\": [\n";
+    for (size_t i = 0; i < segs.size(); i++) {
+        file << "    {\n";
+        file << std::fixed << std::setprecision(6);
+        file << "      \"target_speed_counts_per_hour\": " << segs[i].target_speed_counts_per_hour << ",\n";
+        file << "      \"distance_counts\": " << segs[i].distance_counts << ",\n";
+        file << "      \"autoNext\": " << (segs[i].autoNext ? "true" : "false") << "\n";
+        file << "    }";
+        if (i < segs.size() - 1) file << ",";
+        file << "\n";
+    }
+    file << "  ]";
+    if (trailing_comma) file << ",";
+    file << "\n";
 }
 
 void ConfigFile::save(const RallyState& state) {
@@ -145,17 +172,27 @@ void ConfigFile::save(const RallyState& state) {
     file << "  \"driver_window_width\": " << state.driver_window_width << ",\n";
     file << "  \"driver_window_height\": " << state.driver_window_height << ",\n";
     file << "  \"driver_window_monitor\": " << state.driver_window_monitor << ",\n";
-    file << "  \"segments\": [\n";
-    for (size_t i = 0; i < state.segments.size(); i++) {
-        file << "    {\n";
-        file << std::fixed << std::setprecision(6);
-        file << "      \"target_speed_counts_per_hour\": " << state.segments[i].target_speed_counts_per_hour << ",\n";
-        file << "      \"distance_counts\": " << state.segments[i].distance_counts << ",\n";
-        file << "      \"autoNext\": " << (state.segments[i].autoNext ? "true" : "false") << "\n";
-        file << "    }";
-        if (i < state.segments.size() - 1) file << ",";
-        file << "\n";
+    
+    // Check if any memory slots are populated
+    bool has_memory = false;
+    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+        if (!state.memory_slots[i].empty()) { has_memory = true; break; }
     }
-    file << "  ]\n";
+    
+    writeSegmentArray(file, "segments", state.segments, has_memory);
+    
+    if (has_memory) {
+        int last_populated = -1;
+        for (int i = RallyState::MAX_MEMORY_SLOTS - 1; i >= 0; i--) {
+            if (!state.memory_slots[i].empty()) { last_populated = i; break; }
+        }
+        for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+            if (!state.memory_slots[i].empty()) {
+                std::string name = "memory_" + std::to_string(i + 1);
+                writeSegmentArray(file, name, state.memory_slots[i], i < last_populated);
+            }
+        }
+    }
+    
     file << "}\n";
 }
