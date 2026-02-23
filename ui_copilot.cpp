@@ -22,8 +22,9 @@ static void applyCopilotCSS() {
         ".title-label { font-size: 20px; font-weight: bold; }"
         ".info-label { font-size: 18px; }"
         ".clock-label { font-size: 24px; font-weight: bold; }"
-        ".total-label { font-size: 32px; font-weight: bold; font-family: monospace; }"
-        ".trip-label { font-size: 32px; font-weight: bold; font-family: monospace; }"
+        ".total-label { font-size: 48px; font-weight: bold; font-family: monospace; }"
+        ".trip-label { font-size: 48px; font-weight: bold; font-family: monospace; }"
+        ".nav-button { font-size: 18px; }"
         ".segment-label { font-size: 18px; }"
         ".segment-row entry, .segment-row button, .segment-row checkbutton { font-size: 18px; }"
         ".new-segment-row label, .new-segment-row entry, .new-segment-row button, .new-segment-row checkbutton { font-size: 18px; }",
@@ -72,7 +73,7 @@ void updateCopilotDisplay(AppData* data) {
     std::string total_duration = formatDuration(total_duration_ms);
     
     std::stringstream ss;
-    ss << "Total:  " << std::setw(10) << total_m << " m   from " << total_duration << " ago";
+    ss << "Total: " << std::setw(6) << total_m << " m  from " << total_duration << " ago";
     gtk_label_set_text(data->totalDistLabel, ss.str().c_str());
     
     // Trip distance
@@ -84,7 +85,7 @@ void updateCopilotDisplay(AppData* data) {
     std::string trip_duration = formatDuration(trip_duration_ms);
     
     ss.str("");
-    ss << "Trip:   " << std::setw(10) << trip_m << " m   from " << trip_duration << " ago";
+    ss << "Trip:  " << std::setw(6) << trip_m << " m  from " << trip_duration << " ago";
     gtk_label_set_text(data->tripDistLabel, ss.str().c_str());
     
     // Segment info
@@ -124,10 +125,9 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     
     // Row 2: Total (large font) with reset button following closely
     GtkWidget* totalRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    gtk_widget_set_halign(totalRow, GTK_ALIGN_CENTER);
     gtk_box_pack_start(GTK_BOX(screen), totalRow, TRUE, FALSE, 0);
     
-    data->totalDistLabel = GTK_LABEL(gtk_label_new("Total:           0 m   from 000:00:00.0 ago"));
+    data->totalDistLabel = GTK_LABEL(gtk_label_new("Total:      0 m  from 000:00:00.0 ago"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistLabel)), "total-label");
     
     GtkWidget* totalResetBtn = gtk_button_new_with_label("reset");
@@ -138,10 +138,9 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     
     // Row 3: Trip (same large font) with reset button following closely
     GtkWidget* tripRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    gtk_widget_set_halign(tripRow, GTK_ALIGN_CENTER);
     gtk_box_pack_start(GTK_BOX(screen), tripRow, TRUE, FALSE, 0);
     
-    data->tripDistLabel = GTK_LABEL(gtk_label_new("Trip:            0 m   from 000:00:00.0 ago"));
+    data->tripDistLabel = GTK_LABEL(gtk_label_new("Trip:       0 m  from 000:00:00.0 ago"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripDistLabel)), "trip-label");
     
     GtkWidget* tripResetBtn = gtk_button_new_with_label("reset");
@@ -159,6 +158,12 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     GtkWidget* nextSegBtn = gtk_button_new_with_label("next segment");
     GtkWidget* calBtn = gtk_button_new_with_label("calibration");
     GtkWidget* datetimeBtn = gtk_button_new_with_label("date/time");
+    
+    gtk_style_context_add_class(gtk_widget_get_style_context(stageGoBtn), "nav-button");
+    gtk_style_context_add_class(gtk_widget_get_style_context(segmentsBtn), "nav-button");
+    gtk_style_context_add_class(gtk_widget_get_style_context(nextSegBtn), "nav-button");
+    gtk_style_context_add_class(gtk_widget_get_style_context(calBtn), "nav-button");
+    gtk_style_context_add_class(gtk_widget_get_style_context(datetimeBtn), "nav-button");
     
     g_signal_connect(stageGoBtn, "clicked", G_CALLBACK(on_stage_go), data);
     g_signal_connect(segmentsBtn, "clicked", G_CALLBACK(on_show_segments), data);

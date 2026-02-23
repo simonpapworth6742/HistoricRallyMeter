@@ -247,11 +247,11 @@ When editing any value a numeric entry keyboard should be shown on the right of 
 +----------------------------------------------------------------------------------------------------------+
 | Segment xx  -  next segment in xxx,xxx m                                                   hh:mm:ss      |
 +----------------------------------------------------------------------------------------------------------+
-|                Total:  xxx,xxx m   from hhh:mm:ss.s ago   [reset]                                        |
+|                Total:  xxx,xxx m   from hhh:mm:ss.s ago   [reset]                                        |  48px font
 +----------------------------------------------------------------------------------------------------------+
-|                Trip:   xxx,xxx m   from hhh:mm:ss.s ago   [reset]                                        |
+|                Trip:   xxx,xxx m   from hhh:mm:ss.s ago   [reset]                                        |  48px font
 +----------------------------------------------------------------------------------------------------------+
-|   [stage go]      [segments]       [next segment]       [calibration]       [date/time]                  |
+|   [stage go]      [segments]       [next segment]       [calibration]       [date/time]                  | 18px font
 +----------------------------------------------------------------------------------------------------------+
 ```
 
