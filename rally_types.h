@@ -48,6 +48,7 @@ struct AppData {
     GtkLabel* speedAdjustArrowsLabel;
     GtkLabel* nextSegLabel;
     GtkLabel* updatesPerSecLabel;
+    GtkLabel* cpuTempLabel;
     GtkLabel* unitsLabel;  // Shows KPH or MPH in header
     GtkButton* unitToggleBtn;
     

@@ -124,7 +124,7 @@ calculation of current speed, with too little time passed since a start any spee
 
 
 
-Drivers display Window (1280 x 400) - dark theme only
+**_Drivers display Window (1280 x 400) - dark theme only_**
 
 The drivers display window is wide (1280px) and shallow (400px). It shows the average speed since the last reset of the Total, the current speed calculated from approximately the last 10 seconds of driving, the average speed since the last Trip reset, and the average speed since the start of the current segment. The target speed for the current segment and how many seconds ahead or behind target average speed by calculating how many counts difference there is between the actual count now and the count that it should be based upon the time since stage start taking account of the differing speeds in segments already completed and the target speed for the current segment. Along with the ETA = remaining segment distance / (last-10s average speed) to the next segment. If there is no current segment defined or more than 1000m past end of the last segment, then display "--.--" for Seg. For the next segment line of the display hide it if there is no next segment and if last-10s speed = 0: '--.--'; negative remaining: 'Over by xx:xx:xx'.
 
@@ -140,6 +140,7 @@ The ahead/behind timing is displayed as a 180-degree semicircular gauge (rally g
 look at the example guage in gaugepilot-rallymaster-display.png
 - Zero (on target) at the top center (12 o'clock position)
 - adjust the scale on the guage based upon the current number of seconds you are ahead/ behind, have three scales +- 5 minutes (red), +-10 seconds (yellow), +- 3 seconds (green)
+- The amount ahead/behind should be large white text withing a white outlined box.
 - red should have a red semi circle on the guage, and the amount ahead/behind should be shown as +-hhh:mm:ss
 - yellow should have a yellow semi circle on the guage, and the amount ahead/behind should be shown as +-ss.s
 - green should have a green semi circle on the guage, and the amount ahead/behind should be shown as +-ss.s
@@ -150,13 +151,13 @@ look at the example guage in gaugepilot-rallymaster-display.png
 
 ```
 +----------------------------------------------------------------------------------------------------------+
-|   Current↑↑↑↓↓↓         Total             |              RALLY GAUGE                              (KPH)  |
-|    xx.xx                xx.xx             |         -10s ←───┬───→ +10s                                  |
-|                                           |              ╱   │   ╲                                       |
-|   Target                Trip              |            ╱     ●     ╲                                     |
-|    xx.xx                xx.xx             |          ╱       │       ╲                                   |
-+----------------------------------------------------------------------------------------------------------+
-|   updates/sec: xxx                                  next: xx.xx in xxx,xxx m  ETA hh:mm:ss  [KPH/MPH]    |
+|   Current↑↑↑↓↓↓         Total                       |                 RALLY GAUGE                 [KPH]  |
+|    xx.xx                xx.xx                       |            -10s ←───┬───→ +10s                     |
+|                                                     |                 ╱   │   ╲                          |
+|   Target                Trip                        |               ╱     |    ╲                         |
+|    xx.xx                xx.xx                       |             ╱       │     ╲                        |
+|                                                     |            ╱        ●       ╲                      |
+|   fps: xxx  cpu: xxC   next: xx.xx in xxxm - mm:ss  |           ╱         │         ╲                    |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
@@ -171,7 +172,7 @@ Layout notes for 1280x400 (wide, shallow display):
 - The speed up /slow down arrows should not effect the Total label position and should not effect the Current label position
 - The number of digits displayed for any of the values should not effect their position the decimal point should remain the in same place.
 
-Co-Pilots display window (1280 x 400) - dark theme only
+**_Co-Pilots display window (1280 x 400) - dark theme only_**
 
 The co-pilot display window is wide (1280px) and shallow (400px), same as the driver display. It has four screens:
 1) Stage setup

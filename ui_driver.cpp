@@ -9,6 +9,17 @@
 #include <cmath>
 #include <cstdio>
 #include <chrono>
+#include <fstream>
+
+static std::string readCpuTemp() {
+    std::ifstream f("/sys/class/thermal/thermal_zone0/temp");
+    if (!f.is_open()) return "cpu: --C";
+    int millideg = 0;
+    f >> millideg;
+    char buf[16];
+    snprintf(buf, sizeof(buf), "cpu: %dC", millideg / 1000);
+    return buf;
+}
 
 // Auto-scaling gauge with 2-second debounce.
 // Scale 0: ±3 seconds   (green arc)
@@ -92,16 +103,16 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     gtk_widget_get_allocation(widget, &alloc);
     double width = alloc.width;
     double height = alloc.height;
-    double centerX = width / 2;
-    double centerY = height - 15;
-    double radius = std::min(width / 2, height) - 25;
+    double radius = (std::min(width / 2, height) - 25) * 0.8;
+    double centerX = width - radius - 20;
+    double centerY = (height + radius) / 2;
 
     updateGaugeScale(data);
     GaugeScaleInfo si = getGaugeScaleInfo(data->gaugeScale);
     double max_val = si.max_seconds;
 
     // Background
-    cairo_set_source_rgb(cr, 0.05, 0.05, 0.05);
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
     cairo_paint(cr);
 
     // Outer bezel ring
@@ -222,28 +233,28 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     cairo_close_path(cr);
     cairo_fill(cr);
 
-    // Digital display box
-    double box_width = 100;
-    double box_height = 28;
+    // Digital display box - white outlined
+    double box_width = 130;
+    double box_height = 36;
     double box_x = centerX - box_width / 2;
-    double box_y = centerY - 45;
+    double box_y = centerY - 50;
 
-    cairo_set_source_rgb(cr, 0.08, 0.08, 0.08);
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
     cairo_rectangle(cr, box_x, box_y, box_width, box_height);
     cairo_fill(cr);
-    cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
-    cairo_set_line_width(cr, 1.5);
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    cairo_set_line_width(cr, 2.0);
     cairo_rectangle(cr, box_x, box_y, box_width, box_height);
     cairo_stroke(cr);
 
-    // Digital readout - colour matches the arc
+    // Digital readout - large white text
     double seconds = data->aheadBehindSeconds;
     char digital[24];
     formatGaugeDigital(digital, sizeof(digital), seconds, data->gaugeScale);
 
     cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 18);
-    cairo_set_source_rgb(cr, si.arc_r, si.arc_g, si.arc_b);
+    cairo_set_font_size(cr, 22);
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
 
     cairo_text_extents_t dext;
     cairo_text_extents(cr, digital, &dext);
@@ -497,12 +508,13 @@ void updateDriverDisplay(AppData* data) {
         gtk_label_set_text(data->nextSegLabel, "");
     }
     
-    // Updates per second
+    // FPS counter and CPU temp (refreshed once per second)
     data->updateCount++;
     if (current_time_ms - data->lastUpdateCountTime_ms >= 1000) {
         ss.str("");
-        ss << "updates/sec: " << data->updateCount;
+        ss << "fps: " << data->updateCount;
         gtk_label_set_text(data->updatesPerSecLabel, ss.str().c_str());
+        gtk_label_set_text(data->cpuTempLabel, readCpuTemp().c_str());
         data->updateCount = 0;
         data->lastUpdateCountTime_ms = current_time_ms;
     }
@@ -540,21 +552,25 @@ GtkWidget* createDriverWindow(AppData* data) {
     applyDriverCSS(window);
     
     GtkWidget* mainBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_container_set_border_width(GTK_CONTAINER(mainBox), 5);
+    gtk_container_set_border_width(GTK_CONTAINER(mainBox), 2);
     gtk_container_add(GTK_CONTAINER(window), mainBox);
     
-    // Main content: left side speeds, right side gauge
+    // Main content: left side speeds + footer, right side gauge (full height)
     GtkWidget* contentBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(mainBox), contentBox, TRUE, TRUE, 0);
     
-    // Left side: Speed displays using a 2-column grid
-    // Column 0: Current + Target (left), Column 1: Total + Trip (right)
-    GtkWidget* speedsBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_box_pack_start(GTK_BOX(contentBox), speedsBox, TRUE, TRUE, 0);
+    // Left side: vertical box holding speed columns on top, footer on bottom (~40% width)
+    GtkWidget* speedsBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_widget_set_size_request(speedsBox, 580, -1);
+    gtk_box_pack_start(GTK_BOX(contentBox), speedsBox, FALSE, TRUE, 0);
+    
+    // Two-column speed display row
+    GtkWidget* speedColsBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_box_pack_start(GTK_BOX(speedsBox), speedColsBox, TRUE, TRUE, 0);
     
     // Left column: Current speed + arrows, Target speed
     GtkWidget* leftCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_box_pack_start(GTK_BOX(speedsBox), leftCol, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(speedColsBox), leftCol, TRUE, TRUE, 0);
     
     // Current header with arrows beside it
     GtkWidget* currentHeaderRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
@@ -596,7 +612,7 @@ GtkWidget* createDriverWindow(AppData* data) {
     
     // Right column: Total + Trip (vertically aligned)
     GtkWidget* rightCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_box_pack_start(GTK_BOX(speedsBox), rightCol, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(speedColsBox), rightCol, TRUE, TRUE, 0);
     
     GtkWidget* totalHeader = gtk_label_new("Total");
     gtk_style_context_add_class(gtk_widget_get_style_context(totalHeader), "speed-header");
@@ -624,47 +640,45 @@ GtkWidget* createDriverWindow(AppData* data) {
     gtk_widget_set_valign(GTK_WIDGET(data->tripSpeedLabel), GTK_ALIGN_CENTER);
     gtk_box_pack_start(GTK_BOX(rightCol), GTK_WIDGET(data->tripSpeedLabel), TRUE, TRUE, 0);
     
-    // Right side: Rally gauge with units overlay
-    GtkWidget* gaugeBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_widget_set_size_request(gaugeBox, 550, -1);
-    gtk_widget_set_valign(gaugeBox, GTK_ALIGN_START);
-    gtk_box_pack_end(GTK_BOX(contentBox), gaugeBox, FALSE, FALSE, 10);
+    // Footer row at bottom of LEFT side only (under speeds)
+    GtkWidget* footerBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_end(GTK_BOX(speedsBox), footerBox, FALSE, FALSE, 5);
     
-    // Units label overlaid at top right using an overlay container
+    data->updatesPerSecLabel = GTK_LABEL(gtk_label_new("fps: 0"));
+    data->cpuTempLabel = GTK_LABEL(gtk_label_new(readCpuTemp().c_str()));
+    data->nextSegLabel = GTK_LABEL(gtk_label_new(""));
+    
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->updatesPerSecLabel)), "footer-info");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->cpuTempLabel)), "footer-info");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextSegLabel)), "next-info");
+    
+    gtk_box_pack_start(GTK_BOX(footerBox), GTK_WIDGET(data->updatesPerSecLabel), FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(footerBox), GTK_WIDGET(data->cpuTempLabel), FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(footerBox), GTK_WIDGET(data->nextSegLabel), TRUE, TRUE, 0);
+    
+    // Right side: Rally gauge fills full height with unit toggle overlaid at top right
     GtkWidget* gaugeOverlay = gtk_overlay_new();
-    gtk_box_pack_start(GTK_BOX(gaugeBox), gaugeOverlay, TRUE, TRUE, 0);
+    gtk_widget_set_vexpand(gaugeOverlay, TRUE);
+    gtk_widget_set_hexpand(gaugeOverlay, TRUE);
+    gtk_box_pack_end(GTK_BOX(contentBox), gaugeOverlay, TRUE, TRUE, 0);
     
     data->rallyGaugeDrawingArea = gtk_drawing_area_new();
-    gtk_widget_set_size_request(data->rallyGaugeDrawingArea, 500, 300);
+    gtk_widget_set_hexpand(data->rallyGaugeDrawingArea, TRUE);
+    gtk_widget_set_vexpand(data->rallyGaugeDrawingArea, TRUE);
     g_signal_connect(data->rallyGaugeDrawingArea, "draw", G_CALLBACK(on_gauge_draw), data);
     gtk_container_add(GTK_CONTAINER(gaugeOverlay), data->rallyGaugeDrawingArea);
     
+    data->unitToggleBtn = GTK_BUTTON(gtk_button_new_with_label(data->state->units ? "MPH" : "KPH"));
+    gtk_widget_set_halign(GTK_WIDGET(data->unitToggleBtn), GTK_ALIGN_END);
+    gtk_widget_set_valign(GTK_WIDGET(data->unitToggleBtn), GTK_ALIGN_START);
+    gtk_overlay_add_overlay(GTK_OVERLAY(gaugeOverlay), GTK_WIDGET(data->unitToggleBtn));
+    
+    // Units label (hidden, kept for update logic compatibility)
     data->unitsLabel = GTK_LABEL(gtk_label_new(data->state->units ? "(MPH)" : "(KPH)"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->unitsLabel)), "speed-header");
-    gtk_widget_set_halign(GTK_WIDGET(data->unitsLabel), GTK_ALIGN_END);
-    gtk_widget_set_valign(GTK_WIDGET(data->unitsLabel), GTK_ALIGN_START);
-    gtk_overlay_add_overlay(GTK_OVERLAY(gaugeOverlay), GTK_WIDGET(data->unitsLabel));
     
     // Hidden labels still needed by update logic
     data->aheadBehindLabel = GTK_LABEL(gtk_label_new(""));
     data->gaugeTargetLabel = GTK_LABEL(gtk_label_new(""));
-    
-    // Bottom row: Updates counter, next segment, unit toggle
-    GtkWidget* footerBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_end(GTK_BOX(mainBox), footerBox, FALSE, FALSE, 5);
-    
-    data->updatesPerSecLabel = GTK_LABEL(gtk_label_new("updates/sec: 0"));
-    data->nextSegLabel = GTK_LABEL(gtk_label_new(""));
-    data->unitToggleBtn = GTK_BUTTON(gtk_button_new_with_label(data->state->units ? "MPH" : "KPH"));
-    
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->updatesPerSecLabel)), "footer-info");
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextSegLabel)), "next-info");
-    
-    gtk_widget_set_halign(GTK_WIDGET(data->nextSegLabel), GTK_ALIGN_CENTER);
-    
-    gtk_box_pack_start(GTK_BOX(footerBox), GTK_WIDGET(data->updatesPerSecLabel), FALSE, FALSE, 10);
-    gtk_box_pack_start(GTK_BOX(footerBox), GTK_WIDGET(data->nextSegLabel), TRUE, TRUE, 0);
-    gtk_box_pack_end(GTK_BOX(footerBox), GTK_WIDGET(data->unitToggleBtn), FALSE, FALSE, 10);
     
     return window;
 }
