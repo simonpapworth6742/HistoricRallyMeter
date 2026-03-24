@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=HistoricRallyMeter
+Comment=Precision timing and speed measurement for historic car regulation rallies
+Exec=bash -c 'cd ~/HistoricRallyMeter && ./HistoricRallyMeter'
+Icon=utilities-system-monitor
+Terminal=false
+Categories=Utility;
+StartupNotify=true
