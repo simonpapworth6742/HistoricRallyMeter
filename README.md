@@ -76,8 +76,10 @@ dtparam=i2c_arm=on,i2c_arm_baudrate=400000
 Reboot for the change to take effect. Verify the baud rate with:
 
 ```bash
-sudo cat /sys/module/i2c_bcm2835/parameters/baudrate
+python3 -c "import struct; f=open('/sys/bus/i2c/devices/i2c-1/of_node/clock-frequency','rb'); print(struct.unpack('>I',f.read())[0],'Hz')"
 ```
+
+This should output `400000 Hz`.
 
 ### 4. Clone and build
 
