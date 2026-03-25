@@ -33,24 +33,39 @@ static bool extractBool(const std::string& line) {
     return line.find("true") != std::string::npos;
 }
 
-static void parseSegmentArray(std::istringstream& stream, std::vector<Segment>& out) {
+static void parseSegmentArray(std::istringstream& stream, std::vector<Segment>& out, long calibration) {
     out.clear();
     std::string line;
     bool in_obj = false;
-    Segment seg = {0, 0, false};
+    Segment seg{};
+    bool has_kph = false, has_m = false;
     
     while (std::getline(stream, line)) {
         if (line.find('{') != std::string::npos) {
             in_obj = true;
-            seg = {0, 0, false};
+            seg = Segment{};
+            has_kph = false;
+            has_m = false;
         } else if (line.find('}') != std::string::npos && in_obj) {
+            if (!has_kph && calibration > 0) {
+                seg.target_speed_kph = (seg.target_speed_counts_per_hour * calibration) / 1e9;
+            }
+            if (!has_m && calibration > 0) {
+                seg.distance_m = (seg.distance_counts * calibration) / 1e6;
+            }
             out.push_back(seg);
             in_obj = false;
         } else if (line.find(']') != std::string::npos) {
             return;
         } else if (in_obj) {
-            if (line.find("\"target_speed_counts_per_hour\"") != std::string::npos) {
+            if (line.find("\"target_speed_kph\"") != std::string::npos) {
+                seg.target_speed_kph = extractDouble(line);
+                has_kph = true;
+            } else if (line.find("\"target_speed_counts_per_hour\"") != std::string::npos) {
                 seg.target_speed_counts_per_hour = extractDouble(line);
+            } else if (line.find("\"distance_m\"") != std::string::npos) {
+                seg.distance_m = extractDouble(line);
+                has_m = true;
             } else if (line.find("\"distance_counts\"") != std::string::npos) {
                 seg.distance_counts = extractDouble(line);
             } else if (line.find("\"autoNext\"") != std::string::npos) {
@@ -75,17 +90,17 @@ void ConfigFile::load(RallyState& state) {
     
     while (std::getline(stream, line)) {
         if (line.find("\"segments\"") != std::string::npos && line.find("\"memory_") == std::string::npos) {
-            parseSegmentArray(stream, state.segments);
+            parseSegmentArray(stream, state.segments, state.calibration);
         } else if (line.find("\"memory_1\"") != std::string::npos) {
-            parseSegmentArray(stream, state.memory_slots[0]);
+            parseSegmentArray(stream, state.memory_slots[0], state.calibration);
         } else if (line.find("\"memory_2\"") != std::string::npos) {
-            parseSegmentArray(stream, state.memory_slots[1]);
+            parseSegmentArray(stream, state.memory_slots[1], state.calibration);
         } else if (line.find("\"memory_3\"") != std::string::npos) {
-            parseSegmentArray(stream, state.memory_slots[2]);
+            parseSegmentArray(stream, state.memory_slots[2], state.calibration);
         } else if (line.find("\"memory_4\"") != std::string::npos) {
-            parseSegmentArray(stream, state.memory_slots[3]);
+            parseSegmentArray(stream, state.memory_slots[3], state.calibration);
         } else if (line.find("\"memory_5\"") != std::string::npos) {
-            parseSegmentArray(stream, state.memory_slots[4]);
+            parseSegmentArray(stream, state.memory_slots[4], state.calibration);
         } else if (line.find("\"units\"") != std::string::npos) {
             state.units = extractBool(line);
         } else if (line.find("\"calibration\"") != std::string::npos) {
@@ -134,7 +149,9 @@ static void writeSegmentArray(std::ofstream& file, const std::string& name,
     for (size_t i = 0; i < segs.size(); i++) {
         file << "    {\n";
         file << std::fixed << std::setprecision(6);
+        file << "      \"target_speed_kph\": " << segs[i].target_speed_kph << ",\n";
         file << "      \"target_speed_counts_per_hour\": " << segs[i].target_speed_counts_per_hour << ",\n";
+        file << "      \"distance_m\": " << segs[i].distance_m << ",\n";
         file << "      \"distance_counts\": " << segs[i].distance_counts << ",\n";
         file << "      \"autoNext\": " << (segs[i].autoNext ? "true" : "false") << "\n";
         file << "    }";

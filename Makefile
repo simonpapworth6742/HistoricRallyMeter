@@ -14,9 +14,9 @@ SOURCES = main.cpp i2c_counter.cpp rally_state.cpp config_file.cpp counter_polle
 OBJECTS = $(SOURCES:.cpp=.o)
 OBJECTS_DEBUG = $(SOURCES:.cpp=_debug.o)
 
-# Test sources (only need calculations and rally_state for unit tests)
-TEST_SOURCES = tests/test_main.cpp calculations.cpp rally_state.cpp
-TEST_OBJECTS = tests/test_main.o calculations_test.o rally_state_test.o
+# Test sources (calculations, rally_state, config_file for unit tests)
+TEST_SOURCES = tests/test_main.cpp calculations.cpp rally_state.cpp config_file.cpp
+TEST_OBJECTS = tests/test_main.o calculations_test.o rally_state_test.o config_file_test.o
 
 # Default target
 all: $(TARGET)
@@ -51,6 +51,9 @@ calculations_test.o: calculations.cpp calculations.h rally_state.h rally_types.h
 
 rally_state_test.o: rally_state.cpp rally_state.h rally_types.h
 	$(CXX) $(CXXFLAGS_TEST) -c rally_state.cpp -o rally_state_test.o
+
+config_file_test.o: config_file.cpp config_file.h rally_state.h rally_types.h
+	$(CXX) $(CXXFLAGS_TEST) -c config_file.cpp -o config_file_test.o
 
 clean:
 	rm -f $(TARGET) $(TARGET_DEBUG) $(OBJECTS) $(OBJECTS_DEBUG) $(TEST_TARGET) $(TEST_OBJECTS)

@@ -57,7 +57,7 @@ public:
         // Test segment index beyond bounds
         suite->addTest("segment_current_number beyond segments array", []() {
             RallyState state;
-            state.segments.push_back({100, 1000, true});
+            state.segments.push_back({0.0, 100, 0.0, 1000, true});
             state.segment_current_number = 5;  // Beyond array
             
             bool is_valid = (state.segment_current_number >= 0 && 
@@ -249,9 +249,9 @@ public:
         // Test rapid segment transitions
         suite->addTest("Rapid segment transitions at high speed", []() {
             RallyState state;
-            state.segments.push_back({100000.0, 100.0, true});   // Very short
-            state.segments.push_back({100000.0, 100.0, true});
-            state.segments.push_back({100000.0, 100.0, true});
+            state.segments.push_back({0.0, 100000.0, 0.0, 100.0, true});   // Very short
+            state.segments.push_back({0.0, 100000.0, 0.0, 100.0, true});
+            state.segments.push_back({0.0, 100000.0, 0.0, 100.0, true});
             state.segment_current_number = 0;
             
             // At high speed, might cover multiple segments in one poll

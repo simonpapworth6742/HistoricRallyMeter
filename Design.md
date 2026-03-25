@@ -99,8 +99,10 @@ long segment_current_number – the current segment of the stage so defining the
  
 long rallyTimeOffset – ms offset of rally time to operating system time, defaults to 0
 structure segment[]  - Stage segments contain target speed over distance segments of the stage, and if manual or automatic progression to the next segment is required. Defaults to no segments.
-double target_speed – stored in number of counts per hour via the calibration (high precision floating point).
-double distance – number of counts for the segment (high precision floating point).
+double target_speed_kph - the actual speed requested for this segment, this does not change when the calibration changes
+double target_speed – stored in number of counts per hour via the calibration (high precision floating point). This is recaculated when calibration changes
+double distance_m - the actual distance in meter entered, this does not change when the calibration changes
+double distance – number of counts for the segment (high precision floating point).This is recaculated when calibration changes
 Boolean autoNext – True =  when the distance of this segment has been reached the next segment is started automatically, changing the segment_current value and segment_start counter as well as resetting the trip counter values, false = the next segment button on the co-pilots TwinMaster display must be pressed to advance to the next segment, setting the segment_current, segment_counters and Trip counters
  
 
@@ -239,7 +241,7 @@ save button should update the stored calibration as defined above.
 Min input: 500m, Max input: 100,000m.
 new_cal = (input_meters * 1000 * 1000) / total_count_diff
 When editing any value a numeric entry keyboard should be shown on the right of the screen, the same as the stage setup screen.
-
+When [save] is pressed the new calibaration should be changed in the rally_config file as well as recaculating all target_speed and distance in the segments and memeory.
 ---
 
 **3) TwinMaster Screen (Default)**

@@ -16,8 +16,10 @@ class ToneGenerator;
 
 // Segment structure (high precision)
 struct Segment {
-    double target_speed_counts_per_hour = 0.0;  // counts per hour (high precision)
-    double distance_counts = 0.0;                // distance in counts (high precision)
+    double target_speed_kph = 0.0;               // user-entered speed in KPH (calibration-independent)
+    double target_speed_counts_per_hour = 0.0;   // counts per hour (recalculated on calibration change)
+    double distance_m = 0.0;                      // user-entered distance in meters (calibration-independent)
+    double distance_counts = 0.0;                 // distance in counts (recalculated on calibration change)
     bool autoNext = false;
 };
 

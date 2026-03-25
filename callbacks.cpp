@@ -252,10 +252,11 @@ void on_segment_entry_changed(GtkWidget* widget, gpointer user_data) {
     if (text && strlen(text) > 0) {
         if (strcmp(entry_type, "speed") == 0) {
             double kph = std::stod(text);
+            data->state->segments[index].target_speed_kph = kph;
             data->state->segments[index].target_speed_counts_per_hour = kphToCountsPerHour(kph, data->state->calibration);
         } else if (strcmp(entry_type, "distance") == 0) {
             double meters = std::stod(text);
-            // Convert meters to counts (high precision): counts = meters * 1e6 / calibration
+            data->state->segments[index].distance_m = meters;
             data->state->segments[index].distance_counts = (meters * 1e6) / data->state->calibration;
         }
         ConfigFile::save(*data->state);
@@ -284,8 +285,8 @@ void refreshSegmentList(AppData* data) {
     // Add segments with editable entries
     for (size_t i = 0; i < data->state->segments.size(); i++) {
         const Segment& seg = data->state->segments[i];
-        double target_kph = countsPerHourToKPH(seg.target_speed_counts_per_hour, data->state->calibration);
-        long distance_m = countsToCentimeters(seg.distance_counts, data->state->calibration) / 100;
+        double target_kph = seg.target_speed_kph;
+        long distance_m = static_cast<long>(seg.distance_m);
         
         GtkWidget* row = gtk_list_box_row_new();
         GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
@@ -423,7 +424,9 @@ void on_add_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         double distance_counts = (distance_m * 1e6) / data->state->calibration;  // meters to counts
         
         Segment seg;
+        seg.target_speed_kph = target_kph;
         seg.target_speed_counts_per_hour = target_counts_per_hour;
+        seg.distance_m = distance_m;
         seg.distance_counts = distance_counts;
         seg.autoNext = autoNext;
         
@@ -503,6 +506,19 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
             if (total_count_diff > 0) {
                 // new_cal = (input_meters * 1000 * 1000) / total_count_diff
                 data->state->calibration = (rally_distance_m * 1000000) / total_count_diff;
+                
+                // Recalculate count-based values in all segments from stable human values
+                for (auto& seg : data->state->segments) {
+                    seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
+                    seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+                }
+                for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+                    for (auto& seg : data->state->memory_slots[i]) {
+                        seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
+                        seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+                    }
+                }
+                
                 ConfigFile::save(*data->state);
                 
                 // Clear entry and reset calibration state

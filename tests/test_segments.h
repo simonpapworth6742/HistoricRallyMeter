@@ -33,9 +33,9 @@ public:
         suite->addTest("Delete segment from list", []() {
             RallyState state;
             
-            state.segments.push_back({100.0, 1000.0, true});
-            state.segments.push_back({200.0, 2000.0, false});
-            state.segments.push_back({300.0, 3000.0, true});
+            state.segments.push_back({0.0, 100.0, 0.0, 1000.0, true});
+            state.segments.push_back({0.0, 200.0, 0.0, 2000.0, false});
+            state.segments.push_back({0.0, 300.0, 0.0, 3000.0, true});
             
             // Delete middle segment
             state.segments.erase(state.segments.begin() + 1);
@@ -84,8 +84,8 @@ public:
         // Test autoNext advances segment
         suite->addTest("AutoNext=true advances segment when distance reached", []() {
             RallyState state;
-            state.segments.push_back({100000.0, 1000.0, true});   // 1000 counts, autoNext
-            state.segments.push_back({120000.0, 2000.0, false});
+            state.segments.push_back({0.0, 100000.0, 0.0, 1000.0, true});   // 1000 counts, autoNext
+            state.segments.push_back({0.0, 120000.0, 0.0, 2000.0, false});
             state.segment_current_number = 0;
             state.segment_start_cntr1 = 0;
             
@@ -104,7 +104,7 @@ public:
         // Test autoNext=false requires manual
         suite->addTest("AutoNext=false requires manual next segment button", []() {
             RallyState state;
-            state.segments.push_back({100000.0, 1000.0, false});  // autoNext = false
+            state.segments.push_back({0.0, 100000.0, 0.0, 1000.0, false});  // autoNext = false
             state.segment_current_number = 0;
             
             // Even if distance exceeded, should NOT auto-advance
@@ -116,9 +116,9 @@ public:
         // Test skip multiple segments
         suite->addTest("Skip multiple segments if polling lag", []() {
             RallyState state;
-            state.segments.push_back({100000.0, 100.0, true});   // 100 counts
-            state.segments.push_back({100000.0, 100.0, true});   // 100 counts
-            state.segments.push_back({100000.0, 100.0, true});   // 100 counts
+            state.segments.push_back({0.0, 100000.0, 0.0, 100.0, true});   // 100 counts
+            state.segments.push_back({0.0, 100000.0, 0.0, 100.0, true});   // 100 counts
+            state.segments.push_back({0.0, 100000.0, 0.0, 100.0, true});   // 100 counts
             state.segment_current_number = 0;
             state.segment_start_cntr1 = 0;
             
@@ -154,7 +154,7 @@ public:
         suite->addTest("Past end of last segment by >1000m shows --.--", []() {
             RallyState state;
             state.calibration = 600000;  // 0.6m per count
-            state.segments.push_back({100000.0, 10000.0, false});  // 10000 counts = 6000m
+            state.segments.push_back({0.0, 100000.0, 0.0, 10000.0, false});  // 10000 counts = 6000m
             state.segment_current_number = 0;
             state.segment_start_cntr1 = 0;
             

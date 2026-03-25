@@ -36,8 +36,8 @@ public:
             state.total_start_cntr2 = 2000;
             state.segment_current_number = 2;
             state.rallyTimeOffset_ms = 3600000;
-            state.segments.push_back({100.0, 5000.0, true});
-            state.segments.push_back({120.0, 8000.0, false});
+            state.segments.push_back({0.0, 100.0, 0.0, 5000.0, true});
+            state.segments.push_back({0.0, 120.0, 0.0, 8000.0, false});
             
             ASSERT_TRUE(state.units);
             ASSERT_EQ(state.calibration, 750000);
@@ -93,9 +93,9 @@ public:
         suite->addTest("Load JSON with multiple segments", []() {
             // Test that segments vector can hold multiple segments correctly
             std::vector<Segment> segments;
-            segments.push_back({50.0, 1000.0, true});
-            segments.push_back({60.0, 2000.0, false});
-            segments.push_back({70.0, 3000.0, true});
+            segments.push_back({0.0, 50.0, 0.0, 1000.0, true});
+            segments.push_back({0.0, 60.0, 0.0, 2000.0, false});
+            segments.push_back({0.0, 70.0, 0.0, 3000.0, true});
             
             ASSERT_EQ(segments.size(), 3u);
             ASSERT_NEAR(segments[0].target_speed_counts_per_hour, 50.0, 0.001);
@@ -146,8 +146,8 @@ public:
             state.segment_start_time_ms = 7777777;
             state.segment_current_number = 1;
             state.rallyTimeOffset_ms = 1800000;
-            state.segments.push_back({100, 2000, true});
-            state.segments.push_back({150, 3000, false});
+            state.segments.push_back({0.0, 100, 0.0, 2000, true});
+            state.segments.push_back({0.0, 150, 0.0, 3000, false});
             
             // Save using ConfigFile::save logic
             std::ofstream file(test_config_file);

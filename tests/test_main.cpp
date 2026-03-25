@@ -11,6 +11,7 @@
 #include "test_ahead_behind.h"
 #include "test_rally_clock.h"
 #include "test_edge_cases.h"
+#include "test_calibration_independent.h"
 
 int main() {
     TestRunner runner;
@@ -25,6 +26,7 @@ int main() {
     TestAheadBehind aheadBehindTests;
     TestRallyClock clockTests;
     TestEdgeCases edgeCaseTests;
+    TestCalibrationIndependent calIndepTests;
     
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -36,6 +38,7 @@ int main() {
     runner.addSuite(aheadBehindTests.createSuite());
     runner.addSuite(clockTests.createSuite());
     runner.addSuite(edgeCaseTests.createSuite());
+    runner.addSuite(calIndepTests.createSuite());
     
     // Run all tests
     int failures = runner.runAll();
