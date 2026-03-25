@@ -340,9 +340,13 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     g_signal_connect(data->rallyDistEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     GtkWidget* unitLabel = gtk_label_new("meters");
     
+    GtkWidget* resetBtn = gtk_button_new_with_label("reset to 1m per pulse");
+    g_signal_connect(resetBtn, "clicked", G_CALLBACK(on_reset_calibration_1m), data);
+
     gtk_box_pack_start(GTK_BOX(inputRow), inputLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(inputRow), GTK_WIDGET(data->rallyDistEntry), FALSE, FALSE, 10);
     gtk_box_pack_start(GTK_BOX(inputRow), unitLabel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(inputRow), resetBtn, FALSE, FALSE, 20);
     
     // Row 3: Buttons (start, save, back)
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);

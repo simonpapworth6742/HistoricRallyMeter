@@ -530,6 +530,29 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     }
 }
 
+void on_reset_calibration_1m(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+
+    // 1m per pulse: 1 count = 1000mm, so 1000 counts = 1,000,000mm
+    data->state->calibration = 1000000;
+
+    for (auto& seg : data->state->segments) {
+        seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
+        seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+    }
+    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+        for (auto& seg : data->state->memory_slots[i]) {
+            seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
+            seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+        }
+    }
+
+    ConfigFile::save(*data->state);
+    data->cal_started = false;
+    gtk_entry_set_text(data->rallyDistEntry, "");
+    updateCalibrationDisplay(data);
+}
+
 void on_save_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     
