@@ -146,7 +146,7 @@ look at the example guage in gaugepilot-rallymaster-display.png
 - red should have a red semi circle on the guage, and the amount ahead/behind should be shown as +-hhh:mm:ss
 - yellow should have a yellow semi circle on the guage, and the amount ahead/behind should be shown as +-ss.s
 - green should have a green semi circle on the guage, and the amount ahead/behind should be shown as +-ss.s
-- the scale on the guage should wait for the ahead/behind time to be outside its scale for 2 seconds before switching to debounce
+- the scale on the guage should not change too often, and after changing should wait two seconds before changing again, in effect debouncing.
 - A needle/indicator shows the current ahead/behind position
 - The gauge provides an intuitive visual indication - needle pointing right means slow down, needle pointing left means speed up
 

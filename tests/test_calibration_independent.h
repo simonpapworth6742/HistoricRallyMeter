@@ -10,7 +10,7 @@
 
 class TestCalibrationIndependent {
 private:
-    const std::string test_config = "test_cal_indep_config.json";
+    const std::string test_config = "test_cal_indep.json";
 
     void cleanup() {
         std::remove(test_config.c_str());
@@ -184,10 +184,10 @@ public:
             seg.autoNext = true;
             save_state.segments.push_back(seg);
 
-            ConfigFile::save(save_state);
+            ConfigFile::save(save_state, test_config);
 
             RallyState load_state;
-            ConfigFile::load(load_state);
+            ConfigFile::load(load_state, test_config);
 
             ASSERT_EQ(load_state.segments.size(), 1u);
             ASSERT_NEAR(load_state.segments[0].target_speed_kph, 45.0, 0.001);
@@ -209,7 +209,7 @@ public:
             double dist_counts = 8333.333;
 
             // Write an old-format config without the new fields
-            std::ofstream file("rally_config.json");
+            std::ofstream file(test_config);
             file << "{\n";
             file << "  \"calibration\": " << calibration << ",\n";
             file << "  \"segments\": [\n";
@@ -223,7 +223,7 @@ public:
             file.close();
 
             RallyState state;
-            ConfigFile::load(state);
+            ConfigFile::load(state, test_config);
 
             // Should back-calculate: kph = (counts_per_hour * calibration) / 1e9
             double expected_kph = (speed_cph * calibration) / 1e9;
@@ -236,7 +236,6 @@ public:
             ASSERT_NEAR(state.segments[0].target_speed_counts_per_hour, speed_cph, 0.01);
             ASSERT_NEAR(state.segments[0].distance_counts, dist_counts, 0.01);
 
-            // Restore the original config
             cleanup();
             return true;
         });
@@ -254,10 +253,10 @@ public:
             seg.autoNext = false;
             save_state.memory_slots[0].push_back(seg);
 
-            ConfigFile::save(save_state);
+            ConfigFile::save(save_state, test_config);
 
             RallyState load_state;
-            ConfigFile::load(load_state);
+            ConfigFile::load(load_state, test_config);
 
             ASSERT_EQ(load_state.memory_slots[0].size(), 1u);
             ASSERT_NEAR(load_state.memory_slots[0][0].target_speed_kph, 55.0, 0.001);
@@ -287,8 +286,7 @@ public:
 
         suite->addTest("Zero calibration does not crash back-calculation", [this]() {
             cleanup();
-            // Write config with zero calibration and old format
-            std::ofstream file("rally_config.json");
+            std::ofstream file(test_config);
             file << "{\n";
             file << "  \"calibration\": 0,\n";
             file << "  \"segments\": [\n";
@@ -302,7 +300,7 @@ public:
             file.close();
 
             RallyState state;
-            ConfigFile::load(state);
+            ConfigFile::load(state, test_config);
 
             // With zero calibration, back-calc is skipped; kph/m stay at 0
             ASSERT_NEAR(state.segments[0].target_speed_kph, 0.0, 0.001);

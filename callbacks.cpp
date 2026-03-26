@@ -77,7 +77,6 @@ void on_stage_go(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     
     // Reset gauge to green (±3s) scale
     data->gaugeScale = 0;
-    data->gaugePendingScale = -1;
     data->gaugeScaleChangeTime = 0;
     data->aheadBehindSeconds = 0.0;
     

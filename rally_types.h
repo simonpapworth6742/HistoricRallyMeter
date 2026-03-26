@@ -58,8 +58,7 @@ struct AppData {
     GtkWidget* rallyGaugeDrawingArea;
     double aheadBehindSeconds = 0.0;
     int gaugeScale = 1;               // 0=±3s(green), 1=±10s(yellow), 2=±5min(red)
-    int gaugePendingScale = -1;       // Scale we're debouncing toward (-1 = none)
-    int64_t gaugeScaleChangeTime = 0; // Timestamp when pending scale was first requested
+    int64_t gaugeScaleChangeTime = 0; // Timestamp of last scale change (2s cooldown)
     
     // Co-pilot window
     GtkWidget* copilotWindow;

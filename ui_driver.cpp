@@ -33,31 +33,20 @@ static int64_t gauge_now_ms() {
 
 static void updateGaugeScale(AppData* data) {
     double abs_sec = std::abs(data->aheadBehindSeconds);
-    int desired = data->gaugeScale;
+    int desired;
 
-    // Determine which scale the value belongs in
     if (abs_sec <= 3.0) desired = 0;
     else if (abs_sec <= 10.0) desired = 1;
     else desired = 2;
 
-    if (desired == data->gaugeScale) {
-        // Value is within current scale, cancel any pending change
-        data->gaugePendingScale = -1;
-        return;
-    }
+    if (desired == data->gaugeScale) return;
 
-    // Value is outside current scale -- debounce for 2 seconds
+    // Cooldown: don't change again within 2 seconds of the last change
     int64_t now = gauge_now_ms();
-    if (data->gaugePendingScale != desired) {
-        data->gaugePendingScale = desired;
-        data->gaugeScaleChangeTime = now;
-        return;
-    }
+    if (now - data->gaugeScaleChangeTime < 2000) return;
 
-    if (now - data->gaugeScaleChangeTime >= 2000) {
-        data->gaugeScale = desired;
-        data->gaugePendingScale = -1;
-    }
+    data->gaugeScale = desired;
+    data->gaugeScaleChangeTime = now;
 }
 
 struct GaugeScaleInfo {

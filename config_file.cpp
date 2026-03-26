@@ -75,8 +75,8 @@ static void parseSegmentArray(std::istringstream& stream, std::vector<Segment>& 
     }
 }
 
-void ConfigFile::load(RallyState& state) {
-    std::ifstream file("rally_config.json");
+void ConfigFile::load(RallyState& state, const std::string& path) {
+    std::ifstream file(path);
     if (!file.is_open()) {
         return;  // Use defaults
     }
@@ -163,8 +163,8 @@ static void writeSegmentArray(std::ofstream& file, const std::string& name,
     file << "\n";
 }
 
-void ConfigFile::save(const RallyState& state) {
-    std::ofstream file("rally_config.json");
+void ConfigFile::save(const RallyState& state, const std::string& path) {
+    std::ofstream file(path);
     if (!file.is_open()) {
         return;
     }
