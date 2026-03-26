@@ -75,10 +75,11 @@ void on_stage_go(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         data->state->segment_current_number = 0;
     }
     
-    // Reset gauge to green (±3s) scale
+    // Reset gauge and speed filter
     data->gaugeScale = 0;
     data->gaugeScaleChangeTime = 0;
     data->aheadBehindSeconds = 0.0;
+    data->smoothedSpeed = -1.0;
     
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
     

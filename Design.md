@@ -154,10 +154,10 @@ look at the example guage in gaugepilot-rallymaster-display.png
 ```
 +----------------------------------------------------------------------------------------------------------+
 |   Current↑↑↑↓↓↓         Total                       |                 RALLY GAUGE                 [KPH]  |
-|    xx.xx                xx.xx                       |            -10s ←───┬───→ +10s                     |
+|    xx.x                 xx.x                        |            -10s ←───┬───→ +10s                     |
 |                                                     |                 ╱   │   ╲                          |
 |   Target                Trip                        |               ╱     |    ╲                         |
-|    xx.xx                xx.xx                       |             ╱       │     ╲                        |
+|    xx.x                 xx.x                        |             ╱       │     ╲                        |
 |                                                     |            ╱        ●       ╲                      |
 |   fps: xxx  cpu: xxC   next: xx.xx in xxxm - mm:ss  |           ╱         │         ╲                    |
 +----------------------------------------------------------------------------------------------------------+

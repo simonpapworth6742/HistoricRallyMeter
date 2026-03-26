@@ -293,13 +293,21 @@ void updateDriverDisplay(AppData* data) {
     auto tenth_poll = data->poller->get10th();
     auto current_time_ms = getRallyTime_ms(*data->state);
     
-    // Current speed (from 10-second rolling average)
+    // Current speed (from rolling average, then EMA-smoothed for display)
     double current_speed = calculateCurrentSpeed(*data->state, current_poll, tenth_poll);
-    std::stringstream ss;
     if (current_speed < 0) {
-        ss << "--.--";
+        data->smoothedSpeed = -1.0;
+    } else if (data->smoothedSpeed < 0) {
+        data->smoothedSpeed = current_speed;
     } else {
-        ss << std::fixed << std::setprecision(2) << current_speed;
+        constexpr double alpha = 0.02;
+        data->smoothedSpeed = alpha * current_speed + (1.0 - alpha) * data->smoothedSpeed;
+    }
+    std::stringstream ss;
+    if (data->smoothedSpeed < 0) {
+        ss << "--.-";
+    } else {
+        ss << std::fixed << std::setprecision(1) << data->smoothedSpeed;
     }
     gtk_label_set_text(data->currentSpeedLabel, ss.str().c_str());
     
@@ -310,7 +318,7 @@ void updateDriverDisplay(AppData* data) {
     double trip_speed = calculateAverageSpeed(*data->state,
         data->state->trip_start_time_ms, current_time_ms, trip_count_diff);
     ss.str("");
-    ss << std::fixed << std::setprecision(2) << trip_speed;
+    ss << std::fixed << std::setprecision(1) << trip_speed;
     gtk_label_set_text(data->tripSpeedLabel, ss.str().c_str());
     
     // Total average speed
@@ -320,7 +328,7 @@ void updateDriverDisplay(AppData* data) {
     double total_speed = calculateAverageSpeed(*data->state,
         data->state->total_start_time_ms, current_time_ms, total_count_diff);
     ss.str("");
-    ss << std::fixed << std::setprecision(2) << total_speed;
+    ss << std::fixed << std::setprecision(1) << total_speed;
     gtk_label_set_text(data->totalSpeedLabel, ss.str().c_str());
     
     // Target speed and ahead/behind
@@ -332,7 +340,7 @@ void updateDriverDisplay(AppData* data) {
             target_kph = target_kph * 0.621371;  // Convert to MPH
         }
         ss.str("");
-        ss << std::fixed << std::setprecision(2) << target_kph;
+        ss << std::fixed << std::setprecision(1) << target_kph;
         gtk_label_set_text(data->targetSpeedLabel, ss.str().c_str());
         gtk_label_set_text(data->gaugeTargetLabel, ss.str().c_str());
         
@@ -441,8 +449,8 @@ void updateDriverDisplay(AppData* data) {
         // Redraw gauge
         gtk_widget_queue_draw(data->rallyGaugeDrawingArea);
     } else {
-        gtk_label_set_text(data->targetSpeedLabel, "--.--");
-        gtk_label_set_text(data->gaugeTargetLabel, "--.--");
+        gtk_label_set_text(data->targetSpeedLabel, "--.-");
+        gtk_label_set_text(data->gaugeTargetLabel, "--.-");
         gtk_label_set_text(data->aheadBehindLabel, "--:--.--");
         gtk_label_set_text(data->speedAdjustArrowsLabel, "");
         if (data->toneGen) data->toneGen->setCadence(0, 0);
@@ -577,7 +585,7 @@ GtkWidget* createDriverWindow(AppData* data) {
     gtk_box_pack_start(GTK_BOX(currentHeaderRow), GTK_WIDGET(data->speedAdjustArrowsLabel), FALSE, FALSE, 0);
     
     // Current speed value (fixed width, right-aligned so decimal stays put)
-    data->currentSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
+    data->currentSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->currentSpeedLabel)), "speed-value-xl");
     gtk_label_set_width_chars(data->currentSpeedLabel, 6);
     gtk_label_set_xalign(data->currentSpeedLabel, 1.0);
@@ -591,7 +599,7 @@ GtkWidget* createDriverWindow(AppData* data) {
     gtk_widget_set_halign(targetHeader, GTK_ALIGN_CENTER);
     gtk_box_pack_start(GTK_BOX(leftCol), targetHeader, FALSE, FALSE, 0);
     
-    data->targetSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
+    data->targetSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->targetSpeedLabel)), "speed-value-target");
     gtk_label_set_width_chars(data->targetSpeedLabel, 6);
     gtk_label_set_xalign(data->targetSpeedLabel, 1.0);
@@ -608,7 +616,7 @@ GtkWidget* createDriverWindow(AppData* data) {
     gtk_widget_set_halign(totalHeader, GTK_ALIGN_CENTER);
     gtk_box_pack_start(GTK_BOX(rightCol), totalHeader, FALSE, FALSE, 0);
     
-    data->totalSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
+    data->totalSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalSpeedLabel)), "speed-value");
     gtk_label_set_width_chars(data->totalSpeedLabel, 6);
     gtk_label_set_xalign(data->totalSpeedLabel, 1.0);
@@ -621,7 +629,7 @@ GtkWidget* createDriverWindow(AppData* data) {
     gtk_widget_set_halign(tripHeader, GTK_ALIGN_CENTER);
     gtk_box_pack_start(GTK_BOX(rightCol), tripHeader, FALSE, FALSE, 0);
     
-    data->tripSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
+    data->tripSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripSpeedLabel)), "speed-value");
     gtk_label_set_width_chars(data->tripSpeedLabel, 6);
     gtk_label_set_xalign(data->tripSpeedLabel, 1.0);
