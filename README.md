@@ -117,6 +117,26 @@ The shortcut assumes the project is cloned to `~/HistoricRallyMeter`. If you clo
 
 Run from the project directory — the application reads and writes `rally_config.json` relative to the current working directory. On first run, default values are used and saved on exit. You can also launch from the desktop shortcut created in step 6.
 
+## Updating to the Latest Version
+
+If you already have HistoricRallyMeter installed and want to update to the latest release:
+
+```bash
+cd ~/HistoricRallyMeter
+git pull
+make clean
+make all
+```
+
+Your `rally_config.json` settings are preserved automatically — it is listed in `.gitignore` and will not be overwritten by the update.
+
+If the desktop shortcut has changed, re-copy it:
+
+```bash
+cp HistoricRallyMeter.desktop ~/Desktop/
+chmod +x ~/Desktop/HistoricRallyMeter.desktop
+```
+
 ## Build Commands
 
 | Command | Description |
