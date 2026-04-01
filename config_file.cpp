@@ -139,6 +139,10 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.driver_window_height = static_cast<int>(extractLong(line));
         } else if (line.find("\"driver_window_monitor\"") != std::string::npos) {
             state.driver_window_monitor = static_cast<int>(extractLong(line));
+        } else if (line.find("\"alarm_distance_km\"") != std::string::npos) {
+            state.alarm_distance_km = static_cast<int>(extractLong(line));
+        } else if (line.find("\"alarm_target_counts\"") != std::string::npos) {
+            state.alarm_target_counts = extractLong(line);
         }
     }
 }
@@ -189,6 +193,8 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"driver_window_width\": " << state.driver_window_width << ",\n";
     file << "  \"driver_window_height\": " << state.driver_window_height << ",\n";
     file << "  \"driver_window_monitor\": " << state.driver_window_monitor << ",\n";
+    file << "  \"alarm_distance_km\": " << state.alarm_distance_km << ",\n";
+    file << "  \"alarm_target_counts\": " << state.alarm_target_counts << ",\n";
     
     // Check if any memory slots are populated
     bool has_memory = false;

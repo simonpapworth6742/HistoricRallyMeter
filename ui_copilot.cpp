@@ -6,6 +6,7 @@
 #include "callbacks.h"
 #include "config_file.h"
 #include "calculations.h"
+#include "tone_generator.h"
 #include <sstream>
 #include <iomanip>
 #include <ctime>
@@ -24,6 +25,9 @@ static void applyCopilotCSS() {
         ".clock-label { font-size: 24px; font-weight: bold; }"
         ".total-label { font-size: 48px; font-weight: bold; font-family: monospace; }"
         ".trip-label { font-size: 48px; font-weight: bold; font-family: monospace; }"
+        ".alarm-label { font-size: 18px; }"
+        ".alarm-button { font-size: 16px; }"
+        ".alarm-countdown { font-size: 24px; font-weight: bold; color: #FF6600; font-family: monospace; }"
         ".nav-button { font-size: 18px; }"
         ".segment-label { font-size: 18px; }"
         ".segment-row entry, .segment-row button, .segment-row checkbutton { font-size: 18px; }"
@@ -43,6 +47,38 @@ void updateCopilotDisplay(AppData* data) {
     // Rally clock
     std::string rally_time = formatTime(current_time_ms);
     gtk_label_set_text(data->copilotRallyClockLabel, rally_time.c_str());
+    
+    // Alarm check runs regardless of which screen is visible
+    int64_t total_count_diff = calculateDistanceCounts(*data->state,
+        current_poll.cntr1, current_poll.cntr2,
+        data->state->total_start_cntr1, data->state->total_start_cntr2);
+    
+    if (data->state->alarm_distance_km > 0) {
+        int64_t remaining_counts = data->state->alarm_target_counts - total_count_diff;
+        long remaining_m = countsToCentimeters(remaining_counts, data->state->calibration) / 100;
+        
+        if (remaining_m <= 0) {
+            gtk_label_set_text(data->alarmCountdownLabel, "ALARM!");
+            
+            if (data->alarmSoundStartTime == 0) {
+                data->alarmSoundStartTime = current_time_ms;
+                if (data->toneGen) data->toneGen->setCadence(200, 150, 800.0);
+            } else if (current_time_ms - data->alarmSoundStartTime > 3000) {
+                if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
+                data->state->alarm_distance_km = 0;
+                data->state->alarm_target_counts = 0;
+                data->alarmSoundStartTime = 0;
+                gtk_label_set_text(data->alarmCountdownLabel, "");
+                ConfigFile::save(*data->state);
+            }
+        } else {
+            std::stringstream alarmSs;
+            alarmSs << remaining_m << " m to alarm";
+            gtk_label_set_text(data->alarmCountdownLabel, alarmSs.str().c_str());
+        }
+    } else {
+        gtk_label_set_text(data->alarmCountdownLabel, "");
+    }
     
     // Check which screen is visible
     GtkWidget* visible_child = gtk_stack_get_visible_child(data->copilotStack);
@@ -65,15 +101,14 @@ void updateCopilotDisplay(AppData* data) {
     }
     
     // Total distance
-    int64_t total_count_diff = calculateDistanceCounts(*data->state,
-        current_poll.cntr1, current_poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2);
     long total_m = countsToCentimeters(total_count_diff, data->state->calibration) / 100;
     int64_t total_duration_ms = current_time_ms - data->state->total_start_time_ms;
-    std::string total_duration = formatDuration(total_duration_ms);
+    int total_secs = static_cast<int>(total_duration_ms / 1000);
     
     std::stringstream ss;
-    ss << "Total: " << std::setw(6) << total_m << " m  from " << total_duration << " ago";
+    ss << "Total: " << total_m << " m in "
+       << std::setw(2) << std::setfill('0') << (total_secs / 60) << ":"
+       << std::setw(2) << std::setfill('0') << (total_secs % 60);
     gtk_label_set_text(data->totalDistLabel, ss.str().c_str());
     
     // Trip distance
@@ -82,10 +117,12 @@ void updateCopilotDisplay(AppData* data) {
         data->state->trip_start_cntr1, data->state->trip_start_cntr2);
     long trip_m = countsToCentimeters(trip_count_diff, data->state->calibration) / 100;
     int64_t trip_duration_ms = current_time_ms - data->state->trip_start_time_ms;
-    std::string trip_duration = formatDuration(trip_duration_ms);
+    int trip_secs = static_cast<int>(trip_duration_ms / 1000);
     
     ss.str("");
-    ss << "Trip:  " << std::setw(6) << trip_m << " m  from " << trip_duration << " ago";
+    ss << std::setfill(' ') << "Trip: " << trip_m << " m in "
+       << std::setw(2) << std::setfill('0') << (trip_secs / 60) << ":"
+       << std::setw(2) << std::setfill('0') << (trip_secs % 60);
     gtk_label_set_text(data->tripDistLabel, ss.str().c_str());
     
     // Segment info
@@ -121,33 +158,89 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_halign(GTK_WIDGET(data->segmentInfoLabel), GTK_ALIGN_START);
     
     gtk_box_pack_start(GTK_BOX(topRow), GTK_WIDGET(data->segmentInfoLabel), TRUE, TRUE, 0);
+    gtk_label_set_width_chars(data->copilotRallyClockLabel, 8);
+    gtk_label_set_xalign(data->copilotRallyClockLabel, 1.0);
     gtk_box_pack_end(GTK_BOX(topRow), GTK_WIDGET(data->copilotRallyClockLabel), FALSE, FALSE, 10);
     
-    // Row 2: Total (large font) with reset button following closely
-    GtkWidget* totalRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    gtk_box_pack_start(GTK_BOX(screen), totalRow, TRUE, FALSE, 0);
+    // Row 2: Total area - left side has Total label + reset, right side has alarm buttons in two rows
+    GtkWidget* totalArea = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
+    gtk_box_pack_start(GTK_BOX(screen), totalArea, TRUE, TRUE, 0);
     
-    data->totalDistLabel = GTK_LABEL(gtk_label_new("Total:      0 m  from 000:00:00.0 ago"));
+    // Left: Total + reset (vertically centered)
+    GtkWidget* totalLeft = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
+    gtk_widget_set_valign(totalLeft, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(totalArea), totalLeft, FALSE, FALSE, 0);
+    
+    data->totalDistLabel = GTK_LABEL(gtk_label_new("Total: 0 m in 00:00"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistLabel)), "total-label");
+    gtk_box_pack_start(GTK_BOX(totalLeft), GTK_WIDGET(data->totalDistLabel), FALSE, FALSE, 0);
     
     GtkWidget* totalResetBtn = gtk_button_new_with_label("reset");
+    gtk_style_context_add_class(gtk_widget_get_style_context(totalResetBtn), "alarm-button");
     g_signal_connect(totalResetBtn, "clicked", G_CALLBACK(on_total_reset), data);
+    gtk_box_pack_start(GTK_BOX(totalLeft), totalResetBtn, FALSE, FALSE, 5);
     
-    gtk_box_pack_start(GTK_BOX(totalRow), GTK_WIDGET(data->totalDistLabel), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(totalRow), totalResetBtn, FALSE, FALSE, 5);
+    // Right: Alarm buttons in two rows
+    GtkWidget* alarmBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+    gtk_widget_set_valign(alarmBox, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(totalArea), alarmBox, FALSE, FALSE, 15);
     
-    // Row 3: Trip (same large font) with reset button following closely
-    GtkWidget* tripRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    gtk_box_pack_start(GTK_BOX(screen), tripRow, TRUE, FALSE, 0);
+    // First row: "Alarm in" + [2]-[7]
+    GtkWidget* alarmRow1 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
+    gtk_box_pack_start(GTK_BOX(alarmBox), alarmRow1, FALSE, FALSE, 0);
     
-    data->tripDistLabel = GTK_LABEL(gtk_label_new("Trip:       0 m  from 000:00:00.0 ago"));
+    GtkWidget* alarmLabel = gtk_label_new("Alarm in");
+    gtk_style_context_add_class(gtk_widget_get_style_context(alarmLabel), "alarm-label");
+    gtk_box_pack_start(GTK_BOX(alarmRow1), alarmLabel, FALSE, FALSE, 3);
+    
+    for (int km = 2; km <= 7; km++) {
+        GtkWidget* btn = gtk_button_new_with_label(std::to_string(km).c_str());
+        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "alarm-button");
+        gtk_widget_set_size_request(btn, 36, -1);
+        g_object_set_data(G_OBJECT(btn), "km", GINT_TO_POINTER(km));
+        g_signal_connect(btn, "clicked", G_CALLBACK(on_alarm_set), data);
+        gtk_box_pack_start(GTK_BOX(alarmRow1), btn, FALSE, FALSE, 1);
+    }
+    
+    // Second row: [8]-[13] aligned under the buttons
+    GtkWidget* alarmRow2 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
+    gtk_box_pack_start(GTK_BOX(alarmBox), alarmRow2, FALSE, FALSE, 0);
+    
+    GtkWidget* alarmSpacer = gtk_label_new("");
+    gtk_style_context_add_class(gtk_widget_get_style_context(alarmSpacer), "alarm-label");
+    gtk_widget_set_size_request(alarmSpacer, 60, -1);
+    gtk_box_pack_start(GTK_BOX(alarmRow2), alarmSpacer, FALSE, FALSE, 3);
+    
+    for (int km = 8; km <= 13; km++) {
+        GtkWidget* btn = gtk_button_new_with_label(std::to_string(km).c_str());
+        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "alarm-button");
+        gtk_widget_set_size_request(btn, 36, -1);
+        g_object_set_data(G_OBJECT(btn), "km", GINT_TO_POINTER(km));
+        g_signal_connect(btn, "clicked", G_CALLBACK(on_alarm_set), data);
+        gtk_box_pack_start(GTK_BOX(alarmRow2), btn, FALSE, FALSE, 1);
+    }
+    
+    GtkWidget* alarmClearBtn = gtk_button_new_with_label("clear");
+    gtk_style_context_add_class(gtk_widget_get_style_context(alarmClearBtn), "alarm-button");
+    g_signal_connect(alarmClearBtn, "clicked", G_CALLBACK(on_alarm_clear), data);
+    gtk_box_pack_start(GTK_BOX(alarmRow2), alarmClearBtn, FALSE, FALSE, 5);
+    
+    // Row 3: Trip with reset and alarm countdown
+    GtkWidget* tripRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
+    gtk_box_pack_start(GTK_BOX(screen), tripRow, FALSE, FALSE, 0);
+    
+    data->tripDistLabel = GTK_LABEL(gtk_label_new("Trip: 0 m in 00:00"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripDistLabel)), "trip-label");
+    gtk_box_pack_start(GTK_BOX(tripRow), GTK_WIDGET(data->tripDistLabel), FALSE, FALSE, 0);
     
     GtkWidget* tripResetBtn = gtk_button_new_with_label("reset");
+    gtk_style_context_add_class(gtk_widget_get_style_context(tripResetBtn), "alarm-button");
     g_signal_connect(tripResetBtn, "clicked", G_CALLBACK(on_trip_reset), data);
-    
-    gtk_box_pack_start(GTK_BOX(tripRow), GTK_WIDGET(data->tripDistLabel), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(tripRow), tripResetBtn, FALSE, FALSE, 5);
+    
+    data->alarmCountdownLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->alarmCountdownLabel)), "alarm-countdown");
+    gtk_box_pack_start(GTK_BOX(tripRow), GTK_WIDGET(data->alarmCountdownLabel), FALSE, FALSE, 15);
     
     // Row 4: Navigation buttons spread across (with stage go)
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);

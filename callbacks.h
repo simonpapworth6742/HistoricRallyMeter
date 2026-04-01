@@ -33,6 +33,8 @@ void on_segment_auto_toggled(GtkWidget* widget, gpointer user_data);
 void on_memory_set(GtkWidget* widget, gpointer user_data);
 void on_memory_recall(GtkWidget* widget, gpointer user_data);
 void on_memory_clear(GtkWidget* widget, gpointer user_data);
+void on_alarm_set(GtkWidget* widget, gpointer user_data);
+void on_alarm_clear(GtkWidget* widget, gpointer user_data);
 GtkWidget* createNumericKeypad(AppData* data);
 
 #endif // CALLBACKS_H

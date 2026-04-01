@@ -553,6 +553,33 @@ void on_reset_calibration_1m(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data
     updateCalibrationDisplay(data);
 }
 
+void on_alarm_set(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    int km = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "km"));
+    
+    auto current_poll = data->poller->getMostRecent();
+    int64_t total_counts = calculateDistanceCounts(*data->state,
+        current_poll.cntr1, current_poll.cntr2,
+        data->state->total_start_cntr1, data->state->total_start_cntr2);
+    
+    int64_t km_in_counts = static_cast<int64_t>((static_cast<double>(km) * 1000.0 * 1e6) / data->state->calibration);
+    data->state->alarm_distance_km = km;
+    data->state->alarm_target_counts = total_counts + km_in_counts;
+    data->alarmSoundStartTime = 0;
+    
+    ConfigFile::save(*data->state);
+}
+
+void on_alarm_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->state->alarm_distance_km = 0;
+    data->state->alarm_target_counts = 0;
+    data->alarmSoundStartTime = 0;
+    if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
+    gtk_label_set_text(data->alarmCountdownLabel, "");
+    ConfigFile::save(*data->state);
+}
+
 void on_save_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     

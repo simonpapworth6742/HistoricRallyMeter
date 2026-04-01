@@ -27,6 +27,10 @@ public:
     static constexpr int MAX_MEMORY_SLOTS = 5;
     std::vector<Segment> memory_slots[5];
     
+    // Alarm: co-pilot sets distance alarm that rings a doorbell
+    int alarm_distance_km = 0;          // 0 = no alarm active
+    int64_t alarm_target_counts = 0;    // absolute count target from total_start
+    
     // Driver window position/size (remembered across sessions)
     int driver_window_x = -1;      // -1 = not set
     int driver_window_y = -1;

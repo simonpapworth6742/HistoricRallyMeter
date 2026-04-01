@@ -250,27 +250,30 @@ When [save] is pressed the new calibaration should be changed in the rally_confi
 +----------------------------------------------------------------------------------------------------------+
 | Segment xx  -  next segment in xxx,xxx m                                                   hh:mm:ss      |
 +----------------------------------------------------------------------------------------------------------+
-|                Total:  xxx,xxx m   from hhh:mm:ss.s ago   [reset]                                        |  48px font
+|    Total: xxx,xxx m in mm:ss  [reset]      Alarm in [2] [3] [4] [5] [6] [7]                              |  48px font
+|                                                      [8] [9] [10] [11] [12] [13] [clear]                 |
 +----------------------------------------------------------------------------------------------------------+
-|                Trip:   xxx,xxx m   from hhh:mm:ss.s ago   [reset]                                        |  48px font
+|    Trip: xxx,xxx m in mm:ss   [reset]      x,xxx m to alarm                                              |  48px font
 +----------------------------------------------------------------------------------------------------------+
 |   [stage go]      [segments]       [next segment]       [calibration]       [date/time]                  | 18px font
 +----------------------------------------------------------------------------------------------------------+
 ```
 
-- RallyClock (hh:mm:ss) displayed at top right
-- Total row displayed prominently with large font, distance and elapsed time, reset button after.
-- Trip row below Total with same large font, distance and elapsed time, reset button after. 
-- The Trip distance value should align with the total distace value, and the hhh:mm:ss should right align on the seconds, without large gaps and 
-    the reset button should follow closely the ago.
+- RallyClock (hh:mm:ss) displayed at top right, minimum 8 characters wide
+- Total area occupies the largest vertical space with:
+  - Left: Total distance and elapsed time (48px monospace) with reset button
+  - Right: alarm buttons in two rows — [2]-[7] on first row, [8]-[13] and [clear] on second row (16px font)
+- Trip row below Total with same large font, distance and elapsed time, reset button, and alarm countdown label
 - Segment info on top left
-- Navigation buttons spread across bottom row:
-  - stage go: resets Total (counters + start time), Trip (counters + start time), and Segment (counters + start time), and sets the drivers display guage to green - use at start of a rally stage
+- Navigation buttons spread across bottom row (18px font):
+  - stage go: resets Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green
   - segments: goes to Stage Setup
   - next segment: advances segment, resets Trip
   - calibration: goes to Calibration screen
   - date/time: goes to Date/Time Setup screen
-- reset buttons: reset respective counters and start time only
+- Reset buttons: reset respective counters and start time only
+- Distance alarm: co-pilot presses a km button (2-13) to set an alarm that many km ahead of the current total distance. The target is calculated in pulses and stored in the config file to survive Pi5 restart. When the total distance reaches the target, an 800 Hz doorbell tone sounds for 3 seconds, then the alarm auto-clears. The countdown ("x,xxx m to alarm") is shown on the Trip row. The alarm check runs regardless of which co-pilot screen is visible. Press [clear] to cancel an active alarm.
+
 
 ---
 
