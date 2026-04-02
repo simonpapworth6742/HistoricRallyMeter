@@ -553,6 +553,54 @@ void on_reset_calibration_1m(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data
     updateCalibrationDisplay(data);
 }
 
+static void updateSensorModeLabel(AppData* data) {
+    if (data->state->counters) {
+        gtk_label_set_text(data->sensorModeLabel, "Currently set to both sensors");
+    } else {
+        gtk_label_set_text(data->sensorModeLabel, "Currently set to sensor 1");
+    }
+}
+
+void on_set_sensor_1(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->state->counters = false;
+
+    for (auto& seg : data->state->segments) {
+        seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
+        seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+    }
+    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+        for (auto& seg : data->state->memory_slots[i]) {
+            seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
+            seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+        }
+    }
+
+    ConfigFile::save(*data->state);
+    updateSensorModeLabel(data);
+    updateCalibrationDisplay(data);
+}
+
+void on_set_sensor_both(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->state->counters = true;
+
+    for (auto& seg : data->state->segments) {
+        seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
+        seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+    }
+    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+        for (auto& seg : data->state->memory_slots[i]) {
+            seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
+            seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+        }
+    }
+
+    ConfigFile::save(*data->state);
+    updateSensorModeLabel(data);
+    updateCalibrationDisplay(data);
+}
+
 void on_alarm_set(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     int km = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "km"));

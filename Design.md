@@ -234,6 +234,8 @@ save button should update the stored calibration as defined above.
 +----------------------------------------------------------------------------------------------------------+
 |   Actual distance covered:  [______________] meters       [reset to 1m per pulse]                        |
 +----------------------------------------------------------------------------------------------------------+
+|   Currently set to {sensor 1 / both sensors}        [Set sensor 1]  [set both sensors and agv.]          |
++----------------------------------------------------------------------------------------------------------+
 |     [start]                         [save]                                                      [back]   |
 +----------------------------------------------------------------------------------------------------------+
 ```
@@ -242,6 +244,7 @@ Min input: 500m, Max input: 100,000m.
 new_cal = (input_meters * 1000 * 1000) / total_count_diff
 When editing any value a numeric entry keyboard should be shown on the right of the screen, the same as the stage setup screen.
 When [save] is pressed the new calibaration should be changed in the rally_config file as well as recaculating all target_speed and distance in the segments and memeory.
+The config and caculations should be updated when [Set sensor 1] or [set both sensors and agv.] is selected.
 ---
 
 **3) TwinMaster Screen (Default)**
@@ -250,13 +253,13 @@ When [save] is pressed the new calibaration should be changed in the rally_confi
 +----------------------------------------------------------------------------------------------------------+
 | Segment xx  -  next segment in xxx,xxx m                                                   hh:mm:ss      |
 +----------------------------------------------------------------------------------------------------------+
-|                                                        40px top margin                                    |
+|                                                        40px top margin                                   |
 |    Total: xxx,xxx m in mm:ss  [reset]      Alarm in [2] [3] [4] [5] [6] [7]                              |  48px font
-|                                                                                              8px gap      |
+|                                                                                              8px gap     |
 |                                                      [8] [9] [10] [11] [12] [13]                         |
-|                                                        60px gap                                           |
+|                                                        60px gap                                          |
 |    Trip:  xxx,xxx m in mm:ss  [reset]      x,xxx m to alarm    [clear]                                   |  48px font
-|                                                                                                           |
+|                                                                                                          |
 +----------------------------------------------------------------------------------------------------------+
 |   [stage go]      [segments]       [next segment]       [calibration]       [date/time]                  | 18px font
 +----------------------------------------------------------------------------------------------------------+

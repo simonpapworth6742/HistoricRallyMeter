@@ -1,5 +1,6 @@
 #include <iostream>
 #include <exception>
+#include <system_error>
 #include <cstring>
 #include <string>
 #include <cctype>
@@ -257,7 +258,9 @@ int main(int argc, char* argv[]) {
         const int CNTR_2_ADDRESS = 0x71;
         const uint8_t REGISTER = 0x07;
         
+        std::cerr << "[DEBUG] Step 1: calling gtk_init..." << std::endl;
         gtk_init(&argc, &argv);
+        std::cerr << "[DEBUG] Step 1: gtk_init OK" << std::endl;
         
         // Force dark theme for both windows
         GtkSettings* settings = gtk_settings_get_default();
@@ -265,14 +268,20 @@ int main(int argc, char* argv[]) {
                      "gtk-theme-name", "Adwaita-dark",
                      "gtk-application-prefer-dark-theme", TRUE,
                      NULL);
+        std::cerr << "[DEBUG] Step 2: GTK theme set OK" << std::endl;
         
         // Load state
         RallyState state;
         ConfigFile::load(state);
+        std::cerr << "[DEBUG] Step 3: Config loaded OK" << std::endl;
         
         // Initialize counters from current values if not set
+        std::cerr << "[DEBUG] Step 4: Opening I2C counter1 at 0x70..." << std::endl;
         I2CCounter counter1(I2C_BUS, CNTR_1_ADDRESS);
+        std::cerr << "[DEBUG] Step 4: counter1 OK" << std::endl;
+        std::cerr << "[DEBUG] Step 5: Opening I2C counter2 at 0x71..." << std::endl;
         I2CCounter counter2(I2C_BUS, CNTR_2_ADDRESS);
+        std::cerr << "[DEBUG] Step 5: counter2 OK" << std::endl;
         
         if (state.total_start_cntr1 == 0 && state.total_start_cntr2 == 0) {
             state.total_start_cntr1 = counter1.readRegister(REGISTER);
@@ -288,19 +297,29 @@ int main(int argc, char* argv[]) {
         }
         
         // Create application data
+        std::cerr << "[DEBUG] Step 6: Creating AppData..." << std::endl;
         AppData app_data;
         app_data.counter1 = &counter1;
         app_data.counter2 = &counter2;
         app_data.register_addr = REGISTER;
         app_data.state = &state;
         app_data.poller = new CounterPoller();
+        std::cerr << "[DEBUG] Step 7: CounterPoller created OK" << std::endl;
+        std::cerr << "[DEBUG] Step 8: Creating ToneGenerator..." << std::endl;
         app_data.toneGen = new ToneGenerator();
+        std::cerr << "[DEBUG] Step 8a: ToneGenerator constructed OK" << std::endl;
+        std::cerr << "[DEBUG] Step 8b: Calling toneGen->start()..." << std::endl;
         app_data.toneGen->start();
+        std::cerr << "[DEBUG] Step 8c: ToneGenerator started OK" << std::endl;
         app_data.lastUpdateCountTime_ms = getRallyTime_ms(state);
         
         // Create windows
+        std::cerr << "[DEBUG] Step 9: Creating driver window..." << std::endl;
         app_data.driverWindow = createDriverWindow(&app_data);
+        std::cerr << "[DEBUG] Step 9: Driver window created OK" << std::endl;
+        std::cerr << "[DEBUG] Step 10: Creating copilot window..." << std::endl;
         app_data.copilotWindow = createCopilotWindow(&app_data);
+        std::cerr << "[DEBUG] Step 10: Copilot window created OK" << std::endl;
         
         // Find 1280x400 displays sorted by priority (DSI first, then HDMI, lowest number first)
         GdkDisplay* display = gdk_display_get_default();
@@ -433,8 +452,11 @@ int main(int argc, char* argv[]) {
         g_signal_connect(app_data.unitToggleBtn, "clicked", G_CALLBACK(on_unit_toggle), &app_data);
 
         // Show windows
+        std::cerr << "[DEBUG] Step 11: Showing windows..." << std::endl;
         gtk_widget_show_all(app_data.driverWindow);
+        std::cerr << "[DEBUG] Step 11a: Driver window shown" << std::endl;
         gtk_widget_show_all(app_data.copilotWindow);
+        std::cerr << "[DEBUG] Step 11b: Copilot window shown" << std::endl;
 
         // Fullscreen co-pilot on its monitor AFTER showing (required for Wayland)
         if (copilot_monitor && copilot_index >= 0) {
@@ -451,9 +473,11 @@ int main(int argc, char* argv[]) {
         }
         
         // Set up timer (10ms = 100Hz)
+        std::cerr << "[DEBUG] Step 12: Setting up 10ms timer and entering gtk_main..." << std::endl;
         g_timeout_add(10, update_display, &app_data);
         
         gtk_main();
+        std::cerr << "[DEBUG] gtk_main returned normally" << std::endl;
         
         if (app_data.toneGen) {
             app_data.toneGen->stop();
@@ -461,8 +485,15 @@ int main(int argc, char* argv[]) {
         }
         delete app_data.poller;
         return 0;
+    } catch (const std::system_error& e) {
+        std::cerr << "[DEBUG CRASH] std::system_error: " << e.what() 
+                  << " (code: " << e.code() << " = " << e.code().message() << ")" << std::endl;
+        return 1;
     } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
+        std::cerr << "[DEBUG CRASH] std::exception: " << e.what() << std::endl;
+        return 1;
+    } catch (...) {
+        std::cerr << "[DEBUG CRASH] Unknown exception caught" << std::endl;
         return 1;
     }
 }

@@ -455,7 +455,24 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(inputRow), unitLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(inputRow), resetBtn, FALSE, FALSE, 20);
     
-    // Row 3: Buttons (start, save, back)
+    // Row 3: Sensor mode selection
+    GtkWidget* sensorRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(leftBox), sensorRow, FALSE, FALSE, 10);
+    
+    data->sensorModeLabel = GTK_LABEL(gtk_label_new(
+        data->state->counters ? "Currently set to both sensors" : "Currently set to sensor 1"));
+    gtk_widget_set_halign(GTK_WIDGET(data->sensorModeLabel), GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(sensorRow), GTK_WIDGET(data->sensorModeLabel), FALSE, FALSE, 0);
+    
+    GtkWidget* sensor1Btn = gtk_button_new_with_label("Set sensor 1");
+    g_signal_connect(sensor1Btn, "clicked", G_CALLBACK(on_set_sensor_1), data);
+    gtk_box_pack_start(GTK_BOX(sensorRow), sensor1Btn, FALSE, FALSE, 20);
+    
+    GtkWidget* sensorBothBtn = gtk_button_new_with_label("Set both sensors and avg.");
+    g_signal_connect(sensorBothBtn, "clicked", G_CALLBACK(on_set_sensor_both), data);
+    gtk_box_pack_start(GTK_BOX(sensorRow), sensorBothBtn, FALSE, FALSE, 5);
+    
+    // Row 4: Buttons (start, save, back)
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
     gtk_box_pack_start(GTK_BOX(leftBox), buttonBox, FALSE, FALSE, 10);
     

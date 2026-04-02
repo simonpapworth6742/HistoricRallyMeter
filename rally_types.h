@@ -92,6 +92,7 @@ struct AppData {
     GtkLabel* totalCountCalLabel;
     GtkEntry* rallyDistEntry;
     GtkWidget* calibrationKeypad;   // Numeric keypad for calibration
+    GtkLabel* sensorModeLabel;      // "Currently set to sensor 1 / both sensors"
     
     // Calibration baseline values (set when "start" is pressed)
     uint64_t cal_start_cntr1 = 0;
