@@ -72,6 +72,7 @@ struct AppData {
     GtkLabel* tripDistLabel;
     GtkLabel* segmentInfoLabel;
     GtkLabel* alarmCountdownLabel;
+    GtkWidget* alarmClearBtn;
     int64_t alarmSoundStartTime = 0;    // when doorbell started (0 = not ringing)
     
     // Stage setup screen

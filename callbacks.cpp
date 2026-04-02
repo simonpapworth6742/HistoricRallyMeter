@@ -575,7 +575,7 @@ void on_alarm_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->alarm_distance_km = 0;
     data->state->alarm_target_counts = 0;
     data->alarmSoundStartTime = 0;
-    if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
+    system("pkill -f 'aplay alarm.wav' 2>/dev/null");
     gtk_label_set_text(data->alarmCountdownLabel, "");
     ConfigFile::save(*data->state);
 }

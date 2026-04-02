@@ -1,5 +1,5 @@
 ## Environment
-This environment is a Raspberry Pi 5 with 4GB memory connected to 3 LSI ls7866c 32-bit counters (CNTR_1, CNTR_2) on I2C bus 1 at addresses 0x70 and 0x71 The 32-bit counter register 0x07 and its value is big-endian. the application should be 
+This environment is a Raspberry Pi 5 with 4GB memory connected to 2 LSI ls7866c 32-bit counters (CNTR_1, CNTR_2) on I2C bus 1 at addresses 0x70 and 0x71 The 32-bit counter register 0x07 and its value is big-endian. the application should be 
     GTK3-based GUI window application with two display windows. 
     Use high-resolution chrono timers for accurate measurement
     C++  version 20
@@ -250,21 +250,26 @@ When [save] is pressed the new calibaration should be changed in the rally_confi
 +----------------------------------------------------------------------------------------------------------+
 | Segment xx  -  next segment in xxx,xxx m                                                   hh:mm:ss      |
 +----------------------------------------------------------------------------------------------------------+
+|                                                        40px top margin                                    |
 |    Total: xxx,xxx m in mm:ss  [reset]      Alarm in [2] [3] [4] [5] [6] [7]                              |  48px font
-|                                                      [8] [9] [10] [11] [12] [13] [clear]                 |
-+----------------------------------------------------------------------------------------------------------+
-|    Trip: xxx,xxx m in mm:ss   [reset]      x,xxx m to alarm                                              |  48px font
+|                                                                                              8px gap      |
+|                                                      [8] [9] [10] [11] [12] [13]                         |
+|                                                        60px gap                                           |
+|    Trip:  xxx,xxx m in mm:ss  [reset]      x,xxx m to alarm    [clear]                                   |  48px font
+|                                                                                                           |
 +----------------------------------------------------------------------------------------------------------+
 |   [stage go]      [segments]       [next segment]       [calibration]       [date/time]                  | 18px font
 +----------------------------------------------------------------------------------------------------------+
 ```
 
-- RallyClock (hh:mm:ss) displayed at top right, minimum 8 characters wide
-- Total area occupies the largest vertical space with:
-  - Left: Total distance and elapsed time (48px monospace) with reset button
-  - Right: alarm buttons in two rows — [2]-[7] on first row, [8]-[13] and [clear] on second row (16px font)
-- Trip row below Total with same large font, distance and elapsed time, reset button, and alarm countdown label
-- Segment info on top left
+Layout:
+- 15px border around the entire screen
+- Row 1: Segment info on left, RallyClock (hh:mm:ss) on right (minimum 8 characters wide)
+- Middle section (40px below row 1): Total and Trip grouped together
+  - Total row: distance and elapsed time (48px bold monospace, 22 chars wide, left-aligned) with [reset] button (20px font), then alarm buttons to the right
+  - Alarm buttons in two rows with 8px vertical gap — "Alarm in" label (18px) + [2]-[7] on first row, [8]-[13] on second row (20px font, 48x36px buttons)
+  - Trip row (60px below Total): distance and elapsed time (48px bold monospace, 22 chars wide, left-aligned) with [reset] button, alarm countdown label (24px bold orange monospace), and [clear] button
+  - "Trip:  " has extra space to vertically align distance values with "Total: "
 - Navigation buttons spread across bottom row (18px font):
   - stage go: resets Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green
   - segments: goes to Stage Setup
@@ -272,7 +277,9 @@ When [save] is pressed the new calibaration should be changed in the rally_confi
   - calibration: goes to Calibration screen
   - date/time: goes to Date/Time Setup screen
 - Reset buttons: reset respective counters and start time only
-- Distance alarm: co-pilot presses a km button (2-13) to set an alarm that many km ahead of the current total distance. The target is calculated in pulses and stored in the config file to survive Pi5 restart. When the total distance reaches the target, an 800 Hz doorbell tone sounds for 3 seconds, then the alarm auto-clears. The countdown ("x,xxx m to alarm") is shown on the Trip row. The alarm check runs regardless of which co-pilot screen is visible. Press [clear] to cancel an active alarm.
+- [clear] button is only visible when an alarm is active
+- Distance alarm: co-pilot presses a km button (2-13) to set an alarm that many km ahead of the current total distance. The target is calculated in pulses and stored in the config file to survive Pi5 restart. When the total distance reaches the target, alarm.wav is played, then the alarm auto-clears after 5 seconds. The countdown ("x,xxx m to alarm") is shown on the Trip row. The alarm check runs regardless of which co-pilot screen is visible. Press [clear] to cancel an active alarm.
+
 
 
 ---
