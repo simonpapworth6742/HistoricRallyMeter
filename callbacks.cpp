@@ -179,26 +179,25 @@ GtkWidget* createNumericKeypad(AppData* data) {
     gtk_grid_set_row_spacing(GTK_GRID(keypad), 5);
     gtk_grid_set_column_spacing(GTK_GRID(keypad), 5);
     
-    const char* digits[] = {"7", "8", "9", "4", "5", "6", "1", "2", "3", ".", "0", "C"};
+    const char* digits[] = {"7", "8", "9", "4", "5", "6", "1", "2", "3", ";", "0", "."};
     
     for (int i = 0; i < 12; i++) {
         GtkWidget* btn = gtk_button_new_with_label(digits[i]);
         gtk_widget_set_size_request(btn, 72, 58);
-        
-        if (strcmp(digits[i], "C") == 0) {
-            g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_clear), data);
-        } else {
-            g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
-        }
-        
+        g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
         gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
     }
     
-    // Backspace button
+    // Row 5: Clear and Backspace
+    GtkWidget* clearBtn = gtk_button_new_with_label("C");
+    gtk_widget_set_size_request(clearBtn, 72, 58);
+    g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_keypad_clear), data);
+    gtk_grid_attach(GTK_GRID(keypad), clearBtn, 0, 4, 1, 1);
+    
     GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
-    gtk_widget_set_size_request(bkspBtn, 230, 58);
+    gtk_widget_set_size_request(bkspBtn, 154, 58);
     g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
-    gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 0, 4, 3, 1);
+    gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
     
     return keypad;
 }
@@ -321,6 +320,16 @@ void refreshSegmentList(AppData* data) {
         g_object_set_data(G_OBJECT(autoCheck), "app_data", data);
         g_signal_connect(autoCheck, "toggled", G_CALLBACK(on_segment_auto_toggled), GINT_TO_POINTER(i));
         
+        // Time label (display only: mm:ss to cover distance at speed)
+        int time_secs = (seg.distance_m > 0 && seg.target_speed_kph > 0)
+            ? static_cast<int>(seg.distance_m / (seg.target_speed_kph * 1000.0 / 3600.0))
+            : 0;
+        ss.str("");
+        ss << std::setw(2) << std::setfill('0') << (time_secs / 60)
+           << ":" << std::setw(2) << std::setfill('0') << (time_secs % 60);
+        GtkWidget* timeLabel = gtk_label_new(ss.str().c_str());
+        gtk_style_context_add_class(gtk_widget_get_style_context(timeLabel), "segment-label");
+        
         // Delete button
         GtkWidget* deleteBtn = gtk_button_new_with_label("del");
         gtk_widget_set_size_request(deleteBtn, -1, 36);
@@ -330,6 +339,7 @@ void refreshSegmentList(AppData* data) {
         gtk_box_pack_start(GTK_BOX(box), speedEntry, FALSE, FALSE, 5);
         gtk_box_pack_start(GTK_BOX(box), distEntry, FALSE, FALSE, 5);
         gtk_box_pack_start(GTK_BOX(box), autoCheck, FALSE, FALSE, 15);
+        gtk_box_pack_start(GTK_BOX(box), timeLabel, FALSE, FALSE, 5);
         gtk_box_pack_start(GTK_BOX(box), deleteBtn, FALSE, FALSE, 5);
         
         gtk_list_box_insert(data->segmentListBox, row, -1);
@@ -417,29 +427,41 @@ void on_add_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     
     if (speed_str && dist_str && strlen(speed_str) > 0 && strlen(dist_str) > 0) {
         double target_kph = std::stod(speed_str);
-        double distance_m = std::stod(dist_str);
-        
-        // Convert to counts (high precision)
         double target_counts_per_hour = kphToCountsPerHour(target_kph, data->state->calibration);
-        double distance_counts = (distance_m * 1e6) / data->state->calibration;  // meters to counts
         
-        Segment seg;
-        seg.target_speed_kph = target_kph;
-        seg.target_speed_counts_per_hour = target_counts_per_hour;
-        seg.distance_m = distance_m;
-        seg.distance_counts = distance_counts;
-        seg.autoNext = autoNext;
+        // Split distance by comma to allow multiple segments at the same speed
+        std::string dist_input(dist_str);
+        std::stringstream dist_stream(dist_input);
+        std::string token;
+        bool added = false;
         
-        data->state->segments.push_back(seg);
-        ConfigFile::save(*data->state);
+        while (std::getline(dist_stream, token, ';')) {
+            if (token.empty()) continue;
+            double distance_m = std::stod(token);
+            if (distance_m <= 0) continue;
+            
+            double distance_counts = (distance_m * 1e6) / data->state->calibration;
+            
+            Segment seg;
+            seg.target_speed_kph = target_kph;
+            seg.target_speed_counts_per_hour = target_counts_per_hour;
+            seg.distance_m = distance_m;
+            seg.distance_counts = distance_counts;
+            seg.autoNext = autoNext;
+            
+            data->state->segments.push_back(seg);
+            added = true;
+        }
         
-        // Clear entries
-        gtk_entry_set_text(data->targetSpeedEntry, "");
-        gtk_entry_set_text(data->distanceEntry, "");
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->autoNextCheck), FALSE);
-        
-        // Refresh list
-        refreshSegmentList(data);
+        if (added) {
+            ConfigFile::save(*data->state);
+            
+            gtk_entry_set_text(data->targetSpeedEntry, "");
+            gtk_entry_set_text(data->distanceEntry, "");
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->autoNextCheck), FALSE);
+            
+            refreshSegmentList(data);
+        }
     }
 }
 

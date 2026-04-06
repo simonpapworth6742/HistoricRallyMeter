@@ -198,25 +198,28 @@ Allows target speed, distance and AutoNext for multiple segments of a rally stag
 +----------------------------------------------------------------------------------------------------------+
 |                                        STAGE SETUP                                                       |
 +----------------------------------------------------------------------------------------------------------+
-|  Speed(KPH)      Distance(m)      AutoNext            Mem Set   Recall                                   |
-|    xx.xx          xxx,xxx           [Y] [del]             [1]    [1]                                     |
-|    xx.xx          xxx,xxx           [Y] [del]             [2]    [2]                                     |
-|    xx.xx          xxx,xxx           [Y] [del]             [3]    [3]                                     |
-|    xx.xx          xxx,xxx           [Y] [del]             [4]    [4]                                     |
-|    xx.xx          xxx,xxx           [Y] [del]             [5]    [5]                                     |
-|    xx.xx          xxx,xxx           [Y] [del]                                                            |
-|    xx.xx          xxx,xxx           [Y] [del]         [clear memory]                                     |
+|  Speed(KPH)      Distance(m)      Auto       Time                 Mem Set   Recall                       |
+|    xx.xx          xxx,xxx           [Y]     mm:ss [del]             [1]    [1]                           |
+|    xx.xx          xxx,xxx           [Y]     mm:ss [del]             [2]    [2]                           |
+|    xx.xx          xxx,xxx           [Y]     mm:ss [del]             [3]    [3]                           |
+|    xx.xx          xxx,xxx           [Y]     mm:ss [del]             [4]    [4]                           |
+|    xx.xx          xxx,xxx           [Y]     mm:ss [del]             [5]    [5]                           |
+|    xx.xx          xxx,xxx           [Y]     mm:ss [del]                                                  |
+|    xx.xx          xxx,xxx           [Y]     mm:ss [del]            [clear memory]                        |
 +----------------------------------------------------------------------------------------------------------+
-|  New segment:  Speed [______] KPH    Distance [________] m    Auto [_]    [add]               [back]     |
+|  New segment:  Speed [______] KPH    Distance [________________] m    Auto [_]    [add]       [back]     |
 +----------------------------------------------------------------------------------------------------------+
 ```
 The exisiting segments should have editable values and scroll if there are more than 5 rows, The font should be 18px.
-When editing any value a numeric entry keyboard should be shown on the right of the screen, buttons 72x58 pixels.
-The New line at the bottom should have fonts 18px, entry boxes 130x40 pixels and buttons 80x40 pixels, there should be 100px paddingbefore the back button.
+When editing any value a numeric entry keyboard should be shown on the right of the screen with a ";" button, buttons 72x58 pixels.
+The New line at the bottom should have fonts 18px, speed entry boxe 130x40 pixels and distance 300x40 pixels, and buttons 80x40 pixels.
+The distance allows mutiple values seperated by ";" to be entered, each semi-colon seperated value creates a segment at the speed defined.
+
 
 The target speed is in KPH and the distance is in meters.
 Counts per hour = (input_kph * 1000 * 3600) / (cal / 1000)
-Changes in calibration have no effect on stored segment values.
+Changes in calibration have no effect on stored segment distance and speed values, but do update the stored counts for distance and speed.
+Time is display only and caculated as the mm:ss required to cover the distance at the speed for that segment.
 
 The memory storage allows for upto five stage setups to be remembered and then recalled on request, pressing the set button for the memeory number should copy the current segment setup into that memory position in the configuration file. pressing recall and a memory number should copy that memory position from the config file into the current setup and configuration, updating the display. Memory clear, after a conformation dialog box, should remove the memory sections from the configuration file.Buttons should be 66x43 pixels.
 

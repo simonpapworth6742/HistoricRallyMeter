@@ -326,14 +326,17 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     GtkWidget* header1 = gtk_label_new("Speed (KPH)");
     GtkWidget* header2 = gtk_label_new("Distance (m)");
     GtkWidget* header3 = gtk_label_new("Auto");
+    GtkWidget* header4 = gtk_label_new("Time");
     
     gtk_style_context_add_class(gtk_widget_get_style_context(header1), "segment-label");
     gtk_style_context_add_class(gtk_widget_get_style_context(header2), "segment-label");
     gtk_style_context_add_class(gtk_widget_get_style_context(header3), "segment-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(header4), "segment-label");
     
     gtk_box_pack_start(GTK_BOX(headerBox), header1, FALSE, FALSE, 5);
     gtk_box_pack_start(GTK_BOX(headerBox), header2, FALSE, FALSE, 80);
     gtk_box_pack_start(GTK_BOX(headerBox), header3, FALSE, FALSE, 5);
+    gtk_box_pack_start(GTK_BOX(headerBox), header4, FALSE, FALSE, 5);
     
     // Scrollable list for segments
     GtkWidget* scrolled = gtk_scrolled_window_new(NULL, NULL);
@@ -394,8 +397,8 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     g_signal_connect(data->targetSpeedEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     
     data->distanceEntry = GTK_ENTRY(gtk_entry_new());
-    gtk_entry_set_placeholder_text(data->distanceEntry, "meters");
-    gtk_widget_set_size_request(GTK_WIDGET(data->distanceEntry), 100, 40);
+    gtk_entry_set_placeholder_text(data->distanceEntry, "meters (;  separated)");
+    gtk_widget_set_size_request(GTK_WIDGET(data->distanceEntry), 300, 40);
     g_signal_connect(data->distanceEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     
     data->autoNextCheck = GTK_CHECK_BUTTON(gtk_check_button_new_with_label("Auto"));
