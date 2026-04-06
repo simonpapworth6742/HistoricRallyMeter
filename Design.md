@@ -210,7 +210,7 @@ Allows target speed, distance and AutoNext for multiple segments of a rally stag
 |  New segment:  Speed [______] KPH    Distance [________________] m    Auto [_]    [add]       [back]     |
 +----------------------------------------------------------------------------------------------------------+
 ```
-The exisiting segments should have editable values and scroll if there are more than 5 rows, The font should be 18px.
+The exisiting segments should have editable values and scroll if there are more than 5 rows, The font should be 18px. The scrollbar should be touch-friendly: slider 20px wide, trough 24px wide.
 When editing any value a numeric entry keyboard should be shown on the right of the screen with a ";" button, buttons 72x58 pixels.
 The New line at the bottom should have fonts 18px, speed entry boxe 130x40 pixels and distance 300x40 pixels, and buttons 80x40 pixels.
 The distance allows mutiple values seperated by ";" to be entered, each semi-colon seperated value creates a segment at the speed defined.
