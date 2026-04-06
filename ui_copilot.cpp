@@ -47,7 +47,10 @@ static void applyCopilotCSS() {
         ".nav-button { font-size: 18px; }"
         ".segment-label { font-size: 18px; }"
         ".segment-row entry, .segment-row button, .segment-row checkbutton { font-size: 18px; }"
-        ".new-segment-row label, .new-segment-row entry, .new-segment-row button, .new-segment-row checkbutton { font-size: 18px; }",
+        ".new-segment-row label, .new-segment-row entry, .new-segment-row button, .new-segment-row checkbutton { font-size: 18px; }"
+        "scrollbar slider { min-width: 20px; min-height: 20px; }"
+        "scrollbar.vertical slider { min-width: 20px; }"
+        "scrollbar trough { min-width: 24px; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
