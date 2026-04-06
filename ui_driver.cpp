@@ -4,6 +4,7 @@
 #include "rally_state.h"
 #include "counter_poller.h"
 #include "tone_generator.h"
+#include "callbacks.h"
 #include <iomanip>
 #include <sstream>
 #include <cmath>
@@ -664,6 +665,12 @@ GtkWidget* createDriverWindow(AppData* data) {
     gtk_widget_set_vexpand(data->rallyGaugeDrawingArea, TRUE);
     g_signal_connect(data->rallyGaugeDrawingArea, "draw", G_CALLBACK(on_gauge_draw), data);
     gtk_container_add(GTK_CONTAINER(gaugeOverlay), data->rallyGaugeDrawingArea);
+    
+    GtkWidget* exitBtn = gtk_button_new_with_label("exit");
+    gtk_widget_set_halign(exitBtn, GTK_ALIGN_START);
+    gtk_widget_set_valign(exitBtn, GTK_ALIGN_START);
+    g_signal_connect(exitBtn, "clicked", G_CALLBACK(on_exit_app), data);
+    gtk_overlay_add_overlay(GTK_OVERLAY(gaugeOverlay), exitBtn);
     
     data->unitToggleBtn = GTK_BUTTON(gtk_button_new_with_label(data->state->units ? "MPH" : "KPH"));
     gtk_widget_set_halign(GTK_WIDGET(data->unitToggleBtn), GTK_ALIGN_END);

@@ -628,6 +628,12 @@ void on_alarm_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     ConfigFile::save(*data->state);
 }
 
+void on_exit_app(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    ConfigFile::save(*data->state);
+    gtk_main_quit();
+}
+
 void on_save_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     

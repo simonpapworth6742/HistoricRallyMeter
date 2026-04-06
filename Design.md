@@ -153,7 +153,7 @@ look at the example guage in gaugepilot-rallymaster-display.png
 
 ```
 +----------------------------------------------------------------------------------------------------------+
-|   Current↑↑↑↓↓↓         Total                       |                 RALLY GAUGE                 [KPH]  |
+|   Current↑↑↑↓↓↓         Total                       | [exit]               RALLY GAUGE            [KPH]  |
 |    xx.x                 xx.x                        |            -10s ←───┬───→ +10s                     |
 |                                                     |                 ╱   │   ╲                          |
 |   Target                Trip                        |               ╱     |    ╲                         |
@@ -173,6 +173,7 @@ Layout notes for 1280x400 (wide, shallow display):
 - Total and Trip should vertially align
 - The speed up /slow down arrows should not effect the Total label position and should not effect the Current label position
 - The number of digits displayed for any of the values should not effect their position the decimal point should remain the in same place.
+- The [Exit] button closes the application
 
 **_Co-Pilots display window (1280 x 400) - dark theme only_**
 
@@ -249,31 +250,39 @@ The config and caculations should be updated when [Set sensor 1] or [set both se
 
 **3) TwinMaster Screen (Default)**
 
+Two-column layout with bottom navigation row:
+
 ```
-+----------------------------------------------------------------------------------------------------------+
-| Segment xx  -  next segment in xxx,xxx m                                                   hh:mm:ss      |
-+----------------------------------------------------------------------------------------------------------+
-|                                                        40px top margin                                   |
-|    Total: xxx,xxx m in mm:ss  [reset]      Alarm in [2] [3] [4] [5] [6] [7]                              |  48px font
-|                                                                                              8px gap     |
-|                                                      [8] [9] [10] [11] [12] [13]                         |
-|                                                        60px gap                                          |
-|    Trip:  xxx,xxx m in mm:ss  [reset]      x,xxx m to alarm    [clear]                                   |  48px font
-|                                                                                                          |
-+----------------------------------------------------------------------------------------------------------+
-|   [stage go]      [segments]       [next segment]       [calibration]       [date/time]                  | 18px font
++-------------------------------------------------------------------+--------------------------------------+
+| LEFT PANEL (70%)                                                  | RIGHT PANEL (30%)                    |
+|  Segment xx  -  next segment in xxx,xxx m                         |                          hh:mm:ss   |
+|                                               30px top margin     |                                      |
+|  Total: xxx,xxx m in mmm:ss  [reset]                              |  Alarm in [2] [3] [4]               |
+|                                               40px gap            |           [5] [6] [7]               |
+|  Trip:  xxx,xxx m in mmm:ss  [reset]                              |           [8] [9] [10]              |
+|                                                                   |          [11] [12] [13]             |
+|                                                                   |  x,xxx m to alarm  [clear]          |
++-------------------------------------------------------------------+--------------------------------------+
+|   [stage go]      [segments]       [next segment]       [calibration]       [date/time]                  |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
 Layout:
+- The number of digits displayed for any of the values should not effect their position the decimal point should remain the in same place.
+- Distances formatted with comma separators and fixed minimum width of 7 characters (e.g., "      0", "  1,234", "999,999")
+- Time formatted as space-padded minutes (3 chars) + ":" + zero-padded seconds (2 chars), e.g., "  0:00", " 12:34", "120:00"
 - 15px border around the entire screen
-- Row 1: Segment info on left, RallyClock (hh:mm:ss) on right (minimum 8 characters wide)
-- Middle section (40px below row 1): Total and Trip grouped together
-  - Total row: distance and elapsed time (48px bold monospace, 22 chars wide, left-aligned) with [reset] button (20px font), then alarm buttons to the right
-  - Alarm buttons in two rows with 8px vertical gap — "Alarm in" label (18px) + [2]-[7] on first row, [8]-[13] on second row (20px font, 48x36px buttons)
-  - Trip row (60px below Total): distance and elapsed time (48px bold monospace, 22 chars wide, left-aligned) with [reset] button, alarm countdown label (24px bold orange monospace), and [clear] button
+- Two-column layout: left panel 70% width (~870px), right panel 30% width (~360px)
+- Left panel:
+  - Segment info at top (18px)
+  - Total row (30px below segment): distance and elapsed time (48px bold monospace) with [reset] button (20px font)
+  - Trip row (40px below Total): distance and elapsed time (48px bold monospace) with [reset] button
   - "Trip:  " has extra space to vertically align distance values with "Total: "
-- Navigation buttons spread across bottom row (18px font):
+- Right panel:
+  - Rally clock (hh:mm:ss) at top, right-aligned (24px bold, minimum 8 chars wide)
+  - Alarm buttons in four rows with 4px vertical gap — "Alarm in" label (18px) + [2]-[4] on first row, [5]-[7] on second row, [8]-[10] on third row, [11]-[13] on fourth row (20px font, 62x47px buttons)
+  - Alarm countdown ("x,xxx m to alarm") and [clear] button below alarm buttons
+- Navigation buttons spread across full-width bottom row (18px font, 43px tall):
   - stage go: resets Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green
   - segments: goes to Stage Setup
   - next segment: advances segment, resets Trip
@@ -281,7 +290,7 @@ Layout:
   - date/time: goes to Date/Time Setup screen
 - Reset buttons: reset respective counters and start time only
 - [clear] button is only visible when an alarm is active
-- Distance alarm: co-pilot presses a km button (2-13) to set an alarm that many km ahead of the current total distance. The target is calculated in pulses and stored in the config file to survive Pi5 restart. When the total distance reaches the target, alarm.wav is played, then the alarm auto-clears after 5 seconds. The countdown ("x,xxx m to alarm") is shown on the Trip row. The alarm check runs regardless of which co-pilot screen is visible. Press [clear] to cancel an active alarm.
+- Distance alarm: co-pilot presses a km button (2-13) to set an alarm that many km ahead of the current total distance. The target is calculated in pulses and stored in the config file to survive Pi5 restart. When the total distance reaches the target, alarm.wav is played, then the alarm auto-clears after 5 seconds. The countdown ("x,xxx m to alarm") is shown in the right panel. The alarm check runs regardless of which co-pilot screen is visible. Press [clear] to cancel an active alarm.
 
 
 

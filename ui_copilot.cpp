@@ -12,6 +12,22 @@
 #include <ctime>
 #include <string>
 
+static std::string formatDistance(long meters, int width = 7) {
+    bool negative = meters < 0;
+    std::string num = std::to_string(negative ? -meters : meters);
+    std::string result;
+    int count = 0;
+    for (int i = static_cast<int>(num.size()) - 1; i >= 0; i--) {
+        if (count > 0 && count % 3 == 0) result = ',' + result;
+        result = num[i] + result;
+        count++;
+    }
+    if (negative) result = '-' + result;
+    while (static_cast<int>(result.size()) < width)
+        result = ' ' + result;
+    return result;
+}
+
 // Apply CSS styling
 static void applyCopilotCSS() {
     GtkCssProvider* provider = gtk_css_provider_new();
@@ -75,7 +91,7 @@ void updateCopilotDisplay(AppData* data) {
             }
         } else {
             std::stringstream alarmSs;
-            alarmSs << remaining_m << " m to alarm";
+            alarmSs << formatDistance(remaining_m, 6) << " m to alarm";
             gtk_label_set_text(data->alarmCountdownLabel, alarmSs.str().c_str());
         }
     } else {
@@ -109,9 +125,9 @@ void updateCopilotDisplay(AppData* data) {
     int total_secs = static_cast<int>(total_duration_ms / 1000);
     
     std::stringstream ss;
-    ss << "Total: " << total_m << " m in "
-       << std::setw(2) << std::setfill('0') << (total_secs / 60) << ":"
-       << std::setw(2) << std::setfill('0') << (total_secs % 60);
+    ss << "Total: " << formatDistance(total_m, 7) << " m in "
+       << std::setw(3) << std::setfill(' ') << (total_secs / 60)
+       << ":" << std::setw(2) << std::setfill('0') << (total_secs % 60);
     gtk_label_set_text(data->totalDistLabel, ss.str().c_str());
     
     // Trip distance
@@ -123,9 +139,9 @@ void updateCopilotDisplay(AppData* data) {
     int trip_secs = static_cast<int>(trip_duration_ms / 1000);
     
     ss.str("");
-    ss << std::setfill(' ') << "Trip:  " << trip_m << " m in "
-       << std::setw(2) << std::setfill('0') << (trip_secs / 60) << ":"
-       << std::setw(2) << std::setfill('0') << (trip_secs % 60);
+    ss << "Trip:  " << formatDistance(trip_m, 7) << " m in "
+       << std::setw(3) << std::setfill(' ') << (trip_secs / 60)
+       << ":" << std::setw(2) << std::setfill('0') << (trip_secs % 60);
     gtk_label_set_text(data->tripDistLabel, ss.str().c_str());
     
     // Segment info
@@ -140,123 +156,125 @@ void updateCopilotDisplay(AppData* data) {
         
         ss.str("");
         ss << "Segment " << (data->state->segment_current_number + 1) 
-           << "  -  next segment in " << remaining_m << " m";
+           << "  -  next segment in " << formatDistance(remaining_m, 7) << " m";
         gtk_label_set_text(data->segmentInfoLabel, ss.str().c_str());
     } else {
         gtk_label_set_text(data->segmentInfoLabel, "No active segment");
     }
 }
 
-// Create TwinMaster screen - horizontal layout for 1280x400
+// Create TwinMaster screen - two-column layout for 1280x400
 GtkWidget* createTwinMasterScreen(AppData* data) {
     GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_container_set_border_width(GTK_CONTAINER(screen), 15);
     
-    // Row 1: Segment info on left, rally clock on right
-    GtkWidget* topRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(screen), topRow, FALSE, FALSE, 0);
+    // Main area: two columns (left 70%, right 30%)
+    GtkWidget* mainArea = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(screen), mainArea, TRUE, TRUE, 0);
     
+    // ── LEFT PANEL (70%): segment info, total, trip ──
+    GtkWidget* leftPanel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_widget_set_size_request(leftPanel, 870, -1);
+    gtk_box_pack_start(GTK_BOX(mainArea), leftPanel, TRUE, TRUE, 0);
+    
+    // Segment info row
     data->segmentInfoLabel = GTK_LABEL(gtk_label_new("No active segment"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->segmentInfoLabel)), "segment-label");
     gtk_widget_set_halign(GTK_WIDGET(data->segmentInfoLabel), GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(leftPanel), GTK_WIDGET(data->segmentInfoLabel), FALSE, FALSE, 0);
     
-    gtk_box_pack_start(GTK_BOX(topRow), GTK_WIDGET(data->segmentInfoLabel), TRUE, TRUE, 0);
-    gtk_label_set_width_chars(data->copilotRallyClockLabel, 8);
-    gtk_label_set_xalign(data->copilotRallyClockLabel, 1.0);
-    gtk_box_pack_end(GTK_BOX(topRow), GTK_WIDGET(data->copilotRallyClockLabel), FALSE, FALSE, 10);
+    // Total row: distance + reset
+    GtkWidget* totalRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_margin_top(totalRow, 30);
+    gtk_widget_set_valign(totalRow, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(leftPanel), totalRow, FALSE, FALSE, 0);
     
-    // Middle section: Total + Trip grouped together, positioned in upper portion
-    GtkWidget* middleSection = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_widget_set_margin_top(middleSection, 40);
-    gtk_box_pack_start(GTK_BOX(screen), middleSection, FALSE, FALSE, 0);
-    
-    // Row 2: Total area - left side has Total label + reset, right side has alarm buttons in two rows
-    GtkWidget* totalArea = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
-    gtk_box_pack_start(GTK_BOX(middleSection), totalArea, FALSE, FALSE, 0);
-    
-    // Left: Total + reset (vertically centered)
-    GtkWidget* totalLeft = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
-    gtk_widget_set_valign(totalLeft, GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(totalArea), totalLeft, FALSE, FALSE, 0);
-    
-    data->totalDistLabel = GTK_LABEL(gtk_label_new("Total: 0 m in 00:00"));
+    data->totalDistLabel = GTK_LABEL(gtk_label_new("Total:       0 m in   0:00"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistLabel)), "total-label");
-    gtk_label_set_width_chars(data->totalDistLabel, 22);
     gtk_label_set_xalign(data->totalDistLabel, 0.0);
-    gtk_box_pack_start(GTK_BOX(totalLeft), GTK_WIDGET(data->totalDistLabel), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(totalRow), GTK_WIDGET(data->totalDistLabel), FALSE, FALSE, 0);
     
     GtkWidget* totalResetBtn = gtk_button_new_with_label("reset");
     gtk_style_context_add_class(gtk_widget_get_style_context(totalResetBtn), "alarm-button");
     g_signal_connect(totalResetBtn, "clicked", G_CALLBACK(on_total_reset), data);
-    gtk_box_pack_start(GTK_BOX(totalLeft), totalResetBtn, FALSE, FALSE, 5);
+    gtk_box_pack_start(GTK_BOX(totalRow), totalResetBtn, FALSE, FALSE, 10);
     
-    // Right: Alarm buttons in two rows
-    GtkWidget* alarmBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_widget_set_valign(alarmBox, GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(totalArea), alarmBox, FALSE, FALSE, 15);
+    // Trip row: distance + reset
+    GtkWidget* tripRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_margin_top(tripRow, 40);
+    gtk_widget_set_valign(tripRow, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(leftPanel), tripRow, FALSE, FALSE, 0);
     
-    // First row: "Alarm in" + [2]-[7]
-    GtkWidget* alarmRow1 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
-    gtk_box_pack_start(GTK_BOX(alarmBox), alarmRow1, FALSE, FALSE, 0);
-    
-    GtkWidget* alarmLabel = gtk_label_new("Alarm in");
-    gtk_style_context_add_class(gtk_widget_get_style_context(alarmLabel), "alarm-label");
-    gtk_box_pack_start(GTK_BOX(alarmRow1), alarmLabel, FALSE, FALSE, 3);
-    
-    for (int km = 2; km <= 7; km++) {
-        GtkWidget* btn = gtk_button_new_with_label(std::to_string(km).c_str());
-        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "alarm-button");
-        gtk_widget_set_size_request(btn, 48, 36);
-        g_object_set_data(G_OBJECT(btn), "km", GINT_TO_POINTER(km));
-        g_signal_connect(btn, "clicked", G_CALLBACK(on_alarm_set), data);
-        gtk_box_pack_start(GTK_BOX(alarmRow1), btn, FALSE, FALSE, 2);
-    }
-    
-    // Second row: [8]-[13] aligned under the buttons
-    GtkWidget* alarmRow2 = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
-    gtk_box_pack_start(GTK_BOX(alarmBox), alarmRow2, FALSE, FALSE, 0);
-    
-    GtkWidget* alarmSpacer = gtk_label_new("");
-    gtk_style_context_add_class(gtk_widget_get_style_context(alarmSpacer), "alarm-label");
-    gtk_widget_set_size_request(alarmSpacer, 60, -1);
-    gtk_box_pack_start(GTK_BOX(alarmRow2), alarmSpacer, FALSE, FALSE, 3);
-    
-    for (int km = 8; km <= 13; km++) {
-        GtkWidget* btn = gtk_button_new_with_label(std::to_string(km).c_str());
-        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "alarm-button");
-        gtk_widget_set_size_request(btn, 48, 36);
-        g_object_set_data(G_OBJECT(btn), "km", GINT_TO_POINTER(km));
-        g_signal_connect(btn, "clicked", G_CALLBACK(on_alarm_set), data);
-        gtk_box_pack_start(GTK_BOX(alarmRow2), btn, FALSE, FALSE, 2);
-    }
-    
-    // Row 3: Trip with reset, alarm countdown, and clear button
-    GtkWidget* tripRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
-    gtk_widget_set_margin_top(tripRow, 60);
-    gtk_box_pack_start(GTK_BOX(middleSection), tripRow, FALSE, FALSE, 0);
-    
-    data->tripDistLabel = GTK_LABEL(gtk_label_new("Trip:  0 m in 00:00"));
+    data->tripDistLabel = GTK_LABEL(gtk_label_new("Trip:        0 m in   0:00"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripDistLabel)), "trip-label");
-    gtk_label_set_width_chars(data->tripDistLabel, 22);
     gtk_label_set_xalign(data->tripDistLabel, 0.0);
     gtk_box_pack_start(GTK_BOX(tripRow), GTK_WIDGET(data->tripDistLabel), FALSE, FALSE, 0);
     
     GtkWidget* tripResetBtn = gtk_button_new_with_label("reset");
     gtk_style_context_add_class(gtk_widget_get_style_context(tripResetBtn), "alarm-button");
     g_signal_connect(tripResetBtn, "clicked", G_CALLBACK(on_trip_reset), data);
-    gtk_box_pack_start(GTK_BOX(tripRow), tripResetBtn, FALSE, FALSE, 5);
+    gtk_box_pack_start(GTK_BOX(tripRow), tripResetBtn, FALSE, FALSE, 10);
+    
+    // ── RIGHT PANEL (30%): clock, alarm buttons, countdown ──
+    GtkWidget* rightPanel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_set_size_request(rightPanel, 360, -1);
+    gtk_box_pack_start(GTK_BOX(mainArea), rightPanel, FALSE, FALSE, 0);
+    
+    // Rally clock at top-right
+    gtk_label_set_width_chars(data->copilotRallyClockLabel, 8);
+    gtk_label_set_xalign(data->copilotRallyClockLabel, 1.0);
+    gtk_box_pack_start(GTK_BOX(rightPanel), GTK_WIDGET(data->copilotRallyClockLabel), FALSE, FALSE, 0);
+    
+    // Alarm buttons: 3 rows of 4
+    GtkWidget* alarmBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_widget_set_margin_top(alarmBox, 10);
+    gtk_box_pack_start(GTK_BOX(rightPanel), alarmBox, FALSE, FALSE, 0);
+    
+    // Alarm buttons: 4 rows of 3, 30% larger (62x47)
+    auto addAlarmRow = [&](GtkWidget* parent, int from, int to, bool hasLabel) {
+        GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
+        gtk_box_pack_start(GTK_BOX(parent), row, FALSE, FALSE, 0);
+        if (hasLabel) {
+            GtkWidget* lbl = gtk_label_new("Alarm in");
+            gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "alarm-label");
+            gtk_box_pack_start(GTK_BOX(row), lbl, FALSE, FALSE, 3);
+        } else {
+            GtkWidget* spacer = gtk_label_new("");
+            gtk_style_context_add_class(gtk_widget_get_style_context(spacer), "alarm-label");
+            gtk_widget_set_size_request(spacer, 70, -1);
+            gtk_box_pack_start(GTK_BOX(row), spacer, FALSE, FALSE, 3);
+        }
+        for (int km = from; km <= to; km++) {
+            GtkWidget* btn = gtk_button_new_with_label(std::to_string(km).c_str());
+            gtk_style_context_add_class(gtk_widget_get_style_context(btn), "alarm-button");
+            gtk_widget_set_size_request(btn, 62, 47);
+            g_object_set_data(G_OBJECT(btn), "km", GINT_TO_POINTER(km));
+            g_signal_connect(btn, "clicked", G_CALLBACK(on_alarm_set), data);
+            gtk_box_pack_start(GTK_BOX(row), btn, FALSE, FALSE, 2);
+        }
+    };
+    
+    addAlarmRow(alarmBox, 2, 4, true);
+    addAlarmRow(alarmBox, 5, 7, false);
+    addAlarmRow(alarmBox, 8, 10, false);
+    addAlarmRow(alarmBox, 11, 13, false);
+    
+    // Alarm countdown + clear button
+    GtkWidget* countdownRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+    gtk_widget_set_margin_top(countdownRow, 8);
+    gtk_box_pack_start(GTK_BOX(rightPanel), countdownRow, FALSE, FALSE, 0);
     
     data->alarmCountdownLabel = GTK_LABEL(gtk_label_new(""));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->alarmCountdownLabel)), "alarm-countdown");
-    gtk_box_pack_start(GTK_BOX(tripRow), GTK_WIDGET(data->alarmCountdownLabel), FALSE, FALSE, 15);
+    gtk_box_pack_start(GTK_BOX(countdownRow), GTK_WIDGET(data->alarmCountdownLabel), FALSE, FALSE, 0);
     
     data->alarmClearBtn = gtk_button_new_with_label("clear");
     gtk_style_context_add_class(gtk_widget_get_style_context(data->alarmClearBtn), "alarm-button");
     g_signal_connect(data->alarmClearBtn, "clicked", G_CALLBACK(on_alarm_clear), data);
-    gtk_box_pack_start(GTK_BOX(tripRow), data->alarmClearBtn, FALSE, FALSE, 3);
+    gtk_box_pack_start(GTK_BOX(countdownRow), data->alarmClearBtn, FALSE, FALSE, 5);
     gtk_widget_set_no_show_all(data->alarmClearBtn, TRUE);
     
-    // Row 4: Navigation buttons spread across (with stage go)
+    // ── BOTTOM ROW: Navigation buttons (20% taller) ──
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
     gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 0);
     
@@ -266,23 +284,18 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     GtkWidget* calBtn = gtk_button_new_with_label("calibration");
     GtkWidget* datetimeBtn = gtk_button_new_with_label("date/time");
     
-    gtk_style_context_add_class(gtk_widget_get_style_context(stageGoBtn), "nav-button");
-    gtk_style_context_add_class(gtk_widget_get_style_context(segmentsBtn), "nav-button");
-    gtk_style_context_add_class(gtk_widget_get_style_context(nextSegBtn), "nav-button");
-    gtk_style_context_add_class(gtk_widget_get_style_context(calBtn), "nav-button");
-    gtk_style_context_add_class(gtk_widget_get_style_context(datetimeBtn), "nav-button");
+    GtkWidget* navBtns[] = {stageGoBtn, segmentsBtn, nextSegBtn, calBtn, datetimeBtn};
+    for (auto* btn : navBtns) {
+        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "nav-button");
+        gtk_widget_set_size_request(btn, -1, 43);
+        gtk_box_pack_start(GTK_BOX(buttonBox), btn, TRUE, TRUE, 0);
+    }
     
     g_signal_connect(stageGoBtn, "clicked", G_CALLBACK(on_stage_go), data);
     g_signal_connect(segmentsBtn, "clicked", G_CALLBACK(on_show_segments), data);
     g_signal_connect(nextSegBtn, "clicked", G_CALLBACK(on_next_segment), data);
     g_signal_connect(calBtn, "clicked", G_CALLBACK(on_show_calibration), data);
     g_signal_connect(datetimeBtn, "clicked", G_CALLBACK(on_show_datetime), data);
-    
-    gtk_box_pack_start(GTK_BOX(buttonBox), stageGoBtn, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(buttonBox), segmentsBtn, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(buttonBox), nextSegBtn, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(buttonBox), calBtn, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(buttonBox), datetimeBtn, TRUE, TRUE, 0);
     
     return screen;
 }
