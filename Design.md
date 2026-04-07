@@ -259,10 +259,10 @@ Two-column layout with bottom navigation row:
 +-------------------------------------------------------------------+--------------------------------------+
 | LEFT PANEL (70%)                                                  | RIGHT PANEL (30%)                    |
 |  Segment xx  -  next segment in xxx,xxx m                         |                          hh:mm:ss   |
-|                                               30px top margin     |                                      |
-|  Total: xxx,xxx m in mmm:ss  [reset]                              |  Alarm in [2] [3] [4]               |
-|                                               40px gap            |           [5] [6] [7]               |
-|  Trip:  xxx,xxx m in mmm:ss  [reset]                              |           [8] [9] [10]              |
+|                                                                   |                                      |
+|  Total  xxx,xxx  m  [reset]  mmm:ss                               |  Alarm in [2] [3] [4]               |
+|                                                                   |           [5] [6] [7]               |
+|  Trip   xxx,xxx  m  [reset]  mmm:ss                               |           [8] [9] [10]              |
 |                                                                   |          [11] [12] [13]             |
 |                                                                   |  x,xxx m to alarm  [clear]          |
 +-------------------------------------------------------------------+--------------------------------------+
@@ -271,21 +271,26 @@ Two-column layout with bottom navigation row:
 ```
 
 Layout:
-- The number of digits displayed for any of the values should not effect their position the decimal point should remain the in same place.
+- GtkGrid for Total/Trip rows with aligned columns: heading | value | unit | reset | time
+- The number of digits displayed for any of the values should not affect their position.
 - Distances formatted with comma separators and fixed minimum width of 7 characters (e.g., "      0", "  1,234", "999,999")
 - Time formatted as space-padded minutes (3 chars) + ":" + zero-padded seconds (2 chars), e.g., "  0:00", " 12:34", "120:00"
+- All fonts bold, all buttons have 2px solid white border for daylight visibility
 - 15px border around the entire screen
 - Two-column layout: left panel 70% width (~870px), right panel 30% width (~360px)
 - Left panel:
-  - Segment info at top (18px)
-  - Total row (30px below segment): distance and elapsed time (48px bold monospace) with [reset] button (20px font)
-  - Trip row (40px below Total): distance and elapsed time (48px bold monospace) with [reset] button
-  - "Trip:  " has extra space to vertically align distance values with "Total: "
+  - Segment info at top (20px)
+  - Total/Trip in a GtkGrid (15px below segment info, 10px gap between rows):
+    - Col 0: heading "Total" / "Trip" (48px bold monospace)
+    - Col 1: distance value, right-aligned, 7-char width (88px bold monospace)
+    - Col 2: unit "m" (48px bold monospace), bottom-aligned
+    - Col 3: [reset] button (36px font), vertically centred
+    - Col 4: elapsed time mmm:ss (36px monospace, light grey #CCCCCC), vertically centred
 - Right panel:
-  - Rally clock (hh:mm:ss) at top, right-aligned (24px bold, minimum 8 chars wide)
-  - Alarm buttons in four rows with 4px vertical gap — "Alarm in" label (18px) + [2]-[4] on first row, [5]-[7] on second row, [8]-[10] on third row, [11]-[13] on fourth row (20px font, 62x47px buttons)
-  - Alarm countdown ("x,xxx m to alarm") and [clear] button below alarm buttons
-- Navigation buttons spread across full-width bottom row (18px font, 43px tall):
+  - Rally clock (hh:mm:ss) at top, right-aligned (30px bold, minimum 8 chars wide)
+  - Alarm buttons in four rows with 4px vertical gap — "Alarm in" label (20px) + [2]-[4] on first row, [5]-[7] on second row, [8]-[10] on third row, [11]-[13] on fourth row (22px font, 62x47px buttons)
+  - Alarm countdown ("x,xxx m to alarm") and [clear] button below alarm buttons (28px bright yellow #FFCC00)
+- Navigation buttons spread across full-width bottom row (20px font, 43px tall):
   - stage go: resets Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green
   - segments: goes to Stage Setup
   - next segment: advances segment, resets Trip
