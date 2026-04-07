@@ -251,27 +251,19 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     cairo_move_to(cr, centerX - dext.width / 2, box_y + box_height / 2 + dext.height / 2 - 2);
     cairo_show_text(cr, digital);
 
-    // Needle (narrow triangle with black centre line)
+    // Needle (narrow white triangle)
     double needle_seconds = seconds;
     if (needle_seconds > max_val) needle_seconds = max_val;
     if (needle_seconds < -max_val) needle_seconds = -max_val;
 
     double needle_angle = M_PI + M_PI/2 + (needle_seconds / max_val) * (M_PI / 2);
-    double needle_length = radius - 45;
+    double needle_length = radius - 25;
     double half_width = 12.0;
 
     double tip_x = centerX + needle_length * cos(needle_angle);
     double tip_y = centerY + needle_length * sin(needle_angle);
     double perp_x = -sin(needle_angle);
     double perp_y = cos(needle_angle);
-
-    // Drop shadow
-    cairo_set_source_rgba(cr, 0, 0, 0, 0.4);
-    cairo_move_to(cr, tip_x + 2, tip_y + 2);
-    cairo_line_to(cr, centerX + 2 + half_width * perp_x, centerY + 2 + half_width * perp_y);
-    cairo_line_to(cr, centerX + 2 - half_width * perp_x, centerY + 2 - half_width * perp_y);
-    cairo_close_path(cr);
-    cairo_fill(cr);
 
     // White filled triangle
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
@@ -280,13 +272,6 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     cairo_line_to(cr, centerX - half_width * perp_x, centerY - half_width * perp_y);
     cairo_close_path(cr);
     cairo_fill(cr);
-
-    // Black centre line
-    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
-    cairo_set_line_width(cr, 1.5);
-    cairo_move_to(cr, centerX, centerY);
-    cairo_line_to(cr, tip_x, tip_y);
-    cairo_stroke(cr);
 
     // Needle hub
     cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
@@ -436,7 +421,7 @@ void updateDriverDisplay(AppData* data) {
             
             // Tone cadence: silent if beyond ±30s, otherwise match arrow brackets.
             // Behind (speed_diff > 0, speed up): C6=1046.50, F6=1396.91, A6=1760.00
-            // Ahead  (speed_diff < 0, slow down): C4=261.63,  A3=220.00,  F3=174.61
+            // Ahead  (speed_diff < 0, slow down): E4=329.63,  D4=293.66,  C4=261.63
             if (data->toneGen) {
                 if (abs_seconds > 30.0 || num_arrows == 0) {
                     data->toneGen->setCadence(0, 0);
@@ -445,13 +430,13 @@ void updateDriverDisplay(AppData* data) {
                     double freq;
                     int tone, silence;
                     if (num_arrows >= 3) {
-                        freq = behind ? 1760.00 : 174.61;
+                        freq = behind ? 1760.00 : 261.63;
                         tone = 700; silence = 300;
                     } else if (num_arrows == 2) {
-                        freq = behind ? 1396.91 : 220.00;
+                        freq = behind ? 1396.91 : 293.66;
                         tone = 500; silence = 200;
                     } else {
-                        freq = behind ? 1046.50 : 261.63;
+                        freq = behind ? 1046.50 : 329.63;
                         tone = 100; silence = 100;
                     }
                     data->toneGen->setCadence(tone, silence, freq);
