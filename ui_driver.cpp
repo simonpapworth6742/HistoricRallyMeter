@@ -227,7 +227,7 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     double box_width = 130;
     double box_height = 36;
     double box_x = centerX - box_width / 2;
-    double box_y = centerY - 50;
+    double box_y = centerY + 18;
 
     cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
     cairo_rectangle(cr, box_x, box_y, box_width, box_height);
@@ -251,26 +251,41 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     cairo_move_to(cr, centerX - dext.width / 2, box_y + box_height / 2 + dext.height / 2 - 2);
     cairo_show_text(cr, digital);
 
-    // Needle
+    // Needle (narrow triangle with black centre line)
     double needle_seconds = seconds;
     if (needle_seconds > max_val) needle_seconds = max_val;
     if (needle_seconds < -max_val) needle_seconds = -max_val;
 
     double needle_angle = M_PI + M_PI/2 + (needle_seconds / max_val) * (M_PI / 2);
     double needle_length = radius - 45;
+    double half_width = 12.0;
 
+    double tip_x = centerX + needle_length * cos(needle_angle);
+    double tip_y = centerY + needle_length * sin(needle_angle);
+    double perp_x = -sin(needle_angle);
+    double perp_y = cos(needle_angle);
+
+    // Drop shadow
     cairo_set_source_rgba(cr, 0, 0, 0, 0.4);
-    cairo_set_line_width(cr, 5);
-    cairo_move_to(cr, centerX + 2, centerY + 2);
-    cairo_line_to(cr, centerX + 2 + needle_length * cos(needle_angle),
-                  centerY + 2 + needle_length * sin(needle_angle));
-    cairo_stroke(cr);
+    cairo_move_to(cr, tip_x + 2, tip_y + 2);
+    cairo_line_to(cr, centerX + 2 + half_width * perp_x, centerY + 2 + half_width * perp_y);
+    cairo_line_to(cr, centerX + 2 - half_width * perp_x, centerY + 2 - half_width * perp_y);
+    cairo_close_path(cr);
+    cairo_fill(cr);
 
+    // White filled triangle
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    cairo_set_line_width(cr, 3);
+    cairo_move_to(cr, tip_x, tip_y);
+    cairo_line_to(cr, centerX + half_width * perp_x, centerY + half_width * perp_y);
+    cairo_line_to(cr, centerX - half_width * perp_x, centerY - half_width * perp_y);
+    cairo_close_path(cr);
+    cairo_fill(cr);
+
+    // Black centre line
+    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+    cairo_set_line_width(cr, 1.5);
     cairo_move_to(cr, centerX, centerY);
-    cairo_line_to(cr, centerX + needle_length * cos(needle_angle),
-                  centerY + needle_length * sin(needle_angle));
+    cairo_line_to(cr, tip_x, tip_y);
     cairo_stroke(cr);
 
     // Needle hub

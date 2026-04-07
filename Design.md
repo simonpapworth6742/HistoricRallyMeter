@@ -147,7 +147,8 @@ look at the example guage in gaugepilot-rallymaster-display.png
 - yellow should have a yellow semi circle on the guage, and the amount ahead/behind should be shown as +-ss.s
 - green should have a green semi circle on the guage, and the amount ahead/behind should be shown as +-ss.s
 - the scale on the guage should not change too often, and after changing should wait two seconds before changing again, in effect debouncing.
-- A needle/indicator shows the current ahead/behind position
+- The needle is a narrow triangle (white filled) tapering from a 24px-wide base at the hub to a sharp point at the tip, with a black 1.5px centre line running from hub to tip, and a subtle drop shadow offset by 2px
+- The digital readout box (ahead/behind value) is positioned just below the needle hub
 - The gauge provides an intuitive visual indication - needle pointing right means slow down, needle pointing left means speed up
 
 
@@ -156,10 +157,10 @@ look at the example guage in gaugepilot-rallymaster-display.png
 |   Current↑↑↑↓↓↓         Total                       | [exit]               RALLY GAUGE            [KPH]  |
 |    xx.x                 xx.x                        |            -10s ←───┬───→ +10s                     |
 |                                                     |                 ╱   │   ╲                          |
-|   Target                Trip                        |               ╱     |    ╲                         |
-|    xx.x                 xx.x                        |             ╱       │     ╲                        |
-|                                                     |            ╱        ●       ╲                      |
-|   fps: xxx  cpu: xxC   next: xx.xx in xxxm - mm:ss  |           ╱         │         ╲                    |
+|   Target                Trip                        |               ╱     ▲    ╲                         |
+|    xx.x                 xx.x                        |             ╱       ●     ╲                        |
+|                                                     |            ╱    [±ss.s]     ╲                      |
+|   fps: xxx  cpu: xxC   next: xx.xx in xxxm - mm:ss  |           ╱                   ╲                    |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
@@ -289,7 +290,7 @@ Layout:
 - Right panel:
   - Rally clock (hh:mm:ss) at top, right-aligned (30px bold, minimum 8 chars wide)
   - Alarm buttons in four rows with 4px vertical gap — "Alarm in" label (20px) + [2]-[4] on first row, [5]-[7] on second row, [8]-[10] on third row, [11]-[13] on fourth row (22px font, 62x47px buttons)
-  - Alarm countdown ("x,xxx m to alarm") and [clear] button below alarm buttons (28px bright yellow #FFCC00)
+  - Alarm countdown ("x,xxx m to alarm") and [clear] button below alarm buttons (28px white font #FFFFFF)
 - Navigation buttons spread across full-width bottom row (20px font, 43px tall):
   - stage go: resets Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green
   - segments: goes to Stage Setup
