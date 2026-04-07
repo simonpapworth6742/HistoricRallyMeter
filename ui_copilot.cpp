@@ -46,8 +46,11 @@ static void applyCopilotCSS() {
         ".alarm-label { font-size: 20px; }"
         ".alarm-button { font-size: 22px; }"
         ".reset-button { font-size: 36px; }"
-        ".alarm-countdown { font-size: 28px; color: #FFCC00; font-family: monospace; }"
+        ".alarm-countdown { font-size: 28px; color: #FFFFFF; font-family: monospace; }"
         ".nav-button { font-size: 20px; }"
+        ".calibration-screen label { font-size: 20px; }"
+        ".calibration-screen button { font-size: 20px; }"
+        ".calibration-screen entry { font-size: 20px; }"
         ".segment-label { font-size: 18px; }"
         ".segment-row entry, .segment-row button, .segment-row checkbutton { font-size: 18px; }"
         ".new-segment-row label, .new-segment-row entry, .new-segment-row button, .new-segment-row checkbutton { font-size: 18px; }"
@@ -97,7 +100,7 @@ void updateCopilotDisplay(AppData* data) {
             }
         } else {
             std::stringstream alarmSs;
-            alarmSs << formatDistance(remaining_m, 6) << " m to alarm";
+            alarmSs << formatDistance(remaining_m, 6) << " to alarm";
             gtk_label_set_text(data->alarmCountdownLabel, alarmSs.str().c_str());
         }
     } else {
@@ -135,7 +138,7 @@ void updateCopilotDisplay(AppData* data) {
     gtk_label_set_text(data->totalDistLabel, ss.str().c_str());
     
     ss.str("");
-    ss << "  " << std::setw(3) << std::setfill(' ') << (total_secs / 60)
+    ss << " " << std::setw(3) << std::setfill(' ') << (total_secs / 60)
        << ":" << std::setw(2) << std::setfill('0') << (total_secs % 60);
     gtk_label_set_text(data->totalTimeLabel, ss.str().c_str());
     
@@ -152,7 +155,7 @@ void updateCopilotDisplay(AppData* data) {
     gtk_label_set_text(data->tripDistLabel, ss.str().c_str());
     
     ss.str("");
-    ss << "  " << std::setw(3) << std::setfill(' ') << (trip_secs / 60)
+    ss << " " << std::setw(3) << std::setfill(' ') << (trip_secs / 60)
        << ":" << std::setw(2) << std::setfill('0') << (trip_secs % 60);
     gtk_label_set_text(data->tripTimeLabel, ss.str().c_str());
     
@@ -226,7 +229,7 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_grid_attach(GTK_GRID(distGrid), totalResetBtn, 3, 0, 1, 1);
     
     // Col 4: Total time (same row)
-    data->totalTimeLabel = GTK_LABEL(gtk_label_new("    0:00"));
+    data->totalTimeLabel = GTK_LABEL(gtk_label_new("   0:00"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalTimeLabel)), "time-label");
     gtk_label_set_xalign(data->totalTimeLabel, 0.0);
     gtk_widget_set_valign(GTK_WIDGET(data->totalTimeLabel), GTK_ALIGN_CENTER);
@@ -260,7 +263,7 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_grid_attach(GTK_GRID(distGrid), tripResetBtn, 3, 1, 1, 1);
     
     // Col 4: Trip time (same row)
-    data->tripTimeLabel = GTK_LABEL(gtk_label_new("    0:00"));
+    data->tripTimeLabel = GTK_LABEL(gtk_label_new("   0:00"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripTimeLabel)), "time-label");
     gtk_label_set_xalign(data->tripTimeLabel, 0.0);
     gtk_widget_set_valign(GTK_WIDGET(data->tripTimeLabel), GTK_ALIGN_CENTER);
@@ -481,8 +484,9 @@ GtkWidget* createStageSetupScreen(AppData* data) {
 
 // Create Calibration screen - horizontal layout for 1280x400
 GtkWidget* createCalibrationScreen(AppData* data) {
-    GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    gtk_container_set_border_width(GTK_CONTAINER(screen), 15);
+    GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_style_context_add_class(gtk_widget_get_style_context(screen), "calibration-screen");
+    gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
     
     // Title
     GtkWidget* titleLabel = gtk_label_new("CALIBRATION");
@@ -494,19 +498,20 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(screen), data->calibrationMainBox, TRUE, TRUE, 0);
     
     // Left side: info and input
-    GtkWidget* leftBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget* leftBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_box_pack_start(GTK_BOX(data->calibrationMainBox), leftBox, TRUE, TRUE, 0);
     
     // Row 1: Distance with counter breakdown
     // Format: "Total distance: xxx,xxx m  (counts calculated: CNTR_A  1: CNTR_1  2: CNTR_2)"
     data->totalDistCalLabel = GTK_LABEL(gtk_label_new("Total distance: 0 m  (counts calculated: 0   1: 0   2: 0)"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistCalLabel)), "info-label");
     gtk_widget_set_halign(GTK_WIDGET(data->totalDistCalLabel), GTK_ALIGN_START);
-    gtk_box_pack_start(GTK_BOX(leftBox), GTK_WIDGET(data->totalDistCalLabel), FALSE, FALSE, 5);
+    gtk_box_pack_start(GTK_BOX(leftBox), GTK_WIDGET(data->totalDistCalLabel), FALSE, FALSE, 0);
+    
+    gtk_box_pack_start(GTK_BOX(leftBox), gtk_label_new(""), FALSE, FALSE, 0);
     
     // Row 2: Input field
     GtkWidget* inputRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(leftBox), inputRow, FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(leftBox), inputRow, FALSE, FALSE, 0);
     
     GtkWidget* inputLabel = gtk_label_new("Actual distance covered:");
     data->rallyDistEntry = GTK_ENTRY(gtk_entry_new());
@@ -523,9 +528,11 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(inputRow), unitLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(inputRow), resetBtn, FALSE, FALSE, 20);
     
+    gtk_box_pack_start(GTK_BOX(leftBox), gtk_label_new(""), FALSE, FALSE, 0);
+    
     // Row 3: Sensor mode selection
     GtkWidget* sensorRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(leftBox), sensorRow, FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(leftBox), sensorRow, FALSE, FALSE, 0);
     
     data->sensorModeLabel = GTK_LABEL(gtk_label_new(
         data->state->counters ? "Currently set to both sensors" : "Currently set to sensor 1"));
@@ -540,9 +547,13 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     g_signal_connect(sensorBothBtn, "clicked", G_CALLBACK(on_set_sensor_both), data);
     gtk_box_pack_start(GTK_BOX(sensorRow), sensorBothBtn, FALSE, FALSE, 5);
     
-    // Row 4: Buttons (start, save, back)
+    // Right side: numeric keypad
+    data->calibrationKeypad = createNumericKeypad(data);
+    gtk_box_pack_end(GTK_BOX(data->calibrationMainBox), data->calibrationKeypad, FALSE, FALSE, 10);
+    
+    // Bottom: navigation buttons
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
-    gtk_box_pack_start(GTK_BOX(leftBox), buttonBox, FALSE, FALSE, 10);
+    gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 5);
     
     GtkWidget* startBtn = gtk_button_new_with_label("start");
     GtkWidget* saveBtn = gtk_button_new_with_label("save");
@@ -555,10 +566,6 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(buttonBox), startBtn, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(buttonBox), saveBtn, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(buttonBox), backBtn, TRUE, TRUE, 0);
-    
-    // Right side: numeric keypad
-    data->calibrationKeypad = createNumericKeypad(data);
-    gtk_box_pack_end(GTK_BOX(data->calibrationMainBox), data->calibrationKeypad, FALSE, FALSE, 10);
     
     // Hide totalCountCalLabel - we're using totalDistCalLabel for everything
     data->totalCountCalLabel = GTK_LABEL(gtk_label_new(""));
