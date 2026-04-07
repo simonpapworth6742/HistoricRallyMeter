@@ -523,17 +523,17 @@ static void applyDriverCSS(GtkWidget* G_GNUC_UNUSED widget) {
     GtkCssProvider* provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
         "window, .background { background-color: #000000; }"
-        "label { color: #FFFFFF; }"
-        "button { background-color: #333333; color: #FFFFFF; }"
-        ".speed-header { font-size: 28px; font-weight: bold; }"
-        ".speed-value { font-size: 64px; font-weight: bold; font-family: monospace; }"
-        ".speed-value-xl { font-size: 80px; font-weight: bold; font-family: monospace; }"
-        ".speed-value-target { font-size: 45px; font-weight: bold; font-family: monospace; }"
-        ".target-info { font-size: 22px; font-weight: bold; }"
-        ".ahead-behind { font-size: 28px; font-weight: bold; font-family: monospace; }"
+        "label { color: #FFFFFF; font-weight: bold; }"
+        "button { background-color: #333333; color: #FFFFFF; font-weight: bold; }"
+        ".speed-header { font-size: 28px; }"
+        ".speed-value { font-size: 64px; font-family: monospace; }"
+        ".speed-value-xl { font-size: 80px; font-family: monospace; }"
+        ".speed-value-target { font-size: 45px; font-family: monospace; }"
+        ".target-info { font-size: 22px; }"
+        ".ahead-behind { font-size: 28px; font-family: monospace; }"
         ".next-info { font-size: 18px; }"
         ".footer-info { font-size: 14px; }"
-        ".speed-arrows { font-size: 28px; font-weight: bold; }",
+        ".speed-arrows { font-size: 28px; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),

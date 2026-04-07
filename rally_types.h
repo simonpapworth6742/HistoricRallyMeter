@@ -69,7 +69,9 @@ struct AppData {
     // TwinMaster screen
     GtkWidget* twinMasterScreen;
     GtkLabel* totalDistLabel;
+    GtkLabel* totalTimeLabel;
     GtkLabel* tripDistLabel;
+    GtkLabel* tripTimeLabel;
     GtkLabel* segmentInfoLabel;
     GtkLabel* alarmCountdownLabel;
     GtkWidget* alarmClearBtn;

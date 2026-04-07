@@ -33,18 +33,21 @@ static void applyCopilotCSS() {
     GtkCssProvider* provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
         "window, .background { background-color: #000000; }"
-        "label { color: #FFFFFF; }"
-        "button { background-color: #333333; color: #FFFFFF; }"
-        "entry { background-color: #222222; color: #FFFFFF; }"
-        ".title-label { font-size: 20px; font-weight: bold; }"
-        ".info-label { font-size: 18px; }"
-        ".clock-label { font-size: 24px; font-weight: bold; }"
-        ".total-label { font-size: 48px; font-weight: bold; font-family: monospace; }"
-        ".trip-label { font-size: 48px; font-weight: bold; font-family: monospace; }"
-        ".alarm-label { font-size: 18px; }"
-        ".alarm-button { font-size: 20px; }"
-        ".alarm-countdown { font-size: 24px; font-weight: bold; color: #FF6600; font-family: monospace; }"
-        ".nav-button { font-size: 18px; }"
+        "label { color: #FFFFFF; font-weight: bold; }"
+        "button { background-color: #333333; color: #FFFFFF; font-weight: bold; border: 2px solid #FFFFFF; }"
+        "entry { background-color: #222222; color: #FFFFFF; font-weight: bold; }"
+        ".title-label { font-size: 22px; }"
+        ".info-label { font-size: 20px; }"
+        ".clock-label { font-size: 30px; font-family: monospace; }"
+        ".dist-heading { font-size: 48px; font-weight: bold; font-family: monospace; }"
+        ".dist-value { font-size: 88px; font-weight: bold; font-family: monospace; }"
+        ".dist-unit { font-size: 48px; font-weight: bold; font-family: monospace; }"
+        ".time-label { font-size: 36px; font-family: monospace; color: #CCCCCC; }"
+        ".alarm-label { font-size: 20px; }"
+        ".alarm-button { font-size: 22px; }"
+        ".reset-button { font-size: 36px; }"
+        ".alarm-countdown { font-size: 28px; color: #FFCC00; font-family: monospace; }"
+        ".nav-button { font-size: 20px; }"
         ".segment-label { font-size: 18px; }"
         ".segment-row entry, .segment-row button, .segment-row checkbutton { font-size: 18px; }"
         ".new-segment-row label, .new-segment-row entry, .new-segment-row button, .new-segment-row checkbutton { font-size: 18px; }"
@@ -128,10 +131,13 @@ void updateCopilotDisplay(AppData* data) {
     int total_secs = static_cast<int>(total_duration_ms / 1000);
     
     std::stringstream ss;
-    ss << "Total: " << formatDistance(total_m, 7) << " m in "
-       << std::setw(3) << std::setfill(' ') << (total_secs / 60)
-       << ":" << std::setw(2) << std::setfill('0') << (total_secs % 60);
+    ss << formatDistance(total_m, 7);
     gtk_label_set_text(data->totalDistLabel, ss.str().c_str());
+    
+    ss.str("");
+    ss << "  " << std::setw(3) << std::setfill(' ') << (total_secs / 60)
+       << ":" << std::setw(2) << std::setfill('0') << (total_secs % 60);
+    gtk_label_set_text(data->totalTimeLabel, ss.str().c_str());
     
     // Trip distance
     int64_t trip_count_diff = calculateDistanceCounts(*data->state,
@@ -142,10 +148,13 @@ void updateCopilotDisplay(AppData* data) {
     int trip_secs = static_cast<int>(trip_duration_ms / 1000);
     
     ss.str("");
-    ss << "Trip:  " << formatDistance(trip_m, 7) << " m in "
-       << std::setw(3) << std::setfill(' ') << (trip_secs / 60)
-       << ":" << std::setw(2) << std::setfill('0') << (trip_secs % 60);
+    ss << formatDistance(trip_m, 7);
     gtk_label_set_text(data->tripDistLabel, ss.str().c_str());
+    
+    ss.str("");
+    ss << "  " << std::setw(3) << std::setfill(' ') << (trip_secs / 60)
+       << ":" << std::setw(2) << std::setfill('0') << (trip_secs % 60);
+    gtk_label_set_text(data->tripTimeLabel, ss.str().c_str());
     
     // Segment info
     if (data->state->segment_current_number >= 0 && 
@@ -186,37 +195,77 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_halign(GTK_WIDGET(data->segmentInfoLabel), GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(leftPanel), GTK_WIDGET(data->segmentInfoLabel), FALSE, FALSE, 0);
     
-    // Total row: distance + reset
-    GtkWidget* totalRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    gtk_widget_set_margin_top(totalRow, 30);
-    gtk_widget_set_valign(totalRow, GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(leftPanel), totalRow, FALSE, FALSE, 0);
+    // Grid layout for Total/Trip: columns = heading | value | unit | reset
+    GtkWidget* distGrid = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(distGrid), 8);
+    gtk_grid_set_row_spacing(GTK_GRID(distGrid), 2);
+    gtk_widget_set_margin_top(distGrid, 15);
+    gtk_box_pack_start(GTK_BOX(leftPanel), distGrid, FALSE, FALSE, 0);
     
-    data->totalDistLabel = GTK_LABEL(gtk_label_new("Total:       0 m in   0:00"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistLabel)), "total-label");
-    gtk_label_set_xalign(data->totalDistLabel, 0.0);
-    gtk_box_pack_start(GTK_BOX(totalRow), GTK_WIDGET(data->totalDistLabel), FALSE, FALSE, 0);
+    // Row 0: Total distance
+    GtkWidget* totalHeading = gtk_label_new("Total");
+    gtk_style_context_add_class(gtk_widget_get_style_context(totalHeading), "dist-heading");
+    gtk_label_set_xalign(GTK_LABEL(totalHeading), 0.0);
+    gtk_grid_attach(GTK_GRID(distGrid), totalHeading, 0, 0, 1, 1);
+    
+    data->totalDistLabel = GTK_LABEL(gtk_label_new("0"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistLabel)), "dist-value");
+    gtk_label_set_xalign(data->totalDistLabel, 1.0);
+    gtk_label_set_width_chars(data->totalDistLabel, 7);
+    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalDistLabel), 1, 0, 1, 1);
+    
+    GtkWidget* totalUnit = gtk_label_new("m");
+    gtk_style_context_add_class(gtk_widget_get_style_context(totalUnit), "dist-unit");
+    gtk_widget_set_valign(totalUnit, GTK_ALIGN_END);
+    gtk_grid_attach(GTK_GRID(distGrid), totalUnit, 2, 0, 1, 1);
     
     GtkWidget* totalResetBtn = gtk_button_new_with_label("reset");
-    gtk_style_context_add_class(gtk_widget_get_style_context(totalResetBtn), "alarm-button");
+    gtk_style_context_add_class(gtk_widget_get_style_context(totalResetBtn), "reset-button");
+    gtk_widget_set_valign(totalResetBtn, GTK_ALIGN_CENTER);
     g_signal_connect(totalResetBtn, "clicked", G_CALLBACK(on_total_reset), data);
-    gtk_box_pack_start(GTK_BOX(totalRow), totalResetBtn, FALSE, FALSE, 10);
+    gtk_grid_attach(GTK_GRID(distGrid), totalResetBtn, 3, 0, 1, 1);
     
-    // Trip row: distance + reset
-    GtkWidget* tripRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    gtk_widget_set_margin_top(tripRow, 40);
-    gtk_widget_set_valign(tripRow, GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(leftPanel), tripRow, FALSE, FALSE, 0);
+    // Col 4: Total time (same row)
+    data->totalTimeLabel = GTK_LABEL(gtk_label_new("    0:00"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalTimeLabel)), "time-label");
+    gtk_label_set_xalign(data->totalTimeLabel, 0.0);
+    gtk_widget_set_valign(GTK_WIDGET(data->totalTimeLabel), GTK_ALIGN_CENTER);
+    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalTimeLabel), 4, 0, 1, 1);
     
-    data->tripDistLabel = GTK_LABEL(gtk_label_new("Trip:        0 m in   0:00"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripDistLabel)), "trip-label");
-    gtk_label_set_xalign(data->tripDistLabel, 0.0);
-    gtk_box_pack_start(GTK_BOX(tripRow), GTK_WIDGET(data->tripDistLabel), FALSE, FALSE, 0);
+    // Row 1: Trip distance
+    GtkWidget* tripHeading = gtk_label_new("Trip");
+    gtk_style_context_add_class(gtk_widget_get_style_context(tripHeading), "dist-heading");
+    gtk_label_set_xalign(GTK_LABEL(tripHeading), 0.0);
+    gtk_widget_set_margin_top(tripHeading, 10);
+    gtk_grid_attach(GTK_GRID(distGrid), tripHeading, 0, 1, 1, 1);
+    
+    data->tripDistLabel = GTK_LABEL(gtk_label_new("0"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripDistLabel)), "dist-value");
+    gtk_label_set_xalign(data->tripDistLabel, 1.0);
+    gtk_label_set_width_chars(data->tripDistLabel, 7);
+    gtk_widget_set_margin_top(GTK_WIDGET(data->tripDistLabel), 10);
+    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripDistLabel), 1, 1, 1, 1);
+    
+    GtkWidget* tripUnit = gtk_label_new("m");
+    gtk_style_context_add_class(gtk_widget_get_style_context(tripUnit), "dist-unit");
+    gtk_widget_set_valign(tripUnit, GTK_ALIGN_END);
+    gtk_widget_set_margin_top(tripUnit, 10);
+    gtk_grid_attach(GTK_GRID(distGrid), tripUnit, 2, 1, 1, 1);
     
     GtkWidget* tripResetBtn = gtk_button_new_with_label("reset");
-    gtk_style_context_add_class(gtk_widget_get_style_context(tripResetBtn), "alarm-button");
+    gtk_style_context_add_class(gtk_widget_get_style_context(tripResetBtn), "reset-button");
+    gtk_widget_set_valign(tripResetBtn, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_top(tripResetBtn, 10);
     g_signal_connect(tripResetBtn, "clicked", G_CALLBACK(on_trip_reset), data);
-    gtk_box_pack_start(GTK_BOX(tripRow), tripResetBtn, FALSE, FALSE, 10);
+    gtk_grid_attach(GTK_GRID(distGrid), tripResetBtn, 3, 1, 1, 1);
+    
+    // Col 4: Trip time (same row)
+    data->tripTimeLabel = GTK_LABEL(gtk_label_new("    0:00"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripTimeLabel)), "time-label");
+    gtk_label_set_xalign(data->tripTimeLabel, 0.0);
+    gtk_widget_set_valign(GTK_WIDGET(data->tripTimeLabel), GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_top(GTK_WIDGET(data->tripTimeLabel), 10);
+    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripTimeLabel), 4, 1, 1, 1);
     
     // ── RIGHT PANEL (30%): clock, alarm buttons, countdown ──
     GtkWidget* rightPanel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);

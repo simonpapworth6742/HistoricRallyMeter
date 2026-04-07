@@ -14,6 +14,9 @@ SOURCES = main.cpp i2c_counter.cpp rally_state.cpp config_file.cpp counter_polle
 OBJECTS = $(SOURCES:.cpp=.o)
 OBJECTS_DEBUG = $(SOURCES:.cpp=_debug.o)
 
+# Header dependencies — changing any header triggers full rebuild
+HEADERS = $(wildcard *.h)
+
 # Test sources (calculations, rally_state, config_file for unit tests)
 TEST_SOURCES = tests/test_main.cpp calculations.cpp rally_state.cpp config_file.cpp
 TEST_OBJECTS = tests/test_main.o calculations_test.o rally_state_test.o config_file_test.o
@@ -30,10 +33,10 @@ $(TARGET): $(OBJECTS)
 $(TARGET_DEBUG): $(OBJECTS_DEBUG)
 	$(CXX) $(CXXFLAGS_DEBUG) -o $(TARGET_DEBUG) $(OBJECTS_DEBUG) $(LDFLAGS)
 
-%.o: %.cpp
+%.o: %.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-%_debug.o: %.cpp
+%_debug.o: %.cpp $(HEADERS)
 	$(CXX) $(CXXFLAGS_DEBUG) -c $< -o $@
 
 # Test targets
