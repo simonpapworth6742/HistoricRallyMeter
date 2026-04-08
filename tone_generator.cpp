@@ -35,6 +35,10 @@ void ToneGenerator::setCadence(int tone_ms, int silence_ms, double freq_hz) {
     freq_hz_ = freq_hz;
 }
 
+void ToneGenerator::playBeep() {
+    beep_requested_ = true;
+}
+
 void ToneGenerator::threadFunc() {
     snd_pcm_t* pcm = nullptr;
     int err = snd_pcm_open(&pcm, "default", SND_PCM_STREAM_PLAYBACK, 0);
@@ -61,7 +65,26 @@ void ToneGenerator::threadFunc() {
     // Envelope: 0.0 = silent, 1.0 = full volume; ramps smoothly between states
     double envelope = 0.0;
 
+    static constexpr double BEEP_FREQ = 1200.0;
+    static constexpr unsigned BEEP_FRAMES = SAMPLE_RATE * 50 / 1000;  // 50ms
+    static constexpr double BEEP_AMP = 0.20;
+
     while (running_) {
+        // Handle one-shot beep request
+        if (beep_requested_.exchange(false)) {
+            std::vector<int16_t> beep_buf(BEEP_FRAMES);
+            double bp = 0.0;
+            const double bp_inc = 2.0 * M_PI * BEEP_FREQ / SAMPLE_RATE;
+            for (unsigned i = 0; i < BEEP_FRAMES; i++) {
+                double env = 1.0;
+                if (i < FADE_FRAMES) env = static_cast<double>(i) / FADE_FRAMES;
+                if (i > BEEP_FRAMES - FADE_FRAMES) env = static_cast<double>(BEEP_FRAMES - i) / FADE_FRAMES;
+                beep_buf[i] = static_cast<int16_t>(BEEP_AMP * 32767.0 * env * std::sin(bp));
+                bp += bp_inc;
+            }
+            snd_pcm_writei(pcm, beep_buf.data(), BEEP_FRAMES);
+        }
+
         int cur_tone, cur_silence;
         double cur_freq;
         {

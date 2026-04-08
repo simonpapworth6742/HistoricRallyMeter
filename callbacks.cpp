@@ -102,6 +102,57 @@ void on_next_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     }
 }
 
+void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (data->state->segment_current_number < 0 ||
+        data->state->segment_current_number >= static_cast<long>(data->state->segments.size()))
+        return;
+    
+    auto current_poll = data->poller->getMostRecent();
+    int64_t seg_count_diff = calculateDistanceCounts(*data->state,
+        current_poll.cntr1, current_poll.cntr2,
+        data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+    
+    Segment& cur_seg = data->state->segments[data->state->segment_current_number];
+    int64_t remaining_counts = cur_seg.distance_counts - seg_count_diff;
+    long remaining_m = countsToCentimeters(remaining_counts, data->state->calibration) / 100;
+    long travelled_m = countsToCentimeters(seg_count_diff, data->state->calibration) / 100;
+    
+    long next_seg_idx = data->state->segment_current_number + 1;
+    bool near_end = (remaining_m >= 0 && remaining_m <= 500) &&
+                    (next_seg_idx < static_cast<long>(data->state->segments.size()));
+    bool near_start = (travelled_m >= 0 && travelled_m <= 500) &&
+                      (data->state->segment_current_number > 0);
+    
+    if (near_end) {
+        // "next": reduce current segment distance to actual distance travelled, then advance
+        cur_seg.distance_counts = seg_count_diff;
+        cur_seg.distance_m = (cur_seg.distance_counts * data->state->calibration) / 1e6;
+        
+        data->state->segment_current_number++;
+        data->state->segment_start_cntr1 = current_poll.cntr1;
+        data->state->segment_start_cntr2 = current_poll.cntr2;
+        data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
+        data->state->trip_start_cntr1 = current_poll.cntr1;
+        data->state->trip_start_cntr2 = current_poll.cntr2;
+        data->state->trip_start_time_ms = data->state->segment_start_time_ms;
+    } else if (near_start) {
+        // "prev": extend previous segment distance to end here, reset current segment start to now
+        Segment& prev_seg = data->state->segments[data->state->segment_current_number - 1];
+        prev_seg.distance_counts += seg_count_diff;
+        prev_seg.distance_m = (prev_seg.distance_counts * data->state->calibration) / 1e6;
+        
+        data->state->segment_start_cntr1 = current_poll.cntr1;
+        data->state->segment_start_cntr2 = current_poll.cntr2;
+        data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
+        data->state->trip_start_cntr1 = current_poll.cntr1;
+        data->state->trip_start_cntr2 = current_poll.cntr2;
+        data->state->trip_start_time_ms = data->state->segment_start_time_ms;
+    }
+    
+    ConfigFile::save(*data->state);
+}
+
 gboolean update_display(gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     
@@ -496,7 +547,7 @@ void on_add_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
             
             gtk_entry_set_text(data->targetSpeedEntry, "");
             gtk_entry_set_text(data->distanceEntry, "");
-            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->autoNextCheck), FALSE);
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->autoNextCheck), TRUE);
             
             refreshSegmentList(data);
         }

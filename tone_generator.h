@@ -18,11 +18,15 @@ public:
     // freq_hz: tone frequency in Hz (e.g. 523.25 for C5).
     void setCadence(int tone_ms, int silence_ms, double freq_hz = 0.0);
 
+    // Play a short one-shot beep for button feedback
+    void playBeep();
+
 private:
     void threadFunc();
 
     std::thread worker_;
     std::atomic<bool> running_{false};
+    std::atomic<bool> beep_requested_{false};
 
     std::mutex mu_;
     int tone_ms_ = 0;

@@ -124,7 +124,7 @@ The application will have two display windows, one for the driver and one for th
 
 calculation of current speed, with too little time passed since a start any speed calc will be too inaccurate to be useful, therefor within the polling loop of the counters a count should be remembered for about 2 seconds, by placing it into an array[10] of counter values and time polled, simply done on first poll the time of the poll and the value of the poll should be stored in the first position of the array. Each poll if more than 0.2 second has passed since the time in the first position of the array, then the array should be push down one, the last value lost, and the current value and time stored in the first array position. The 10th value of the array count and time should be available via class properties, to be used to calculate the current speed compared to the most recent poll, and not the value in the array position 1. If the time of the 10th position of the array is zero / empty / blank then the current speed should be shown as “--.—". Give a 20% time tolerance when checking the 10th position of the array contains a time over 80% of the total sampling period (i.e., age >= 1280ms, which is 80% of 2s minus 20% tolerance). 
 
-
+when any button is pressed make a "soft beep" sound for feedback
 
 **_Drivers display Window (1280 x 400) - dark theme only_**
 
@@ -259,15 +259,14 @@ Two-column layout with bottom navigation row:
 ```
 +-------------------------------------------------------------------+--------------------------------------+
 | LEFT PANEL (70%)                                                  | RIGHT PANEL (30%)                    |
-|  Segment xx  -  next segment in xxx,xxx m                         |                [exit]     hh:mm:ss   |
-|                                                                   |                                      |
+|                                                                   |                           hh:mm:ss   |
 |  Total  xxx,xxx  m  [reset]  mmm:ss                               |  Alarm in [2] [3] [4]                |
 |                                                                   |           [5] [6] [7]                |
 |  Trip   xxx,xxx  m  [reset]  mmm:ss                               |           [8] [9] [10]               |
 |                                                                   |          [11] [12] [13]              |
-|                                                                   |  x,xxx m to alarm  [clear]           |
+|  Next   xxx,xxx  m  [next/prev] xxx kph                           |  x,xxx m to alarm  [clear]           |
 +-------------------------------------------------------------------+--------------------------------------+
-|   [stage go]      [segments]       [next segment]       [calibration]       [date/time]                  |
+|   [stage go]      [segments]                            [calibration]       [date/time]                  |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
@@ -280,13 +279,15 @@ Layout:
 - 15px border around the entire screen
 - Two-column layout: left panel 70% width (~870px), right panel 30% width (~360px)
 - Left panel:
-  - Segment info at top (20px)
   - Total/Trip in a GtkGrid (15px below segment info, 10px gap between rows):
-    - Col 0: heading "Total" / "Trip" (48px bold monospace)
+    - Col 0: heading "Total" / "Trip" / "Next" (48px bold monospace)
     - Col 1: distance value, right-aligned, 7-char width (88px bold monospace)
     - Col 2: unit "m" (48px bold monospace), bottom-aligned
-    - Col 3: [reset] button (36px font), vertically centred
-    - Col 4: elapsed time mmm:ss (36px monospace, light grey #CCCCCC), vertically centred
+    - Col 3: [reset] button / Arrow pointing right (36px font), vertically centred
+    - Col 4: elapsed time mmm:ss (36px monospace, light grey #CCCCCC) or the speed of the next segment, vertically centred
+- Segment info on the third line "Next" showing the distance to the next segment in meters and the speed of the next segment, if there are no segments or past the end of the 
+      segments then the distance shows ---.--- and the speed shows ---.
+  
 - Right panel:
   - Rally clock (hh:mm:ss) at top, right-aligned (30px bold, minimum 8 chars wide)
   - Alarm buttons in four rows with 4px vertical gap — "Alarm in" label (20px) + [2]-[4] on first row, [5]-[7] on second row, [8]-[10] on third row, [11]-[13] on fourth row (22px font, 62x47px buttons)
@@ -294,10 +295,12 @@ Layout:
 - Navigation buttons spread across full-width bottom row (20px font, 43px tall):
   - stage go: resets Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green
   - segments: goes to Stage Setup
-  - next segment: advances segment, resets Trip
+ 
   - calibration: goes to Calibration screen
   - date/time: goes to Date/Time Setup screen
 - Reset buttons: reset respective counters and start time only
+- next/prev button is only active when within 500m of the begining of a segment or the end of the segment, when it is within 500m of the end of a segement 
+    the button displays "next", when it is within 500m of the start of a segment (not the first) it displays "prev" otherwise it displays "--->". The button allows the correction of distance of segment starts/ends, due to poor driving dicipline or mistakes in setting up the road book. When pressed within the 500m before a segment end then the segment distance should be reduced to the distance when the button was pressed. When press within 500m of the of the start of a segment (not the first) then the distance of the last segment should be extened to match the when the button was pressed.
 - [clear] button is only visible when an alarm is active
 - Distance alarm: co-pilot presses a km button (2-13) to set an alarm that many km ahead of the current total distance. The target is calculated in pulses and stored in the config file to survive Pi5 restart. When the total distance reaches the target, alarm.wav is played, then the alarm auto-clears after 5 seconds. The countdown ("x,xxx m to alarm") is shown in the right panel. The alarm check runs regardless of which co-pilot screen is visible. Press [clear] to cancel an active alarm.
 
@@ -312,7 +315,7 @@ On entry pre fill the date and time entry box's with the current date and time.
 All fonts to be 20px
 
 +----------------------------------------------------------------------------------------------------------+
-|                                       DATE/TIME SETUP                                                    |
+|                                       DATE/TIME SETUP                                   [exit app]       |
 +----------------------------------------------------------------------------------------------------------+
 |   System Clock:  yyyy/mm/dd  hh:mm:ss        30px                                                        |
 |                                                                                                          |

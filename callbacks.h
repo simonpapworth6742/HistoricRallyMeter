@@ -10,6 +10,7 @@ void on_total_reset(GtkWidget* widget, gpointer user_data);
 void on_trip_reset(GtkWidget* widget, gpointer user_data);
 void on_stage_go(GtkWidget* widget, gpointer user_data);
 void on_next_segment(GtkWidget* widget, gpointer user_data);
+void on_next_prev_segment(GtkWidget* widget, gpointer user_data);
 void on_show_segments(GtkWidget* widget, gpointer user_data);
 void on_show_calibration(GtkWidget* widget, gpointer user_data);
 void on_show_twinmaster(GtkWidget* widget, gpointer user_data);

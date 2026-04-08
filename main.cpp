@@ -251,6 +251,13 @@ static gboolean on_window_close_save(GtkWidget* G_GNUC_UNUSED widget, GdkEvent* 
     return TRUE;
 }
 
+static ToneGenerator* g_beepToneGen = nullptr;
+
+static gboolean on_button_beep(GSignalInvocationHint*, guint, const GValue*, gpointer) {
+    if (g_beepToneGen) g_beepToneGen->playBeep();
+    return TRUE;
+}
+
 int main(int argc, char* argv[]) {
     try {
         const int I2C_BUS = 1;
@@ -320,6 +327,13 @@ int main(int argc, char* argv[]) {
         std::cerr << "[DEBUG] Step 10: Creating copilot window..." << std::endl;
         app_data.copilotWindow = createCopilotWindow(&app_data);
         std::cerr << "[DEBUG] Step 10: Copilot window created OK" << std::endl;
+        
+        // Install global button-click beep
+        g_beepToneGen = app_data.toneGen;
+        guint clicked_id = g_signal_lookup("clicked", GTK_TYPE_BUTTON);
+        if (clicked_id > 0) {
+            g_signal_add_emission_hook(clicked_id, 0, on_button_beep, nullptr, nullptr);
+        }
         
         // Find 1280x400 displays sorted by priority (DSI first, then HDMI, lowest number first)
         GdkDisplay* display = gdk_display_get_default();

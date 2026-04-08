@@ -20,7 +20,7 @@ struct Segment {
     double target_speed_counts_per_hour = 0.0;   // counts per hour (recalculated on calibration change)
     double distance_m = 0.0;                      // user-entered distance in meters (calibration-independent)
     double distance_counts = 0.0;                 // distance in counts (recalculated on calibration change)
-    bool autoNext = false;
+    bool autoNext = true;
 };
 
 // Counter polling data with 10-second rolling average
@@ -73,6 +73,9 @@ struct AppData {
     GtkLabel* tripDistLabel;
     GtkLabel* tripTimeLabel;
     GtkLabel* segmentInfoLabel;
+    GtkLabel* nextDistLabel;
+    GtkLabel* nextSpeedLabel;
+    GtkWidget* nextPrevBtn;
     GtkLabel* alarmCountdownLabel;
     GtkWidget* alarmClearBtn;
     int64_t alarmSoundStartTime = 0;    // when doorbell started (0 = not ringing)
