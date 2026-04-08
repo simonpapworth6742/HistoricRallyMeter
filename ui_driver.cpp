@@ -420,23 +420,20 @@ void updateDriverDisplay(AppData* data) {
             }
             
             // Tone cadence: silent if beyond ±30s, otherwise match arrow brackets.
-            // Behind (speed_diff > 0, speed up): C6=1046.50, F6=1396.91, A6=1760.00
-            // Ahead  (speed_diff < 0, slow down): F6=1396.91, D6=1174.66, C6=1046.50
+            // Behind (speed_diff > 0, speed up): C6=1046.50
+            // Ahead  (speed_diff < 0, slow down): F6=1396.91
             if (data->toneGen) {
                 if (abs_seconds > 30.0 || num_arrows == 0) {
                     data->toneGen->setCadence(0, 0);
                 } else {
                     bool behind = (speed_diff > 0);
-                    double freq;
+                    double freq = behind ? 1046.50 : 1396.91;
                     int tone, silence;
                     if (num_arrows >= 3) {
-                        freq = behind ? 1760.00 : 1046.50;
                         tone = 700; silence = 300;
                     } else if (num_arrows == 2) {
-                        freq = behind ? 1396.91 : 1174.66;
                         tone = 500; silence = 200;
                     } else {
-                        freq = behind ? 1046.50 : 1396.91;
                         tone = 100; silence = 100;
                     }
                     data->toneGen->setCadence(tone, silence, freq);
