@@ -154,7 +154,7 @@ look at the example guage in gaugepilot-rallymaster-display.png
 
 ```
 +----------------------------------------------------------------------------------------------------------+
-|   Current↑↑↑↓↓↓         Total                       | [exit]               RALLY GAUGE            [KPH]  |
+|   Current↑↑↑↓↓↓         Total                       |                      RALLY GAUGE            [KPH]  |
 |    xx.x                 xx.x                        |            -10s ←───┬───→ +10s                     |
 |                                                     |                 ╱   │   ╲                          |
 |   Target                Trip                        |               ╱     ▲    ╲                         |
@@ -259,13 +259,13 @@ Two-column layout with bottom navigation row:
 ```
 +-------------------------------------------------------------------+--------------------------------------+
 | LEFT PANEL (70%)                                                  | RIGHT PANEL (30%)                    |
-|  Segment xx  -  next segment in xxx,xxx m                         |                          hh:mm:ss   |
+|  Segment xx  -  next segment in xxx,xxx m                         |                [exit]     hh:mm:ss   |
 |                                                                   |                                      |
-|  Total  xxx,xxx  m  [reset]  mmm:ss                               |  Alarm in [2] [3] [4]               |
-|                                                                   |           [5] [6] [7]               |
-|  Trip   xxx,xxx  m  [reset]  mmm:ss                               |           [8] [9] [10]              |
-|                                                                   |          [11] [12] [13]             |
-|                                                                   |  x,xxx m to alarm  [clear]          |
+|  Total  xxx,xxx  m  [reset]  mmm:ss                               |  Alarm in [2] [3] [4]                |
+|                                                                   |           [5] [6] [7]                |
+|  Trip   xxx,xxx  m  [reset]  mmm:ss                               |           [8] [9] [10]               |
+|                                                                   |          [11] [12] [13]              |
+|                                                                   |  x,xxx m to alarm  [clear]           |
 +-------------------------------------------------------------------+--------------------------------------+
 |   [stage go]      [segments]       [next segment]       [calibration]       [date/time]                  |
 +----------------------------------------------------------------------------------------------------------+
@@ -308,18 +308,24 @@ Layout:
 **4) Date/Time Setup Screen**
 
 ```
+On entry pre fill the date and time entry box's with the current date and time.
+All fonts to be 20px
+
 +----------------------------------------------------------------------------------------------------------+
 |                                       DATE/TIME SETUP                                                    |
 +----------------------------------------------------------------------------------------------------------+
-|   System Clock:  yyyy/mm/dd  hh:mm:ss          |   Rally Clock:  yyyy/mm/dd  hh:mm:ss                    |
+|   System Clock:  yyyy/mm/dd  hh:mm:ss        30px                                                        |
+|                                                                                                          |
+|   Rally  Clock:  yyyy/mm/dd  hh:mm:ss        30px                                                        |
 +----------------------------------------------------------------------------------------------------------+
-|   Set Rally Time:    Date: [__________]    Time: [__________]                                            |
+|   Set Rally Time:    Date: [__________]    Time: [__________]    30px                                        |
 +----------------------------------------------------------------------------------------------------------+
 |                                [set and save]                          [back]                            |
 +----------------------------------------------------------------------------------------------------------+
 ```
+Display a numeric keypad for entry on the right, it is a different keypad to other screens as it has "/" and ":" 
+on it, but no ";" and ".".
 
-              set and save                                          back
 
 ## Unit Tests
 

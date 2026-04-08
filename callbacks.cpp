@@ -171,6 +171,17 @@ void on_show_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     gtk_stack_set_visible_child_name(data->copilotStack, "datetime");
     updateDateTimeDisplay(data);
+
+    int64_t rally_ms = getRallyTime_ms(*data->state);
+    time_t rally_seconds = rally_ms / 1000;
+    struct tm* rally_tm = localtime(&rally_seconds);
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%04d/%02d/%02d",
+             rally_tm->tm_year + 1900, rally_tm->tm_mon + 1, rally_tm->tm_mday);
+    gtk_entry_set_text(data->dateEntry, buf);
+    snprintf(buf, sizeof(buf), "%02d:%02d:%02d",
+             rally_tm->tm_hour, rally_tm->tm_min, rally_tm->tm_sec);
+    gtk_entry_set_text(data->timeEntry, buf);
 }
 
 // Create numeric keypad widget
@@ -183,19 +194,46 @@ GtkWidget* createNumericKeypad(AppData* data) {
     
     for (int i = 0; i < 12; i++) {
         GtkWidget* btn = gtk_button_new_with_label(digits[i]);
-        gtk_widget_set_size_request(btn, 72, 58);
+        gtk_widget_set_size_request(btn, 60, 48);
         g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
         gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
     }
     
     // Row 5: Clear and Backspace
     GtkWidget* clearBtn = gtk_button_new_with_label("C");
-    gtk_widget_set_size_request(clearBtn, 72, 58);
+    gtk_widget_set_size_request(clearBtn, 60, 48);
     g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_keypad_clear), data);
     gtk_grid_attach(GTK_GRID(keypad), clearBtn, 0, 4, 1, 1);
     
     GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
-    gtk_widget_set_size_request(bkspBtn, 154, 58);
+    gtk_widget_set_size_request(bkspBtn, 130, 48);
+    g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
+    gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
+    
+    return keypad;
+}
+
+GtkWidget* createDateTimeKeypad(AppData* data) {
+    GtkWidget* keypad = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(keypad), 5);
+    gtk_grid_set_column_spacing(GTK_GRID(keypad), 5);
+    
+    const char* digits[] = {"7", "8", "9", "4", "5", "6", "1", "2", "3", "/", "0", ":"};
+    
+    for (int i = 0; i < 12; i++) {
+        GtkWidget* btn = gtk_button_new_with_label(digits[i]);
+        gtk_widget_set_size_request(btn, 60, 48);
+        g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
+        gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
+    }
+    
+    GtkWidget* clearBtn = gtk_button_new_with_label("C");
+    gtk_widget_set_size_request(clearBtn, 60, 48);
+    g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_keypad_clear), data);
+    gtk_grid_attach(GTK_GRID(keypad), clearBtn, 0, 4, 1, 1);
+    
+    GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
+    gtk_widget_set_size_request(bkspBtn, 130, 48);
     g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
     gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
     

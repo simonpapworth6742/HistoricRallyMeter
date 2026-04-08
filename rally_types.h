@@ -103,6 +103,7 @@ struct AppData {
     
     // Date/Time setup screen
     GtkWidget* dateTimeScreen;
+    GtkWidget* datetimeKeypad;
     GtkLabel* systemClockLabel;
     GtkLabel* rallyClockLabel;
     GtkEntry* dateEntry;

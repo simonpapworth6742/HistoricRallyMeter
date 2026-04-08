@@ -48,9 +48,6 @@ static void applyCopilotCSS() {
         ".reset-button { font-size: 36px; }"
         ".alarm-countdown { font-size: 28px; color: #FFFFFF; font-family: monospace; }"
         ".nav-button { font-size: 20px; }"
-        ".calibration-screen label { font-size: 20px; }"
-        ".calibration-screen button { font-size: 20px; }"
-        ".calibration-screen entry { font-size: 20px; }"
         ".segment-label { font-size: 18px; }"
         ".segment-row entry, .segment-row button, .segment-row checkbutton { font-size: 18px; }"
         ".new-segment-row label, .new-segment-row entry, .new-segment-row button, .new-segment-row checkbutton { font-size: 18px; }"
@@ -275,10 +272,17 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_size_request(rightPanel, 360, -1);
     gtk_box_pack_start(GTK_BOX(mainArea), rightPanel, FALSE, FALSE, 0);
     
-    // Rally clock at top-right
+    // Top row: exit button + rally clock
+    GtkWidget* topRightRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(rightPanel), topRightRow, FALSE, FALSE, 0);
+
+    GtkWidget* exitBtn = gtk_button_new_with_label("exit");
+    g_signal_connect(exitBtn, "clicked", G_CALLBACK(on_exit_app), data);
+    gtk_box_pack_start(GTK_BOX(topRightRow), exitBtn, FALSE, FALSE, 0);
+
     gtk_label_set_width_chars(data->copilotRallyClockLabel, 8);
     gtk_label_set_xalign(data->copilotRallyClockLabel, 1.0);
-    gtk_box_pack_start(GTK_BOX(rightPanel), GTK_WIDGET(data->copilotRallyClockLabel), FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(topRightRow), GTK_WIDGET(data->copilotRallyClockLabel), FALSE, FALSE, 0);
     
     // Alarm buttons: 3 rows of 4
     GtkWidget* alarmBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
@@ -575,51 +579,66 @@ GtkWidget* createCalibrationScreen(AppData* data) {
 
 // Create Date/Time Setup screen - horizontal layout for 1280x400
 GtkWidget* createDateTimeScreen(AppData* data) {
-    GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 15);
-    gtk_container_set_border_width(GTK_CONTAINER(screen), 15);
+    GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_style_context_add_class(gtk_widget_get_style_context(screen), "datetime-screen");
+    gtk_container_set_border_width(GTK_CONTAINER(screen), 10);
     
     // Title
     GtkWidget* titleLabel = gtk_label_new("DATE/TIME SETUP");
     gtk_style_context_add_class(gtk_widget_get_style_context(titleLabel), "title-label");
     gtk_box_pack_start(GTK_BOX(screen), titleLabel, FALSE, FALSE, 0);
     
-    // Row 1: System and Rally clock side by side
-    GtkWidget* clockRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 40);
-    gtk_box_pack_start(GTK_BOX(screen), clockRow, TRUE, TRUE, 0);
+    // Main horizontal container: left side for content, right side for keypad
+    GtkWidget* mainBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(screen), mainBox, TRUE, TRUE, 0);
     
-    // System clock section
+    // Left side: clocks, input, buttons
+    GtkWidget* leftBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_pack_start(GTK_BOX(mainBox), leftBox, TRUE, TRUE, 0);
+    
+    // System clock row (30px)
     GtkWidget* sysBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     GtkWidget* sysLabel = gtk_label_new("System Clock:");
+    gtk_style_context_add_class(gtk_widget_get_style_context(sysLabel), "clock-label");
     data->systemClockLabel = GTK_LABEL(gtk_label_new(""));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->systemClockLabel)), "info-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->systemClockLabel)), "clock-label");
     gtk_box_pack_start(GTK_BOX(sysBox), sysLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(sysBox), GTK_WIDGET(data->systemClockLabel), TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(sysBox), GTK_WIDGET(data->systemClockLabel), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(leftBox), sysBox, FALSE, FALSE, 0);
     
-    // Rally clock section
+    // Rally clock row (30px)
     GtkWidget* rallyBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget* rallyLabel = gtk_label_new("Rally Clock:");
+    GtkWidget* rallyLabel = gtk_label_new("Rally  Clock:");
+    gtk_style_context_add_class(gtk_widget_get_style_context(rallyLabel), "clock-label");
     data->rallyClockLabel = GTK_LABEL(gtk_label_new(""));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->rallyClockLabel)), "info-label");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->rallyClockLabel)), "clock-label");
     gtk_box_pack_start(GTK_BOX(rallyBox), rallyLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(rallyBox), GTK_WIDGET(data->rallyClockLabel), TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(rallyBox), GTK_WIDGET(data->rallyClockLabel), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(leftBox), rallyBox, FALSE, FALSE, 0);
     
-    gtk_box_pack_start(GTK_BOX(clockRow), sysBox, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(clockRow), rallyBox, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(leftBox), gtk_label_new(""), FALSE, FALSE, 0);
     
-    // Row 2: Input fields spread horizontally
+    // Input row
     GtkWidget* inputRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
-    gtk_box_pack_start(GTK_BOX(screen), inputRow, FALSE, FALSE, 10);
+    gtk_box_pack_start(GTK_BOX(leftBox), inputRow, FALSE, FALSE, 0);
     
     GtkWidget* setLabel = gtk_label_new("Set Rally Time:");
+    gtk_style_context_add_class(gtk_widget_get_style_context(setLabel), "clock-label");
     GtkWidget* dateLabel = gtk_label_new("Date:");
+    gtk_style_context_add_class(gtk_widget_get_style_context(dateLabel), "clock-label");
     data->dateEntry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_placeholder_text(data->dateEntry, "yyyy/mm/dd");
-    gtk_widget_set_size_request(GTK_WIDGET(data->dateEntry), 150, -1);
+    gtk_widget_set_size_request(GTK_WIDGET(data->dateEntry), 200, -1);
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->dateEntry)), "clock-label");
+    g_signal_connect(data->dateEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     
     GtkWidget* timeLabel = gtk_label_new("Time:");
+    gtk_style_context_add_class(gtk_widget_get_style_context(timeLabel), "clock-label");
     data->timeEntry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_placeholder_text(data->timeEntry, "hh:mm:ss");
-    gtk_widget_set_size_request(GTK_WIDGET(data->timeEntry), 120, -1);
+    gtk_widget_set_size_request(GTK_WIDGET(data->timeEntry), 160, -1);
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->timeEntry)), "clock-label");
+    g_signal_connect(data->timeEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     
     gtk_box_pack_start(GTK_BOX(inputRow), setLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(inputRow), dateLabel, FALSE, FALSE, 10);
@@ -627,9 +646,13 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(inputRow), timeLabel, FALSE, FALSE, 10);
     gtk_box_pack_start(GTK_BOX(inputRow), GTK_WIDGET(data->timeEntry), FALSE, FALSE, 0);
     
-    // Row 3: Buttons
+    // Right side: datetime keypad
+    data->datetimeKeypad = createDateTimeKeypad(data);
+    gtk_box_pack_end(GTK_BOX(mainBox), data->datetimeKeypad, FALSE, FALSE, 10);
+    
+    // Bottom: navigation buttons
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
-    gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 5);
     
     GtkWidget* saveBtn = gtk_button_new_with_label("set and save");
     GtkWidget* backBtn = gtk_button_new_with_label("back");
