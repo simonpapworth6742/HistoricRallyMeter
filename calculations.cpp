@@ -159,11 +159,10 @@ double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elaps
             remaining_time_s -= segment_time_s;
         } else {
             // Current segment - use remaining time at this segment's speed
-            // But remaining_time_s might be negative if we're ahead, so use actual time in current segment
-            if (remaining_time_s > 0) {
-                double partial_counts = (remaining_time_s / 3600.0) * seg.target_speed_counts_per_hour;
-                ideal_counts += partial_counts;
-            }
+            // remaining_time_s can be negative if ahead (drove earlier segments faster
+            // than target), which correctly reduces ideal_counts
+            double partial_counts = (remaining_time_s / 3600.0) * seg.target_speed_counts_per_hour;
+            ideal_counts += partial_counts;
         }
     }
     
