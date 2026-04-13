@@ -22,6 +22,7 @@ public:
     long segment_current_number = -1;  // -1 = no segment
     long rallyTimeOffset_ms = 0;  // offset in milliseconds
     long ahead_behind_zero_offset_ms = 0;  // manual offset for driver's ahead/behind display
+    uint64_t auto_start_rally_time_minutes = 0;  // minutes since 1/1/2020, 0 = not set
     std::vector<Segment> segments;
     
     // Up to 5 memory slots for storing/recalling segment setups

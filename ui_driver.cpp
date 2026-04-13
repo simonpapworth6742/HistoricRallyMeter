@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdio>
 #include <chrono>
+#include <ctime>
 #include <fstream>
 
 static std::string readCpuTemp() {
@@ -514,6 +515,41 @@ void updateDriverDisplay(AppData* data) {
         data->updateCount = 0;
         data->lastUpdateCountTime_ms = current_time_ms;
     }
+    
+    // Auto-start countdown overlay
+    if (data->state->auto_start_rally_time_minutes > 0 && !data->autoStartTriggered) {
+        struct tm epoch_tm = {};
+        epoch_tm.tm_year = 120;
+        epoch_tm.tm_mon = 0;
+        epoch_tm.tm_mday = 1;
+        int64_t epoch_ms = static_cast<int64_t>(mktime(&epoch_tm)) * 1000;
+        int64_t target_ms = epoch_ms + 
+            static_cast<int64_t>(data->state->auto_start_rally_time_minutes) * 60000;
+        int64_t diff_ms = target_ms - current_time_ms;
+        
+        if (diff_ms > 0 && diff_ms <= 24LL * 3600 * 1000) {
+            int total_secs = static_cast<int>(diff_ms / 1000);
+            int h = total_secs / 3600;
+            int m = (total_secs % 3600) / 60;
+            int s = total_secs % 60;
+            char buf[32];
+            snprintf(buf, sizeof(buf), "T- %02d:%02d:%02d", h, m, s);
+            gtk_label_set_text(data->countdownLabel, buf);
+            GtkWidget* frame = gtk_widget_get_parent(GTK_WIDGET(data->countdownLabel));
+            if (frame) gtk_widget_show(frame);
+        } else if (diff_ms <= 0 && diff_ms > -2000) {
+            GtkWidget* frame = gtk_widget_get_parent(GTK_WIDGET(data->countdownLabel));
+            if (frame) gtk_widget_hide(frame);
+            data->autoStartTriggered = true;
+            performStageGo(data);
+        } else {
+            GtkWidget* frame = gtk_widget_get_parent(GTK_WIDGET(data->countdownLabel));
+            if (frame) gtk_widget_hide(frame);
+        }
+    } else {
+        GtkWidget* frame = gtk_widget_get_parent(GTK_WIDGET(data->countdownLabel));
+        if (frame && gtk_widget_get_visible(frame)) gtk_widget_hide(frame);
+    }
 }
 
 // Apply CSS styling for large fonts
@@ -547,9 +583,13 @@ GtkWidget* createDriverWindow(AppData* data) {
     
     applyDriverCSS(window);
     
+    // Top-level overlay for countdown display
+    data->countdownOverlay = gtk_overlay_new();
+    gtk_container_add(GTK_CONTAINER(window), data->countdownOverlay);
+    
     GtkWidget* mainBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_container_set_border_width(GTK_CONTAINER(mainBox), 2);
-    gtk_container_add(GTK_CONTAINER(window), mainBox);
+    gtk_container_add(GTK_CONTAINER(data->countdownOverlay), mainBox);
     
     // Main content: left side speeds + footer, right side gauge (full height)
     GtkWidget* contentBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
@@ -675,6 +715,37 @@ GtkWidget* createDriverWindow(AppData* data) {
     // Hidden labels still needed by update logic
     data->aheadBehindLabel = GTK_LABEL(gtk_label_new(""));
     data->gaugeTargetLabel = GTK_LABEL(gtk_label_new(""));
+    
+    // Countdown overlay label in an event box for background styling
+    data->countdownLabel = GTK_LABEL(gtk_label_new("T- 00:00:00"));
+    gtk_widget_set_margin_start(GTK_WIDGET(data->countdownLabel), 30);
+    gtk_widget_set_margin_end(GTK_WIDGET(data->countdownLabel), 30);
+    gtk_widget_set_margin_top(GTK_WIDGET(data->countdownLabel), 15);
+    gtk_widget_set_margin_bottom(GTK_WIDGET(data->countdownLabel), 15);
+    
+    GtkWidget* countdownBox = gtk_event_box_new();
+    gtk_container_add(GTK_CONTAINER(countdownBox), GTK_WIDGET(data->countdownLabel));
+    gtk_widget_set_halign(countdownBox, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(countdownBox, GTK_ALIGN_CENTER);
+    
+    GtkCssProvider* cdProvider = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(cdProvider,
+        ".countdown-box { border: 4px solid white; background-color: #000000; }"
+        ".countdown-label { font-size: 60px; font-family: monospace; color: white; font-weight: bold; }",
+        -1, nullptr);
+    gtk_style_context_add_provider(
+        gtk_widget_get_style_context(countdownBox),
+        GTK_STYLE_PROVIDER(cdProvider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 50);
+    gtk_style_context_add_class(gtk_widget_get_style_context(countdownBox), "countdown-box");
+    gtk_style_context_add_provider(
+        gtk_widget_get_style_context(GTK_WIDGET(data->countdownLabel)),
+        GTK_STYLE_PROVIDER(cdProvider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 50);
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->countdownLabel)), "countdown-label");
+    g_object_unref(cdProvider);
+    
+    gtk_overlay_add_overlay(GTK_OVERLAY(data->countdownOverlay), countdownBox);
+    gtk_widget_show_all(countdownBox);
+    gtk_widget_hide(countdownBox);
     
     return window;
 }

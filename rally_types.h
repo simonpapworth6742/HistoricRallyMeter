@@ -113,6 +113,18 @@ struct AppData {
     GtkEntry* dateEntry;
     GtkEntry* timeEntry;
     
+    // Auto Start setup screen
+    GtkWidget* autoStartScreen;
+    GtkLabel* autoStartRallyClockLabel;
+    GtkLabel* autoStartTimeLabel;
+    GtkEntry* autoStartTimeEntry;
+    GtkWidget* autoStartKeypad;
+    
+    // Driver countdown overlay
+    GtkWidget* countdownOverlay;
+    GtkLabel* countdownLabel;
+    bool autoStartTriggered = false;
+    
     // Tone generator for speed adjustment alerts
     ToneGenerator* toneGen = nullptr;
     

@@ -120,6 +120,12 @@ void updateCopilotDisplay(AppData* data) {
         return;
     }
     
+    // Update auto-start screen if visible
+    if (visible_child == data->autoStartScreen) {
+        updateAutoStartDisplay(data);
+        return;
+    }
+    
     // Only update TwinMaster if it's visible
     if (visible_child != data->twinMasterScreen) {
         return;
@@ -172,7 +178,8 @@ void updateCopilotDisplay(AppData* data) {
             current_poll.cntr1, current_poll.cntr2,
             data->state->segment_start_cntr1, data->state->segment_start_cntr2);
         int64_t remaining_counts = cur_seg.distance_counts - seg_count_diff;
-        long remaining_m = countsToCentimeters(remaining_counts, data->state->calibration) / 100;
+        long remaining_cm = countsToCentimeters(remaining_counts, data->state->calibration);
+        long remaining_m = (remaining_cm >= 0) ? (remaining_cm + 99) / 100 : -((-remaining_cm) / 100);
         long travelled_m = countsToCentimeters(seg_count_diff, data->state->calibration) / 100;
         
         ss.str("");
@@ -731,6 +738,80 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     return screen;
 }
 
+// Create Auto Start Setup screen
+GtkWidget* createAutoStartScreen(AppData* data) {
+    GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_style_context_add_class(gtk_widget_get_style_context(screen), "datetime-screen");
+    gtk_container_set_border_width(GTK_CONTAINER(screen), 10);
+    
+    GtkWidget* titleLabel = gtk_label_new("AUTO START SETUP");
+    gtk_style_context_add_class(gtk_widget_get_style_context(titleLabel), "title-label");
+    gtk_box_pack_start(GTK_BOX(screen), titleLabel, FALSE, FALSE, 0);
+    
+    GtkWidget* mainBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(screen), mainBox, TRUE, TRUE, 0);
+    
+    GtkWidget* leftBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_box_pack_start(GTK_BOX(mainBox), leftBox, TRUE, TRUE, 0);
+    
+    // Rally clock row
+    GtkWidget* rallyRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget* rallyLabel = gtk_label_new("Rally  Clock:");
+    gtk_style_context_add_class(gtk_widget_get_style_context(rallyLabel), "clock-label");
+    data->autoStartRallyClockLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->autoStartRallyClockLabel)), "clock-label");
+    gtk_box_pack_start(GTK_BOX(rallyRow), rallyLabel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(rallyRow), GTK_WIDGET(data->autoStartRallyClockLabel), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(leftBox), rallyRow, FALSE, FALSE, 0);
+    
+    // Auto start current value row
+    GtkWidget* autoRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget* autoLabel = gtk_label_new("Auto Start:");
+    gtk_style_context_add_class(gtk_widget_get_style_context(autoLabel), "clock-label");
+    data->autoStartTimeLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->autoStartTimeLabel)), "clock-label");
+    gtk_box_pack_start(GTK_BOX(autoRow), autoLabel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(autoRow), GTK_WIDGET(data->autoStartTimeLabel), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(leftBox), autoRow, FALSE, FALSE, 0);
+    
+    gtk_box_pack_start(GTK_BOX(leftBox), gtk_label_new(""), FALSE, FALSE, 0);
+    
+    // Input row
+    GtkWidget* inputRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+    GtkWidget* setLabel = gtk_label_new("Set Auto Start time within 3 Hours:");
+    gtk_style_context_add_class(gtk_widget_get_style_context(setLabel), "clock-label");
+    data->autoStartTimeEntry = GTK_ENTRY(gtk_entry_new());
+    gtk_entry_set_placeholder_text(data->autoStartTimeEntry, "hh:mm:ss");
+    gtk_widget_set_size_request(GTK_WIDGET(data->autoStartTimeEntry), 200, -1);
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->autoStartTimeEntry)), "clock-label");
+    g_signal_connect(data->autoStartTimeEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
+    gtk_box_pack_start(GTK_BOX(inputRow), setLabel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(inputRow), GTK_WIDGET(data->autoStartTimeEntry), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(leftBox), inputRow, FALSE, FALSE, 0);
+    
+    // Right side: datetime keypad (same layout)
+    data->autoStartKeypad = createDateTimeKeypad(data);
+    gtk_box_pack_end(GTK_BOX(mainBox), data->autoStartKeypad, FALSE, FALSE, 10);
+    
+    // Bottom: navigation buttons
+    GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
+    gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 5);
+    
+    GtkWidget* clearBtn = gtk_button_new_with_label("clear");
+    GtkWidget* setBtn = gtk_button_new_with_label("set");
+    GtkWidget* backBtn = gtk_button_new_with_label("back");
+    
+    g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_autostart_clear), data);
+    g_signal_connect(setBtn, "clicked", G_CALLBACK(on_autostart_set), data);
+    g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
+    
+    gtk_box_pack_start(GTK_BOX(buttonBox), clearBtn, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(buttonBox), setBtn, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(buttonBox), backBtn, TRUE, TRUE, 0);
+    
+    return screen;
+}
+
 GtkWidget* createCopilotWindow(AppData* data) {
     GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "Co-Pilot Display");
@@ -751,12 +832,14 @@ GtkWidget* createCopilotWindow(AppData* data) {
     data->stageSetupScreen = createStageSetupScreen(data);
     data->calibrationScreen = createCalibrationScreen(data);
     data->dateTimeScreen = createDateTimeScreen(data);
+    data->autoStartScreen = createAutoStartScreen(data);
     
     // Add screens to stack
     gtk_stack_add_named(data->copilotStack, data->twinMasterScreen, "twinmaster");
     gtk_stack_add_named(data->copilotStack, data->stageSetupScreen, "stagesetup");
     gtk_stack_add_named(data->copilotStack, data->calibrationScreen, "calibration");
     gtk_stack_add_named(data->copilotStack, data->dateTimeScreen, "datetime");
+    gtk_stack_add_named(data->copilotStack, data->autoStartScreen, "autostart");
     
     // Show TwinMaster by default
     gtk_stack_set_visible_child_name(data->copilotStack, "twinmaster");

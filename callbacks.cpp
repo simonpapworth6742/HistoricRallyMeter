@@ -74,6 +74,40 @@ static void applyDialogStyle(GtkWidget* dialog) {
     g_object_unref(provider);
 }
 
+void performStageGo(AppData* data) {
+    auto current_poll = data->poller->getMostRecent();
+    int64_t current_time = getRallyTime_ms(*data->state);
+
+    data->state->total_start_cntr1 = current_poll.cntr1;
+    data->state->total_start_cntr2 = current_poll.cntr2;
+    data->state->total_start_time_ms = current_time;
+
+    data->state->trip_start_cntr1 = current_poll.cntr1;
+    data->state->trip_start_cntr2 = current_poll.cntr2;
+    data->state->trip_start_time_ms = current_time;
+
+    data->state->segment_start_cntr1 = current_poll.cntr1;
+    data->state->segment_start_cntr2 = current_poll.cntr2;
+    data->state->segment_start_time_ms = current_time;
+
+    if (!data->state->segments.empty()) {
+        data->state->segment_current_number = 0;
+    }
+
+    data->gaugeScale = 0;
+    data->gaugeScaleChangeTime = 0;
+    data->aheadBehindSeconds = 0.0;
+    data->smoothedSpeed = -1.0;
+    data->state->ahead_behind_zero_offset_ms = 0;
+    data->autoStartTriggered = false;
+    
+    if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
+    
+    ConfigFile::save(*data->state);
+}
+
+static const int RESPONSE_AUTO_START = 99;
+
 void on_stage_go(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     
@@ -82,6 +116,7 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
         GTK_WINDOW(gtk_widget_get_toplevel(widget)),
         GTK_DIALOG_MODAL,
         "Yes", GTK_RESPONSE_YES,
+        "Auto start", RESPONSE_AUTO_START,
         "No", GTK_RESPONSE_NO,
         nullptr);
     
@@ -98,41 +133,11 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
     gint response = gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
     
-    if (response != GTK_RESPONSE_YES) return;
-    
-    auto current_poll = data->poller->getMostRecent();
-    int64_t current_time = getRallyTime_ms(*data->state);
-
-    // Reset Total
-    data->state->total_start_cntr1 = current_poll.cntr1;
-    data->state->total_start_cntr2 = current_poll.cntr2;
-    data->state->total_start_time_ms = current_time;
-
-    // Reset Trip
-    data->state->trip_start_cntr1 = current_poll.cntr1;
-    data->state->trip_start_cntr2 = current_poll.cntr2;
-    data->state->trip_start_time_ms = current_time;
-
-    // Reset Segment
-    data->state->segment_start_cntr1 = current_poll.cntr1;
-    data->state->segment_start_cntr2 = current_poll.cntr2;
-    data->state->segment_start_time_ms = current_time;
-
-    // Reset to first segment if segments exist
-    if (!data->state->segments.empty()) {
-        data->state->segment_current_number = 0;
+    if (response == GTK_RESPONSE_YES) {
+        performStageGo(data);
+    } else if (response == RESPONSE_AUTO_START) {
+        on_show_autostart(widget, user_data);
     }
-
-    // Reset gauge, speed filter, and driver zero offset
-    data->gaugeScale = 0;
-    data->gaugeScaleChangeTime = 0;
-    data->aheadBehindSeconds = 0.0;
-    data->smoothedSpeed = -1.0;
-    data->state->ahead_behind_zero_offset_ms = 0;
-    
-    if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
-    
-    ConfigFile::save(*data->state);
 }
 
 static const int RESPONSE_RESET_ZERO = 100;
@@ -877,4 +882,107 @@ void on_save_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
             updateDateTimeDisplay(data);
         }
     }
+}
+
+// Epoch for auto_start: 2020-01-01 00:00:00 local time
+static int64_t getAutoStartEpochMs() {
+    struct tm epoch_tm = {};
+    epoch_tm.tm_year = 120;  // 2020
+    epoch_tm.tm_mon = 0;
+    epoch_tm.tm_mday = 1;
+    return static_cast<int64_t>(mktime(&epoch_tm)) * 1000;
+}
+
+void on_show_autostart(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    gtk_stack_set_visible_child_name(data->copilotStack, "autostart");
+    data->activeEntry = data->autoStartTimeEntry;
+    
+    if (data->state->auto_start_rally_time_minutes > 0) {
+        int64_t target_ms = getAutoStartEpochMs() + 
+            static_cast<int64_t>(data->state->auto_start_rally_time_minutes) * 60000;
+        time_t target_s = target_ms / 1000;
+        struct tm* t = localtime(&target_s);
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);
+        gtk_entry_set_text(data->autoStartTimeEntry, buf);
+    } else {
+        gtk_entry_set_text(data->autoStartTimeEntry, "");
+    }
+    
+    updateAutoStartDisplay(data);
+}
+
+void updateAutoStartDisplay(AppData* data) {
+    int64_t rally_ms = getRallyTime_ms(*data->state);
+    time_t rally_s = rally_ms / 1000;
+    struct tm* rally_tm = localtime(&rally_s);
+    
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%04d/%02d/%02d  %02d:%02d:%02d",
+             rally_tm->tm_year + 1900, rally_tm->tm_mon + 1, rally_tm->tm_mday,
+             rally_tm->tm_hour, rally_tm->tm_min, rally_tm->tm_sec);
+    gtk_label_set_text(data->autoStartRallyClockLabel, buf);
+    
+    if (data->state->auto_start_rally_time_minutes > 0) {
+        int64_t target_ms = getAutoStartEpochMs() + 
+            static_cast<int64_t>(data->state->auto_start_rally_time_minutes) * 60000;
+        time_t target_s = target_ms / 1000;
+        struct tm* t = localtime(&target_s);
+        snprintf(buf, sizeof(buf), "%04d/%02d/%02d  %02d:%02d:%02d",
+                 t->tm_year + 1900, t->tm_mon + 1, t->tm_mday,
+                 t->tm_hour, t->tm_min, t->tm_sec);
+        gtk_label_set_text(data->autoStartTimeLabel, buf);
+    } else {
+        gtk_label_set_text(data->autoStartTimeLabel, "");
+    }
+}
+
+void on_autostart_set(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    
+    const char* time_str = gtk_entry_get_text(data->autoStartTimeEntry);
+    if (!time_str || strlen(time_str) == 0) return;
+    
+    int hour = 0, min = 0, sec = 0;
+    if (sscanf(time_str, "%d:%d:%d", &hour, &min, &sec) < 2) return;
+    
+    if (hour < 0 || hour > 23 || min < 0 || min > 59 || sec < 0 || sec > 59) return;
+    
+    // Build target time: use today's rally date with the entered time
+    int64_t rally_ms = getRallyTime_ms(*data->state);
+    time_t rally_s = rally_ms / 1000;
+    struct tm target_tm = *localtime(&rally_s);
+    target_tm.tm_hour = hour;
+    target_tm.tm_min = min;
+    target_tm.tm_sec = sec;
+    
+    int64_t target_ms = static_cast<int64_t>(mktime(&target_tm)) * 1000;
+    int64_t diff_ms = target_ms - rally_ms;
+    
+    if (diff_ms <= 0) {
+        gtk_entry_set_text(data->autoStartTimeEntry, "Error: time in past");
+        return;
+    }
+    if (diff_ms > 3 * 3600 * 1000) {
+        gtk_entry_set_text(data->autoStartTimeEntry, "Error: >3 hours");
+        return;
+    }
+    
+    int64_t epoch_ms = getAutoStartEpochMs();
+    data->state->auto_start_rally_time_minutes = 
+        static_cast<uint64_t>((target_ms - epoch_ms) / 60000);
+    data->autoStartTriggered = false;
+    
+    ConfigFile::save(*data->state);
+    updateAutoStartDisplay(data);
+}
+
+void on_autostart_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->state->auto_start_rally_time_minutes = 0;
+    data->autoStartTriggered = false;
+    ConfigFile::save(*data->state);
+    gtk_entry_set_text(data->autoStartTimeEntry, "");
+    updateAutoStartDisplay(data);
 }

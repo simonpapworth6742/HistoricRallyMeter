@@ -98,7 +98,8 @@ time segment_start_time – the time to at least the nearest ms that the last se
 long segment_current_number – the current segment of the stage so defining the current target average speed displayed. On startup/empty segments, segment_current_number defaults to -1; blank Seg/target/±/ETA/next line on drivers display.
  
 long rallyTimeOffset – ms offset of rally time to operating system time, defaults to 0
-long ahead_behind_zero_offset_ms - ms offset (+ or -) of the drivers ahead/behind caculation,defaults to zero and on stage-go. Set in the twinmaster display
+long ahead_behind_zero_offset_ms - ms offset (+ or -) of the drivers ahead/behind caculation,defaults to zero and on stage-go. Set in the twinmaster display.
+ulong auto_start_stage_at_rally_time - the date time in munites the stage should automatially be started in rally time, stored as an offset from 1/1/2020.
 structure segment[]  - Stage segments contain target speed over distance segments of the stage, and if manual or automatic progression to the next segment is required. Defaults to no segments.
 double target_speed_kph - the actual speed requested for this segment, this does not change when the calibration changes
 double target_speed – stored in number of counts per hour via the calibration (high precision floating point). This is recaculated when calibration changes
@@ -137,6 +138,8 @@ Indicate the change in acceleration required green / red arrows to the driver wi
 The tones generated should be piano C6,C6,C6 when behind and F6,F6,F6 when ahead.The tone generator should apply a 5ms fade-in/fade-out envelope at every tone-to-silence and silence-to-tone transition
 
 Updates per second is the number of times this display has been updated in a second, Rolling count of driver display render/update calls over the last full second.
+
+If auto_start_stage_at_rally_time relative to rally time is in the future by less than 24 hours, then overlayed on the drivers display in 30px a count down clock "T- hh:mm:ss" with a thick white border, when zero seconds is reached the "stage go" rountine must be triggered as if the co-piliot had pressed and confirmed "stage go".
 
 **Rally Gauge Display:**
 The ahead/behind timing is displayed as a 180-degree semicircular gauge (rally gauge style):
@@ -286,15 +289,14 @@ Layout:
     - Col 2: unit "m" (48px bold monospace), bottom-aligned
     - Col 3: [reset] button / Arrow pointing right (36px font), vertically centred
     - Col 4: elapsed time mmm:ss (36px monospace, light grey #CCCCCC) or the speed of the next segment, vertically centred
-- Segment info on the third line "Next" showing the distance to the next segment in meters and the speed of the next segment, if there are no segments the next line shows ---.--- and the speed shows ---. If past the end of the of the segments then the distance shows the negative meters past the end of the last segment and the speed shows "END".
+- Segment info on the third line "Next" showing the distance to the next segment in meters and the speed of the next segment, if there are no segments the next line shows ---.--- and the speed shows ---. If past the end of the of the segments then the distance shows the negative meters past the end of the last segment and the speed shows "END". Next rounds up to the nearest meter so that Total/Trip are in sync to it as they round down.
   
 - Right panel:
   - Rally clock (hh:mm:ss) at top, right-aligned (30px bold, minimum 8 chars wide)
   - Alarm buttons in four rows with 4px vertical gap — "Alarm in" label (20px) + [2]-[4] on first row, [5]-[7] on second row, [8]-[10] on third row, [11]-[13] on fourth row (22px font, 62x47px buttons)
   - Alarm countdown ("x,xxx m to alarm") and [clear] button below alarm buttons (28px white font #FFFFFF)
 - Navigation buttons spread across full-width bottom row (20px font, 43px tall):
-  - stage go: conformation dialog (with 30px text and buttons) with yes reseting Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green, 
-    and zero's the ahead_behind_zero_offset_ms.
+  - stage go: conformation dialog (with 30px text and buttons), with "Auto start" option,  with yes reseting Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green, and zero's the ahead_behind_zero_offset_ms. "Auto start" option should go to the "Auto start setup screen.
   - segments: goes to Stage Setup
   - Adj. driver Zero - Displays the current ahead_behind_zero_offset_ms in the label and at the point  pressed, the drivers/ahead behind value including the current ahead_behind_zero_offset_ms is remembered so that it can be used in the conformation dialog (white border and 30px font) with the text "Adjust the ahead behind value by xx.xx seconds, currently xx.xx seconds" before being set in the ahead_behind_zero_offset_ms and changing the drivers ahead/behind guage. Along with Yes / No the dialog should have a "Reset to 0.0" option slighly distant from the Yes/No.
   - calibration: goes to Calibration screen
@@ -330,6 +332,31 @@ All fonts to be 20px
 Display a numeric keypad for entry on the right, it is a different keypad to other screens as it has "/" and ":" 
 on it, but no ";" and ".".
 
+
+**5) Auto Start Setup Screen**
+
+```
+On entry pre fill the time entry box's with the current auto start date and time.
+All fonts to be 20px
+
++----------------------------------------------------------------------------------------------------------+
+|                                       DATE/TIME SETUP                                   [exit app]       |
++----------------------------------------------------------------------------------------------------------+
+|   Rally  Clock:  yyyy/mm/dd  hh:mm:ss        30px                                                        |
+|                                                                                                          |
+|   Auto Start:    yyyy/mm/dd  hh:mm:ss        30px  (Blank date time if not set)                          |
++----------------------------------------------------------------------------------------------------------+
+|   Set Auto Start time within 3 Hours: [__________]    30px                                               |
++----------------------------------------------------------------------------------------------------------+
+|  [Clear]                              [set]                                             [back]           |
++----------------------------------------------------------------------------------------------------------+
+```
+Display a numeric keypad for entry on the right, it is the same keypad layout as the Date/Time setup screen.
+
+Only allow time to be entered in the 24 hour clock, display an error and don't allow the time to be set if more than 3 hours in advance.
+
+Clear - sets the auto_start time to 0, making it in the past and therefor it has no further effect.
+Set - sets the auto start time in the config file etc. recording the offeset as defined, the screen is updated to show the new values.
 
 ## Unit Tests
 
