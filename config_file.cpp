@@ -129,6 +129,8 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.segment_current_number = static_cast<int32_t>(extractLong(line));
         } else if (line.find("\"rallyTimeOffset_ms\"") != std::string::npos) {
             state.rallyTimeOffset_ms = extractLong(line);
+        } else if (line.find("\"ahead_behind_zero_offset_ms\"") != std::string::npos) {
+            state.ahead_behind_zero_offset_ms = extractLong(line);
         } else if (line.find("\"driver_window_x\"") != std::string::npos) {
             state.driver_window_x = static_cast<int>(extractLong(line));
         } else if (line.find("\"driver_window_y\"") != std::string::npos) {
@@ -188,6 +190,7 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"segment_start_time_ms\": " << state.segment_start_time_ms << ",\n";
     file << "  \"segment_current_number\": " << state.segment_current_number << ",\n";
     file << "  \"rallyTimeOffset_ms\": " << state.rallyTimeOffset_ms << ",\n";
+    file << "  \"ahead_behind_zero_offset_ms\": " << state.ahead_behind_zero_offset_ms << ",\n";
     file << "  \"driver_window_x\": " << state.driver_window_x << ",\n";
     file << "  \"driver_window_y\": " << state.driver_window_y << ",\n";
     file << "  \"driver_window_width\": " << state.driver_window_width << ",\n";

@@ -125,6 +125,14 @@ void updateCopilotDisplay(AppData* data) {
         return;
     }
     
+    // Update Adj. driver Zero button label
+    {
+        double offset_s = data->state->ahead_behind_zero_offset_ms / 1000.0;
+        char lbl[64];
+        snprintf(lbl, sizeof(lbl), "Adj. driver Zero (%.2fs)", offset_s);
+        gtk_button_set_label(GTK_BUTTON(data->adjZeroBtn), lbl);
+    }
+    
     // Total distance
     long total_m = countsToCentimeters(total_count_diff, data->state->calibration) / 100;
     int64_t total_duration_ms = current_time_ms - data->state->total_start_time_ms;
@@ -178,7 +186,7 @@ void updateCopilotDisplay(AppData* data) {
             ss << std::fixed << std::setprecision(0) << next_seg.target_speed_kph << " kph";
             gtk_label_set_text(data->nextSpeedLabel, ss.str().c_str());
         } else {
-            gtk_label_set_text(data->nextSpeedLabel, "---");
+            gtk_label_set_text(data->nextSpeedLabel, "END");
         }
         
         // next/prev button: active within 500m of segment end or start
@@ -196,9 +204,14 @@ void updateCopilotDisplay(AppData* data) {
             gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "--->");
             gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
         }
-    } else {
+    } else if (data->state->segments.empty()) {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextSpeedLabel, "---");
+        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "--->");
+        gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
+    } else {
+        gtk_label_set_text(data->nextDistLabel, "---.---");
+        gtk_label_set_text(data->nextSpeedLabel, "END");
         gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "--->");
         gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
     }
@@ -383,18 +396,20 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     
     GtkWidget* stageGoBtn = gtk_button_new_with_label("stage go");
     GtkWidget* segmentsBtn = gtk_button_new_with_label("segments");
+    data->adjZeroBtn = gtk_button_new_with_label("Adj. driver Zero (0.00s)");
     GtkWidget* calBtn = gtk_button_new_with_label("calibration");
     GtkWidget* datetimeBtn = gtk_button_new_with_label("date/time");
-    
-    GtkWidget* navBtns[] = {stageGoBtn, segmentsBtn, calBtn, datetimeBtn};
+
+    GtkWidget* navBtns[] = {stageGoBtn, segmentsBtn, data->adjZeroBtn, calBtn, datetimeBtn};
     for (auto* btn : navBtns) {
         gtk_style_context_add_class(gtk_widget_get_style_context(btn), "nav-button");
         gtk_widget_set_size_request(btn, -1, 43);
         gtk_box_pack_start(GTK_BOX(buttonBox), btn, TRUE, TRUE, 0);
     }
-    
+
     g_signal_connect(stageGoBtn, "clicked", G_CALLBACK(on_stage_go), data);
     g_signal_connect(segmentsBtn, "clicked", G_CALLBACK(on_show_segments), data);
+    g_signal_connect(data->adjZeroBtn, "clicked", G_CALLBACK(on_adj_driver_zero), data);
     g_signal_connect(calBtn, "clicked", G_CALLBACK(on_show_calibration), data);
     g_signal_connect(datetimeBtn, "clicked", G_CALLBACK(on_show_datetime), data);
     

@@ -98,6 +98,7 @@ time segment_start_time – the time to at least the nearest ms that the last se
 long segment_current_number – the current segment of the stage so defining the current target average speed displayed. On startup/empty segments, segment_current_number defaults to -1; blank Seg/target/±/ETA/next line on drivers display.
  
 long rallyTimeOffset – ms offset of rally time to operating system time, defaults to 0
+long ahead_behind_zero_offset_ms - ms offset (+ or -) of the drivers ahead/behind caculation,defaults to zero and on stage-go. Set in the twinmaster display
 structure segment[]  - Stage segments contain target speed over distance segments of the stage, and if manual or automatic progression to the next segment is required. Defaults to no segments.
 double target_speed_kph - the actual speed requested for this segment, this does not change when the calibration changes
 double target_speed – stored in number of counts per hour via the calibration (high precision floating point). This is recaculated when calibration changes
@@ -128,7 +129,7 @@ when any button is pressed make a "soft beep" sound for feedback
 
 **_Drivers display Window (1280 x 400) - dark theme only_**
 
-The drivers display window is wide (1280px) and shallow (400px). It shows the average speed since the last reset of the Total, the current speed calculated from approximately the last 10 seconds of driving, the average speed since the last Trip reset, and the average speed since the start of the current segment. The target speed for the current segment and how many seconds ahead or behind target average speed by calculating how many counts difference there is between the actual count now and the count that it should be based upon the time since stage start taking account of the differing speeds in segments already completed and the target speed for the current segment. Along with the ETA = remaining segment distance / (last-10s average speed) to the next segment. If there is no current segment defined or more than 1000m past end of the last segment, then display "--.--" for Seg. For the next segment line of the display hide it if there is no next segment and if last-10s speed = 0: '--.--'; negative remaining: 'Over by xx:xx:xx'.
+The drivers display window is wide (1280px) and shallow (400px). It shows the average speed since the last reset of the Total, the current speed calculated from approximately the last 10 seconds of driving, the average speed since the last Trip reset, and the average speed since the start of the current segment. The target speed for the current segment and how many seconds ahead or behind target average speed by calculating how many counts difference there is between the actual count now and the count that it should be based upon the time since stage start taking account of the differing speeds in segments already completed and the target speed for the current segment, there is also an ahead_behind_zero_offset_ms value which is a simple addtion to the actual ahead/behind value. Along with the ETA = remaining segment distance / (last-10s average speed) to the next segment. If there is no current segment defined or more than 1000m past end of the last segment, then display "--.--" for Seg. For the next segment line of the display hide it if there is no next segment and if last-10s speed = 0: '--.--'; negative remaining: 'Over by xx:xx:xx'.
 
 Seconds ahead/behind formula (high precision): ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_h; diff = actual - ideal; seconds = diff / (target_counts_h / 3600.0). positive numbers means travelling too fast. All target speed and ETA calculations use high precision (double) floating point arithmetic throughout. If more than +- 0.1 ahead/behind then after the seconds ahead/behind value calculate the increase in speed needed (acceleration/deceleration) to exactly match the target in the next 500 meters. Use up to 3 green up arrows to indicate the requirement to speed up, and up to 3 red down arrows to show the requirement to slow down next to the Current Speed. If speed adjustment needed is less than 3 kph show one arrow, between 3 and 10 show two arrows, and more than 10 show 3 arrows. 
 
@@ -266,7 +267,7 @@ Two-column layout with bottom navigation row:
 |                                                                   |          [11] [12] [13]              |
 |  Next   xxx,xxx  m  [next/prev] xxx kph                           |  x,xxx m to alarm  [clear]           |
 +-------------------------------------------------------------------+--------------------------------------+
-|   [stage go]      [segments]                            [calibration]       [date/time]                  |
+|   [stage go]      [segments]   [Adj. driver Zero (xx.xxs)]      [calibration]        [date/time]                  |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
@@ -285,17 +286,17 @@ Layout:
     - Col 2: unit "m" (48px bold monospace), bottom-aligned
     - Col 3: [reset] button / Arrow pointing right (36px font), vertically centred
     - Col 4: elapsed time mmm:ss (36px monospace, light grey #CCCCCC) or the speed of the next segment, vertically centred
-- Segment info on the third line "Next" showing the distance to the next segment in meters and the speed of the next segment, if there are no segments or past the end of the 
-      segments then the distance shows ---.--- and the speed shows ---.
+- Segment info on the third line "Next" showing the distance to the next segment in meters and the speed of the next segment, if there are no segments the next line shows ---.--- and the speed shows ---. If past the end of the of the segments then the distance shows the negative meters past the end of the last segment and the speed shows "END".
   
 - Right panel:
   - Rally clock (hh:mm:ss) at top, right-aligned (30px bold, minimum 8 chars wide)
   - Alarm buttons in four rows with 4px vertical gap — "Alarm in" label (20px) + [2]-[4] on first row, [5]-[7] on second row, [8]-[10] on third row, [11]-[13] on fourth row (22px font, 62x47px buttons)
   - Alarm countdown ("x,xxx m to alarm") and [clear] button below alarm buttons (28px white font #FFFFFF)
 - Navigation buttons spread across full-width bottom row (20px font, 43px tall):
-  - stage go: resets Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green
+  - stage go: conformation dialog (with 30px text and buttons) with yes reseting Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green, 
+    and zero's the ahead_behind_zero_offset_ms.
   - segments: goes to Stage Setup
- 
+  - Adj. driver Zero - Displays the current ahead_behind_zero_offset_ms in the label and at the point  pressed, the drivers/ahead behind value including the current ahead_behind_zero_offset_ms is remembered so that it can be used in the conformation dialog (white border and 30px font) with the text "Adjust the ahead behind value by xx.xx seconds, currently xx.xx seconds" before being set in the ahead_behind_zero_offset_ms and changing the drivers ahead/behind guage. Along with Yes / No the dialog should have a "Reset to 0.0" option slighly distant from the Yes/No.
   - calibration: goes to Calibration screen
   - date/time: goes to Date/Time Setup screen
 - Reset buttons: reset respective counters and start time only

@@ -36,6 +36,7 @@ void on_memory_recall(GtkWidget* widget, gpointer user_data);
 void on_memory_clear(GtkWidget* widget, gpointer user_data);
 void on_alarm_set(GtkWidget* widget, gpointer user_data);
 void on_alarm_clear(GtkWidget* widget, gpointer user_data);
+void on_adj_driver_zero(GtkWidget* widget, gpointer user_data);
 void on_set_sensor_1(GtkWidget* widget, gpointer user_data);
 void on_set_sensor_both(GtkWidget* widget, gpointer user_data);
 void on_exit_app(GtkWidget* widget, gpointer user_data);

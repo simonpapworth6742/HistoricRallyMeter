@@ -76,6 +76,7 @@ struct AppData {
     GtkLabel* nextDistLabel;
     GtkLabel* nextSpeedLabel;
     GtkWidget* nextPrevBtn;
+    GtkWidget* adjZeroBtn;
     GtkLabel* alarmCountdownLabel;
     GtkWidget* alarmClearBtn;
     int64_t alarmSoundStartTime = 0;    // when doorbell started (0 = not ringing)

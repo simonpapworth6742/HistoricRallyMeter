@@ -350,6 +350,7 @@ void updateDriverDisplay(AppData* data) {
             current_poll.cntr1, current_poll.cntr2,
             data->state->total_start_cntr1, data->state->total_start_cntr2);
         double seconds = calculateAheadBehindFromStageStart(*data->state, current_time_ms, total_count_diff_ab);
+        seconds += data->state->ahead_behind_zero_offset_ms / 1000.0;
         
         // Store for gauge
         data->aheadBehindSeconds = seconds;

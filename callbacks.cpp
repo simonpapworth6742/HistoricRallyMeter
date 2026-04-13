@@ -13,6 +13,7 @@
 #include <ctime>
 #include <cstring>
 #include <chrono>
+#include <functional>
 
 gboolean on_window_delete(G_GNUC_UNUSED GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, G_GNUC_UNUSED gpointer user_data) {
     gtk_main_quit();
@@ -50,40 +51,135 @@ void on_trip_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     ConfigFile::save(*data->state);
 }
 
-void on_stage_go(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+static void applyDialogStyle(GtkWidget* dialog) {
+    GtkCssProvider* provider = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(provider,
+        "* { font-size: 30px; }"
+        "dialog { border: 3px solid white; }", -1, nullptr);
+    
+    std::function<void(GtkWidget*)> apply = [&](GtkWidget* w) {
+        gtk_style_context_add_provider(
+            gtk_widget_get_style_context(w),
+            GTK_STYLE_PROVIDER(provider),
+            GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 100);
+        if (GTK_IS_CONTAINER(w)) {
+            gtk_container_forall(GTK_CONTAINER(w),
+                [](GtkWidget* child, gpointer data) {
+                    auto& fn = *static_cast<std::function<void(GtkWidget*)>*>(data);
+                    fn(child);
+                }, &apply);
+        }
+    };
+    apply(dialog);
+    g_object_unref(provider);
+}
+
+void on_stage_go(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    
+    GtkWidget* dialog = gtk_dialog_new_with_buttons(
+        "Confirm Stage Go",
+        GTK_WINDOW(gtk_widget_get_toplevel(widget)),
+        GTK_DIALOG_MODAL,
+        "Yes", GTK_RESPONSE_YES,
+        "No", GTK_RESPONSE_NO,
+        nullptr);
+    
+    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(content), 20);
+    
+    GtkWidget* label = gtk_label_new("Stage Go?\n\nThis will reset Total, Trip,\nand Segment counters.");
+    gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
+    gtk_box_pack_start(GTK_BOX(content), label, TRUE, TRUE, 10);
+    gtk_widget_show(label);
+    
+    applyDialogStyle(dialog);
+    
+    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    
+    if (response != GTK_RESPONSE_YES) return;
+    
     auto current_poll = data->poller->getMostRecent();
     int64_t current_time = getRallyTime_ms(*data->state);
-    
+
     // Reset Total
     data->state->total_start_cntr1 = current_poll.cntr1;
     data->state->total_start_cntr2 = current_poll.cntr2;
     data->state->total_start_time_ms = current_time;
-    
+
     // Reset Trip
     data->state->trip_start_cntr1 = current_poll.cntr1;
     data->state->trip_start_cntr2 = current_poll.cntr2;
     data->state->trip_start_time_ms = current_time;
-    
+
     // Reset Segment
     data->state->segment_start_cntr1 = current_poll.cntr1;
     data->state->segment_start_cntr2 = current_poll.cntr2;
     data->state->segment_start_time_ms = current_time;
-    
+
     // Reset to first segment if segments exist
     if (!data->state->segments.empty()) {
         data->state->segment_current_number = 0;
     }
-    
-    // Reset gauge and speed filter
+
+    // Reset gauge, speed filter, and driver zero offset
     data->gaugeScale = 0;
     data->gaugeScaleChangeTime = 0;
     data->aheadBehindSeconds = 0.0;
     data->smoothedSpeed = -1.0;
+    data->state->ahead_behind_zero_offset_ms = 0;
     
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
     
     ConfigFile::save(*data->state);
+}
+
+static const int RESPONSE_RESET_ZERO = 100;
+
+void on_adj_driver_zero(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    
+    double current_ahead_behind = data->aheadBehindSeconds;
+    double current_offset_s = data->state->ahead_behind_zero_offset_ms / 1000.0;
+    
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+        "Adjust the ahead/behind value\nby %.2f seconds,\ncurrently %.2f seconds",
+        current_ahead_behind, current_offset_s);
+    
+    GtkWidget* dialog = gtk_dialog_new_with_buttons(
+        "Adjust Driver Zero",
+        GTK_WINDOW(gtk_widget_get_toplevel(widget)),
+        GTK_DIALOG_MODAL,
+        "Yes", GTK_RESPONSE_YES,
+        "No", GTK_RESPONSE_NO,
+        nullptr);
+    
+    GtkWidget* resetBtn = gtk_dialog_add_button(GTK_DIALOG(dialog), "Reset to 0.0", RESPONSE_RESET_ZERO);
+    gtk_widget_set_margin_start(resetBtn, 40);
+    
+    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(content), 20);
+    
+    GtkWidget* label = gtk_label_new(msg);
+    gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
+    gtk_box_pack_start(GTK_BOX(content), label, TRUE, TRUE, 10);
+    gtk_widget_show(label);
+    
+    applyDialogStyle(dialog);
+    
+    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    
+    if (response == GTK_RESPONSE_YES) {
+        long offset_ms = static_cast<long>(current_ahead_behind * -1000.0);
+        data->state->ahead_behind_zero_offset_ms += offset_ms;
+        ConfigFile::save(*data->state);
+    } else if (response == RESPONSE_RESET_ZERO) {
+        data->state->ahead_behind_zero_offset_ms = 0;
+        ConfigFile::save(*data->state);
+    }
 }
 
 void on_next_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
