@@ -226,7 +226,9 @@ Counts per hour = (input_kph * 1000 * 3600) / (cal / 1000)
 Changes in calibration have no effect on stored segment distance and speed values, but do update the stored counts for distance and speed.
 Time is display only and caculated as the mm:ss required to cover the distance at the speed for that segment.
 
-The memory storage allows for upto five stage setups to be remembered and then recalled on request, pressing the set button for the memeory number should copy the current segment setup into that memory position in the configuration file. pressing recall and a memory number should copy that memory position from the config file into the current setup and configuration, updating the display. Memory clear, after a conformation dialog box, should remove the memory sections from the configuration file.Buttons should be 66x43 pixels.
+The memory storage allows for upto five stage setups to be remembered and then recalled on request, pressing the set button for the memeory number should copy the current segment setup into that memory position in the configuration file, after a conformation dialog (30px with white border) if the memory position is not empty. Pressing recall and a memory number should copy that memory position from the config file into the current setup and configuration, updating the display. Memory clear, after a conformation dialog box, should remove the memory sections from the configuration file.Buttons should be 66x43 pixels. 
+If a memory location has a segments stored then the recall button should be a white background and black text.
+
 
 ---
 
@@ -296,9 +298,9 @@ Layout:
   - Alarm buttons in four rows with 4px vertical gap — "Alarm in" label (20px) + [2]-[4] on first row, [5]-[7] on second row, [8]-[10] on third row, [11]-[13] on fourth row (22px font, 62x47px buttons)
   - Alarm countdown ("x,xxx m to alarm") and [clear] button below alarm buttons (28px white font #FFFFFF)
 - Navigation buttons spread across full-width bottom row (20px font, 43px tall):
-  - stage go: conformation dialog (with 30px text and buttons), with "Auto start" option,  with yes reseting Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green, and zero's the ahead_behind_zero_offset_ms. "Auto start" option should go to the "Auto start setup screen.
+  - stage go: conformation dialog (with 30px text and buttons with at least 20px between buttons), with "Auto start" option,  with yes reseting Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green, and zero's the ahead_behind_zero_offset_ms. "Auto start" option should go to the "Auto start setup screen.
   - segments: goes to Stage Setup
-  - Adj. driver Zero - Displays the current ahead_behind_zero_offset_ms in the label and at the point  pressed, the drivers/ahead behind value including the current ahead_behind_zero_offset_ms is remembered so that it can be used in the conformation dialog (white border and 30px font) with the text "Adjust the ahead behind value by xx.xx seconds, currently xx.xx seconds" before being set in the ahead_behind_zero_offset_ms and changing the drivers ahead/behind guage. Along with Yes / No the dialog should have a "Reset to 0.0" option slighly distant from the Yes/No.
+  - Adj. driver Zero - Displays the current ahead_behind_zero_offset_ms in the label and at the point  pressed, the drivers/ahead behind value including the current ahead_behind_zero_offset_ms is remembered so that it can be used in the conformation dialog (white border and 30px font, at least 20px between buttons) with the text "Adjust the ahead behind value by xx.xx seconds, currently xx.xx seconds" before being set in the ahead_behind_zero_offset_ms and changing the drivers ahead/behind guage. Along with Yes / No the dialog should have a "Reset to 0.0" option slighly distant from the Yes/No.
   - calibration: goes to Calibration screen
   - date/time: goes to Date/Time Setup screen
 - Reset buttons: reset respective counters and start time only

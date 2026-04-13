@@ -53,7 +53,8 @@ static void applyCopilotCSS() {
         ".new-segment-row label, .new-segment-row entry, .new-segment-row button, .new-segment-row checkbutton { font-size: 18px; }"
         "scrollbar slider { min-width: 20px; min-height: 20px; }"
         "scrollbar.vertical slider { min-width: 20px; }"
-        "scrollbar trough { min-width: 24px; }",
+        "scrollbar trough { min-width: 24px; }"
+        "button.memory-populated { background-image: none; background-color: #FFFFFF; color: #000000; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -502,6 +503,15 @@ GtkWidget* createStageSetupScreen(AppData* data) {
         g_signal_connect(recallBtn, "clicked", G_CALLBACK(on_memory_recall), data);
         g_object_set_data(G_OBJECT(recallBtn), "slot", GINT_TO_POINTER(i));
         gtk_box_pack_start(GTK_BOX(row), recallBtn, FALSE, FALSE, 0);
+        data->memoryRecallBtns[i - 1] = recallBtn;
+    }
+    
+    // Style populated recall buttons
+    for (int i = 0; i < 5; i++) {
+        if (!data->state->memory_slots[i].empty()) {
+            gtk_style_context_add_class(
+                gtk_widget_get_style_context(data->memoryRecallBtns[i]), "memory-populated");
+        }
     }
     
     GtkWidget* clearMemBtn = gtk_button_new_with_label("clear memory");

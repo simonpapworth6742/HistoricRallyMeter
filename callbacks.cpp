@@ -55,7 +55,8 @@ static void applyDialogStyle(GtkWidget* dialog) {
     GtkCssProvider* provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
         "* { font-size: 30px; }"
-        "dialog { border: 3px solid white; }", -1, nullptr);
+        "dialog { border: 3px solid white; }"
+        "button { margin-left: 10px; margin-right: 10px; }", -1, nullptr);
     
     std::function<void(GtkWidget*)> apply = [&](GtkWidget* w) {
         gtk_style_context_add_provider(
@@ -72,6 +73,11 @@ static void applyDialogStyle(GtkWidget* dialog) {
     };
     apply(dialog);
     g_object_unref(provider);
+    
+    GtkWidget* action_area = gtk_dialog_get_action_area(GTK_DIALOG(dialog));
+    if (action_area && GTK_IS_BUTTON_BOX(action_area)) {
+        gtk_box_set_spacing(GTK_BOX(action_area), 20);
+    }
 }
 
 void performStageGo(AppData* data) {
@@ -669,13 +675,48 @@ void on_delete_segment(GtkWidget* widget, gpointer user_data) {
     }
 }
 
+static void updateMemoryRecallStyles(AppData* data) {
+    for (int i = 0; i < 5; i++) {
+        if (!data->memoryRecallBtns[i]) continue;
+        GtkStyleContext* ctx = gtk_widget_get_style_context(data->memoryRecallBtns[i]);
+        if (!data->state->memory_slots[i].empty()) {
+            gtk_style_context_add_class(ctx, "memory-populated");
+        } else {
+            gtk_style_context_remove_class(ctx, "memory-populated");
+        }
+    }
+}
+
 void on_memory_set(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     int slot = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "slot")) - 1;
-    if (slot >= 0 && slot < RallyState::MAX_MEMORY_SLOTS) {
-        data->state->memory_slots[slot] = data->state->segments;
-        ConfigFile::save(*data->state);
+    if (slot < 0 || slot >= RallyState::MAX_MEMORY_SLOTS) return;
+    
+    if (!data->state->memory_slots[slot].empty()) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "Overwrite memory slot %d?", slot + 1);
+        GtkWidget* dialog = gtk_dialog_new_with_buttons(
+            "Confirm Overwrite",
+            GTK_WINDOW(gtk_widget_get_toplevel(widget)),
+            GTK_DIALOG_MODAL,
+            "Yes", GTK_RESPONSE_YES,
+            "No", GTK_RESPONSE_NO,
+            nullptr);
+        GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+        gtk_container_set_border_width(GTK_CONTAINER(content), 20);
+        GtkWidget* label = gtk_label_new(msg);
+        gtk_box_pack_start(GTK_BOX(content), label, TRUE, TRUE, 10);
+        gtk_widget_show(label);
+        applyDialogStyle(dialog);
+        
+        gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy(dialog);
+        if (response != GTK_RESPONSE_YES) return;
     }
+    
+    data->state->memory_slots[slot] = data->state->segments;
+    ConfigFile::save(*data->state);
+    updateMemoryRecallStyles(data);
 }
 
 void on_memory_recall(GtkWidget* widget, gpointer user_data) {
@@ -689,12 +730,32 @@ void on_memory_recall(GtkWidget* widget, gpointer user_data) {
     }
 }
 
-void on_memory_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+void on_memory_clear(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    
+    GtkWidget* dialog = gtk_dialog_new_with_buttons(
+        "Confirm Clear",
+        GTK_WINDOW(gtk_widget_get_toplevel(widget)),
+        GTK_DIALOG_MODAL,
+        "Yes", GTK_RESPONSE_YES,
+        "No", GTK_RESPONSE_NO,
+        nullptr);
+    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(content), 20);
+    GtkWidget* label = gtk_label_new("Clear all memory slots?");
+    gtk_box_pack_start(GTK_BOX(content), label, TRUE, TRUE, 10);
+    gtk_widget_show(label);
+    applyDialogStyle(dialog);
+    
+    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    if (response != GTK_RESPONSE_YES) return;
+    
     for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
         data->state->memory_slots[i].clear();
     }
     ConfigFile::save(*data->state);
+    updateMemoryRecallStyles(data);
 }
 
 void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
@@ -865,16 +926,38 @@ void on_save_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
             tm.tm_hour = hour;
             tm.tm_min = min;
             tm.tm_sec = sec;
+            tm.tm_isdst = -1;
             
             time_t rally_time = mktime(&tm);
             auto now = std::chrono::system_clock::now();
             auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 now.time_since_epoch()).count();
             
+            int64_t old_rally_ms = getRallyTime_ms(*data->state);
+            time_t old_rally_s = old_rally_ms / 1000;
+            struct tm* old_tm = localtime(&old_rally_s);
+            fprintf(stderr, "[DEBUG datetime] Input: date='%s' time='%s'\n", date_str, time_str);
+            fprintf(stderr, "[DEBUG datetime] Parsed: %04d/%02d/%02d %02d:%02d:%02d\n",
+                    year, month, day, hour, min, sec);
+            fprintf(stderr, "[DEBUG datetime] Old rally time: %04d/%02d/%02d %02d:%02d:%02d\n",
+                    old_tm->tm_year+1900, old_tm->tm_mon+1, old_tm->tm_mday,
+                    old_tm->tm_hour, old_tm->tm_min, old_tm->tm_sec);
+            fprintf(stderr, "[DEBUG datetime] mktime result: %ld, rally_ms: %ld, now_ms: %ld\n",
+                    (long)rally_time, (long)(rally_time * 1000), (long)now_ms);
+            fprintf(stderr, "[DEBUG datetime] New offset: %ld ms\n",
+                    (long)(rally_time * 1000 - now_ms));
+            
             // Calculate offset
             int64_t rally_ms = rally_time * 1000;
             data->state->rallyTimeOffset_ms = rally_ms - now_ms;
             ConfigFile::save(*data->state);
+            
+            int64_t verify_ms = getRallyTime_ms(*data->state);
+            time_t verify_s = verify_ms / 1000;
+            struct tm* verify_tm = localtime(&verify_s);
+            fprintf(stderr, "[DEBUG datetime] Verify rally time: %04d/%02d/%02d %02d:%02d:%02d\n",
+                    verify_tm->tm_year+1900, verify_tm->tm_mon+1, verify_tm->tm_mday,
+                    verify_tm->tm_hour, verify_tm->tm_min, verify_tm->tm_sec);
             
             // Clear entries
             gtk_entry_set_text(data->dateEntry, "");

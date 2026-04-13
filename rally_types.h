@@ -90,6 +90,7 @@ struct AppData {
     GtkCheckButton* autoNextCheck;
     GtkWidget* numericKeypad;      // Numeric keypad container
     GtkEntry* activeEntry;         // Currently focused entry for keypad input
+    GtkWidget* memoryRecallBtns[5] = {};  // Recall buttons for memory slots
     
     // Calibration screen
     GtkWidget* calibrationScreen;
