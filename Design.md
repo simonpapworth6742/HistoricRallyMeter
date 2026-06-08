@@ -267,11 +267,11 @@ Two-column layout with bottom navigation row:
 +-------------------------------------------------------------------+--------------------------------------+
 | LEFT PANEL (70%)                                                  | RIGHT PANEL (30%)                    |
 |                                                                   |                           hh:mm:ss   |
-|  Total  xxx,xxx  m  [reset]  mmm:ss                               |  Alarm in [2] [3] [4]                |
+|  [Total]  xxx,xxx  m  mmm:ss                                      |  Alarm in [2] [3] [4]                |
 |                                                                   |           [5] [6] [7]                |
-|  Trip   xxx,xxx  m  [reset]  mmm:ss                               |           [8] [9] [10]               |
+|  [Trip]   xxx,xxx  m  mmm:ss                                      |           [8] [9] [10]               |
 |                                                                   |          [11] [12] [13]              |
-|  Next   xxx,xxx  m  [next/prev] xxx kph                           |  x,xxx m to alarm  [clear]           |
+|  [Next/prev]   xxx,xxx  m   xxx kph                               |  x,xxx m to alarm  [clear]           |
 +-------------------------------------------------------------------+--------------------------------------+
 |   [stage go]      [segments]   [Adj. driver Zero (xx.xxs)]      [calibration]        [date/time]                  |
 +----------------------------------------------------------------------------------------------------------+
@@ -279,7 +279,8 @@ Two-column layout with bottom navigation row:
 
 Layout:
 - GtkGrid for Total/Trip rows with aligned columns: heading | value | unit | reset | time
-- The number of digits displayed for any of the values should not affect their position.
+- The number of digits displayed for any of the values should not affect their position, the maximum number of meter to display is 999,999 
+  before switching to km.
 - Distances formatted with comma separators and fixed minimum width of 7 characters (e.g., "      0", "  1,234", "999,999")
 - Time formatted as space-padded minutes (3 chars) + ":" + zero-padded seconds (2 chars), e.g., "  0:00", " 12:34", "120:00"
 - All fonts bold, all buttons have 2px solid white border for daylight visibility
@@ -287,27 +288,38 @@ Layout:
 - Two-column layout: left panel 70% width (~870px), right panel 30% width (~360px)
 - Left panel:
   - Total/Trip in a GtkGrid (15px below segment info, 10px gap between rows):
-    - Col 0: heading "Total" / "Trip" / "Next" (48px bold monospace)
+    - Col 0: heading buttons "Total" / "Trip" / "Next" (48px bold monospace)
     - Col 1: distance value, right-aligned, 7-char width (88px bold monospace)
     - Col 2: unit "m" (48px bold monospace), bottom-aligned
-    - Col 3: [reset] button / Arrow pointing right (36px font), vertically centred
-    - Col 4: elapsed time mmm:ss (36px monospace, light grey #CCCCCC) or the speed of the next segment, vertically centred
+    - Col 3: elapsed time mmm:ss (36px monospace, light grey #CCCCCC) or the speed of the next segment, vertically centred
 - Segment info on the third line "Next" showing the distance to the next segment in meters and the speed of the next segment, if there are no segments the next line shows ---.--- and the speed shows ---. If past the end of the of the segments then the distance shows the negative meters past the end of the last segment and the speed shows "END". Next rounds up to the nearest meter so that Total/Trip are in sync to it as they round down.
   
 - Right panel:
   - Rally clock (hh:mm:ss) at top, right-aligned (30px bold, minimum 8 chars wide)
   - Alarm buttons in four rows with 4px vertical gap — "Alarm in" label (20px) + [2]-[4] on first row, [5]-[7] on second row, [8]-[10] on third row, [11]-[13] on fourth row (22px font, 62x47px buttons)
   - Alarm countdown ("x,xxx m to alarm") and [clear] button below alarm buttons (28px white font #FFFFFF)
+
+
+
 - Navigation buttons spread across full-width bottom row (20px font, 43px tall):
-  - stage go: conformation dialog (with 30px text and buttons with at least 20px between buttons), with "Auto start" option,  with yes reseting Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green, and zero's the ahead_behind_zero_offset_ms. "Auto start" option should go to the "Auto start setup screen.
-  - segments: goes to Stage Setup
-  - Adj. driver Zero - Displays the current ahead_behind_zero_offset_ms in the label and at the point  pressed, the drivers/ahead behind value including the current ahead_behind_zero_offset_ms is remembered so that it can be used in the conformation dialog (white border and 30px font, at least 20px between buttons) with the text "Adjust the ahead behind value by xx.xx seconds, currently xx.xx seconds" before being set in the ahead_behind_zero_offset_ms and changing the drivers ahead/behind guage. Along with Yes / No the dialog should have a "Reset to 0.0" option slighly distant from the Yes/No.
-  - calibration: goes to Calibration screen
-  - date/time: goes to Date/Time Setup screen
-- Reset buttons: reset respective counters and start time only
-- next/prev button is only active when within 500m of the begining of a segment or the end of the segment, when it is within 500m of the end of a segement 
+
+- stage go: conformation dialog (with 30px text and buttons with at least 20px between buttons), with "Auto start" option,  with yes reseting Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green, and zero's the ahead_behind_zero_offset_ms. "Auto start" option should go to the "Auto start setup screen.
+ 
+- segments: goes to Stage Setup
+
+- Adj. driver Zero - Displays the current ahead_behind_zero_offset_ms in the label and at the point  pressed, the drivers/ahead behind value including the current   ahead_behind_zero_offset_ms is remembered so that it can be used in the conformation dialog (white border and 30px font, at least 20px between buttons) with the text "Adjust the ahead behind value by xx.xx seconds, currently xx.xx seconds" before being set in the ahead_behind_zero_offset_ms and changing the drivers ahead/behind guage. Along with Yes / No the dialog should have a "Reset to 0.0" option slighly distant from the Yes/No.
+ 
+- calibration: goes to Calibration screen
+ 
+- date/time: goes to Date/Time Setup screen
+
+- Reset buttons: [Total] / [Trip]  are reset buttons and reset their respective counters and start time only
+
+- [next/prev] button is only active when within 500m of the begining of a segment or the end of the segment, when it is within 500m of the end of a segement 
     the button displays "next", when it is within 500m of the start of a segment (not the first) it displays "prev" otherwise it displays "--->". The button allows the correction of distance of segment starts/ends, due to poor driving dicipline or mistakes in setting up the road book. When pressed within the 500m before a segment end then the segment distance should be reduced to the distance when the button was pressed. When press within 500m of the of the start of a segment (not the first) then the distance of the last segment should be extened to match the when the button was pressed.
+
 - [clear] button is only visible when an alarm is active
+
 - Distance alarm: co-pilot presses a km button (2-13) to set an alarm that many km ahead of the current total distance. The target is calculated in pulses and stored in the config file to survive Pi5 restart. When the total distance reaches the target, alarm.wav is played, then the alarm auto-clears after 5 seconds. The countdown ("x,xxx m to alarm") is shown in the right panel. The alarm check runs regardless of which co-pilot screen is visible. Press [clear] to cancel an active alarm.
 
 

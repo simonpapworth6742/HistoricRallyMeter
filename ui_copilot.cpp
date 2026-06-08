@@ -245,11 +245,12 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_grid_set_row_spacing(GTK_GRID(distGrid), 2);
     gtk_box_pack_start(GTK_BOX(leftPanel), distGrid, FALSE, FALSE, 0);
     
-    // Row 0: Total distance
-    GtkWidget* totalHeading = gtk_label_new("Total");
-    gtk_style_context_add_class(gtk_widget_get_style_context(totalHeading), "dist-heading");
-    gtk_label_set_xalign(GTK_LABEL(totalHeading), 0.0);
-    gtk_grid_attach(GTK_GRID(distGrid), totalHeading, 0, 0, 1, 1);
+    // Row 0: Total distance — heading "Total" is itself the reset button
+    GtkWidget* totalHeadingBtn = gtk_button_new_with_label("Total");
+    gtk_style_context_add_class(gtk_widget_get_style_context(totalHeadingBtn), "dist-heading");
+    gtk_widget_set_valign(totalHeadingBtn, GTK_ALIGN_CENTER);
+    g_signal_connect(totalHeadingBtn, "clicked", G_CALLBACK(on_total_reset), data);
+    gtk_grid_attach(GTK_GRID(distGrid), totalHeadingBtn, 0, 0, 1, 1);
     
     data->totalDistLabel = GTK_LABEL(gtk_label_new("0"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistLabel)), "dist-value");
@@ -262,24 +263,20 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_valign(totalUnit, GTK_ALIGN_END);
     gtk_grid_attach(GTK_GRID(distGrid), totalUnit, 2, 0, 1, 1);
     
-    GtkWidget* totalResetBtn = gtk_button_new_with_label("reset");
-    gtk_style_context_add_class(gtk_widget_get_style_context(totalResetBtn), "reset-button");
-    gtk_widget_set_valign(totalResetBtn, GTK_ALIGN_CENTER);
-    g_signal_connect(totalResetBtn, "clicked", G_CALLBACK(on_total_reset), data);
-    gtk_grid_attach(GTK_GRID(distGrid), totalResetBtn, 3, 0, 1, 1);
-    
-    // Col 4: Total time (same row)
+    // Col 3: Total time
     data->totalTimeLabel = GTK_LABEL(gtk_label_new("   0:00"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalTimeLabel)), "time-label");
     gtk_label_set_xalign(data->totalTimeLabel, 0.0);
     gtk_widget_set_valign(GTK_WIDGET(data->totalTimeLabel), GTK_ALIGN_CENTER);
-    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalTimeLabel), 4, 0, 1, 1);
+    gtk_widget_set_margin_start(GTK_WIDGET(data->totalTimeLabel), 10);
+    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalTimeLabel), 3, 0, 1, 1);
     
-    // Row 1: Trip distance
-    GtkWidget* tripHeading = gtk_label_new("Trip");
-    gtk_style_context_add_class(gtk_widget_get_style_context(tripHeading), "dist-heading");
-    gtk_label_set_xalign(GTK_LABEL(tripHeading), 0.0);
-    gtk_grid_attach(GTK_GRID(distGrid), tripHeading, 0, 1, 1, 1);
+    // Row 1: Trip distance — heading "Trip" is itself the reset button
+    GtkWidget* tripHeadingBtn = gtk_button_new_with_label("Trip");
+    gtk_style_context_add_class(gtk_widget_get_style_context(tripHeadingBtn), "dist-heading");
+    gtk_widget_set_valign(tripHeadingBtn, GTK_ALIGN_CENTER);
+    g_signal_connect(tripHeadingBtn, "clicked", G_CALLBACK(on_trip_reset), data);
+    gtk_grid_attach(GTK_GRID(distGrid), tripHeadingBtn, 0, 1, 1, 1);
     
     data->tripDistLabel = GTK_LABEL(gtk_label_new("0"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripDistLabel)), "dist-value");
@@ -292,24 +289,21 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_valign(tripUnit, GTK_ALIGN_END);
     gtk_grid_attach(GTK_GRID(distGrid), tripUnit, 2, 1, 1, 1);
     
-    GtkWidget* tripResetBtn = gtk_button_new_with_label("reset");
-    gtk_style_context_add_class(gtk_widget_get_style_context(tripResetBtn), "reset-button");
-    gtk_widget_set_valign(tripResetBtn, GTK_ALIGN_CENTER);
-    g_signal_connect(tripResetBtn, "clicked", G_CALLBACK(on_trip_reset), data);
-    gtk_grid_attach(GTK_GRID(distGrid), tripResetBtn, 3, 1, 1, 1);
-    
-    // Col 4: Trip time (same row)
+    // Col 3: Trip time
     data->tripTimeLabel = GTK_LABEL(gtk_label_new("   0:00"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripTimeLabel)), "time-label");
     gtk_label_set_xalign(data->tripTimeLabel, 0.0);
     gtk_widget_set_valign(GTK_WIDGET(data->tripTimeLabel), GTK_ALIGN_CENTER);
-    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripTimeLabel), 4, 1, 1, 1);
+    gtk_widget_set_margin_start(GTK_WIDGET(data->tripTimeLabel), 10);
+    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripTimeLabel), 3, 1, 1, 1);
     
-    // Row 2: Next segment distance and speed
-    GtkWidget* nextHeading = gtk_label_new("Next");
-    gtk_style_context_add_class(gtk_widget_get_style_context(nextHeading), "dist-heading");
-    gtk_label_set_xalign(GTK_LABEL(nextHeading), 0.0);
-    gtk_grid_attach(GTK_GRID(distGrid), nextHeading, 0, 2, 1, 1);
+    // Row 2: Next segment — heading is the next/prev button
+    data->nextPrevBtn = gtk_button_new_with_label("--->");
+    gtk_style_context_add_class(gtk_widget_get_style_context(data->nextPrevBtn), "dist-heading");
+    gtk_widget_set_valign(data->nextPrevBtn, GTK_ALIGN_CENTER);
+    gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
+    g_signal_connect(data->nextPrevBtn, "clicked", G_CALLBACK(on_next_prev_segment), data);
+    gtk_grid_attach(GTK_GRID(distGrid), data->nextPrevBtn, 0, 2, 1, 1);
     
     data->nextDistLabel = GTK_LABEL(gtk_label_new("---.---"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextDistLabel)), "dist-value");
@@ -322,19 +316,13 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_valign(nextUnit, GTK_ALIGN_END);
     gtk_grid_attach(GTK_GRID(distGrid), nextUnit, 2, 2, 1, 1);
     
-    data->nextPrevBtn = gtk_button_new_with_label("--->");
-    gtk_style_context_add_class(gtk_widget_get_style_context(data->nextPrevBtn), "reset-button");
-    gtk_widget_set_valign(data->nextPrevBtn, GTK_ALIGN_CENTER);
-    gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
-    g_signal_connect(data->nextPrevBtn, "clicked", G_CALLBACK(on_next_prev_segment), data);
-    gtk_grid_attach(GTK_GRID(distGrid), data->nextPrevBtn, 3, 2, 1, 1);
-    
+    // Col 3: Next segment speed
     data->nextSpeedLabel = GTK_LABEL(gtk_label_new("---"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextSpeedLabel)), "time-label");
     gtk_label_set_xalign(data->nextSpeedLabel, 0.0);
     gtk_widget_set_valign(GTK_WIDGET(data->nextSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_margin_start(GTK_WIDGET(data->nextSpeedLabel), 10);
-    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->nextSpeedLabel), 4, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->nextSpeedLabel), 3, 2, 1, 1);
     
     // ── RIGHT PANEL (30%): clock, alarm buttons, countdown ──
     GtkWidget* rightPanel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
