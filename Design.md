@@ -157,7 +157,7 @@ look at the example guage in gaugepilot-rallymaster-display.png
 - The gauge provides an intuitive visual indication - needle pointing right means slow down, needle pointing left means speed up
 
 
-```
+``` Layout notes For display/windows for 1280x400 and larger (wide, shallow display):
 +----------------------------------------------------------------------------------------------------------+
 |   Current↑↑↑↓↓↓         Total                       |                      RALLY GAUGE            [KPH]  |
 |    xx.x                 xx.x                        |            -10s ←───┬───→ +10s                     |
@@ -169,7 +169,7 @@ look at the example guage in gaugepilot-rallymaster-display.png
 +----------------------------------------------------------------------------------------------------------+
 ```
 
-Layout notes for 1280x400 (wide, shallow display):
+
 - Left side: Four speed values Current, Target, Trip, Total. Trip, Total with large fonts, Current with extra large font and target 70% of the size of Trip.
 - Right side: Rally gauge with semicircular dial, target speed, and timing info
 - Bottom row: Updates counter on left, next segment info in center, unit toggle on right
@@ -179,7 +179,30 @@ Layout notes for 1280x400 (wide, shallow display):
 - Total and Trip should vertially align
 - The speed up /slow down arrows should not effect the Total label position and should not effect the Current label position
 - The number of digits displayed for any of the values should not effect their position the decimal point should remain the in same place.
-- The [Exit] button closes the application
+
+``` Layout notes For display/windows for 800x480 (small 4:3 display):
++-----------------------------------------+
+|  {target}                               |
+|         -10s ←───┬───→ +10s             |
+|            ╱     │     ╲                |
+|          ╱       │ {tot} ╲              |
+|        ╱         │         ╲            |
+|      ╱ {current} ▲  {trip}   ╲          |
+|    ╱             ●             ╲        |
+|  fps:xxx       [±ss.s]           cpu:xxC|
++-----------------------------------------+
+```
+With less display area everthing is compacted.
+The guage is idential to the wide layout above, and is rective to the screen size
+Now the values displayed in the left pane of the wide layout are fitted within the guage area
+{current} is the current speed as above with a very small text label current abaove it.
+{tot} and trip are the values without lables
+{target} has a very small label above it. 
+The fonts for the values should start out the same size as in the wide and shallow display, but shrink as the guage shrinks.
+
+The number of digits displayed for any of the values should not effect their position the decimal point should remain the in same place.
+
+
 
 **_Co-Pilots display window (1280 x 400) - dark theme only_**
 
@@ -282,7 +305,8 @@ Layout:
 - The number of digits displayed for any of the values should not affect their position, the maximum number of meter to display is 999,999 
   before switching to km.
 - Distances formatted with comma separators and fixed minimum width of 7 characters (e.g., "      0", "  1,234", "999,999")
-- Time formatted as space-padded minutes (3 chars) + ":" + zero-padded seconds (2 chars), e.g., "  0:00", " 12:34", "120:00"
+- Time formatted as space-padded minutes (3 chars) + ":" + zero-padded seconds (2 chars), e.g., "  0:00", " 12:34", "120:00", 
+    when more than four chars of minutes, switch to hours:minutes and if more than four chars of hours display "toolong".
 - All fonts bold, all buttons have 2px solid white border for daylight visibility
 - 15px border around the entire screen
 - Two-column layout: left panel 70% width (~870px), right panel 30% width (~360px)
@@ -346,6 +370,8 @@ All fonts to be 20px
 ```
 Display a numeric keypad for entry on the right, it is a different keypad to other screens as it has "/" and ":" 
 on it, but no ";" and ".".
+
+- The [Exit app] button closes the application
 
 
 **5) Auto Start Setup Screen**
