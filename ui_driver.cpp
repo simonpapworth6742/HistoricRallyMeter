@@ -95,7 +95,8 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     double width = alloc.width;
     double height = alloc.height;
     double radius = (std::min(width / 2, height) - 25) * 0.8;
-    double centerX = width - radius - 20;
+    // Compact layout: gauge centered and filling the window
+    double centerX = data->driverCompactMode ? width / 2 : width - radius - 20;
     double centerY = (height + radius) / 2;
 
     updateGaugeScale(data);
@@ -287,6 +288,67 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
     cairo_arc(cr, centerX, centerY, 4, 0, 2 * M_PI);
     cairo_fill(cr);
 
+    // Compact layout: draw the speed values inside the gauge area.
+    // Fonts match the wide layout at full size and shrink with the gauge.
+    if (data->driverCompactMode) {
+        constexpr double REF_RADIUS = 256.0;  // gauge radius in the 1280x400 layout
+        double fscale = std::min(1.0, radius / REF_RADIUS);
+
+        cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+        cairo_text_extents_t te;
+
+        // Right-aligned value: fixed right anchor keeps the decimal point in place.
+        // Returns the left edge of the drawn text so labels can align to it.
+        auto drawValue = [&](const char* text, double right_x, double baseline, double size) {
+            cairo_set_font_size(cr, size);
+            cairo_text_extents(cr, text, &te);
+            double x = right_x - te.x_advance;
+            cairo_move_to(cr, x, baseline);
+            cairo_show_text(cr, text);
+            return x;
+        };
+        // Very small label just above the value, left-aligned with it
+        auto drawLabelAbove = [&](const char* text, double left_x, double value_baseline, double value_size) {
+            cairo_set_font_size(cr, 16 * fscale);
+            cairo_move_to(cr, left_x, value_baseline - value_size * 0.78 - 5 * fscale);
+            cairo_show_text(cr, text);
+        };
+
+        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+
+        // {target}: top-left justified starting at the very top, very small label above
+        double tgt_baseline = 16 * fscale + 5 * fscale + 45 * fscale * 0.78;
+        cairo_set_font_size(cr, 45 * fscale);
+        cairo_move_to(cr, 20, tgt_baseline);
+        cairo_show_text(cr, gtk_label_get_text(data->targetSpeedLabel));
+        drawLabelAbove("Target", 20, tgt_baseline, 45 * fscale);
+
+        // {current}: left of the hub (shifted one 80px char right), very small label above
+        double cur_baseline = centerY - 8;
+        double cur_right = centerX - 42 * fscale;
+        double cur_left = drawValue(gtk_label_get_text(data->currentSpeedLabel),
+                                    cur_right, cur_baseline, 80 * fscale);
+        drawLabelAbove("Current", cur_left, cur_baseline, 80 * fscale);
+
+        // {tot} above {trip}: right side, no labels
+        double right_anchor = centerX + radius * 0.72;
+        drawValue(gtk_label_get_text(data->totalSpeedLabel),
+                  right_anchor, cur_baseline - 75 * fscale, 64 * fscale);
+        drawValue(gtk_label_get_text(data->tripSpeedLabel),
+                  right_anchor, cur_baseline, 64 * fscale);
+
+        // fps bottom-left, cpu bottom-right
+        double foot_size = std::max(11.0, 14 * fscale);
+        cairo_set_font_size(cr, foot_size);
+        cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+        cairo_move_to(cr, 15, height - 10);
+        cairo_show_text(cr, gtk_label_get_text(data->updatesPerSecLabel));
+        const char* cpu_text = gtk_label_get_text(data->cpuTempLabel);
+        cairo_text_extents(cr, cpu_text, &te);
+        cairo_move_to(cr, width - 15 - te.x_advance, height - 10);
+        cairo_show_text(cr, cpu_text);
+    }
+
     return FALSE;
 }
 
@@ -294,6 +356,22 @@ void updateDriverDisplay(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
     auto tenth_poll = data->poller->get10th();
     auto current_time_ms = getRallyTime_ms(*data->state);
+    
+    // Switch to compact layout (values drawn inside the gauge) when the
+    // window is closer to 4:3 (e.g. 800x480) than wide-and-shallow 1280x400
+    if (data->driverWindow && data->driverSpeedsBox) {
+        int win_w = 0, win_h = 0;
+        gtk_window_get_size(GTK_WINDOW(data->driverWindow), &win_w, &win_h);
+        bool compact = (win_h > 0) && (static_cast<double>(win_w) / win_h) < 2.2;
+        if (compact != data->driverCompactMode) {
+            data->driverCompactMode = compact;
+            if (compact) {
+                gtk_widget_hide(data->driverSpeedsBox);
+            } else {
+                gtk_widget_show_all(data->driverSpeedsBox);
+            }
+        }
+    }
     
     // Current speed (from rolling average, then EMA-smoothed for display)
     double current_speed = calculateCurrentSpeed(*data->state, current_poll, tenth_poll);
@@ -561,7 +639,7 @@ void updateDriverDisplay(AppData* data) {
 }
 
 // Apply CSS styling for large fonts
-static void applyDriverCSS(GtkWidget* G_GNUC_UNUSED widget) {
+static void applyDriverCSS(G_GNUC_UNUSED GtkWidget* widget) {
     GtkCssProvider* provider = gtk_css_provider_new();
     gtk_css_provider_load_from_data(provider,
         "window, .background { background-color: #000000; }"
@@ -607,6 +685,7 @@ GtkWidget* createDriverWindow(AppData* data) {
     GtkWidget* speedsBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_widget_set_size_request(speedsBox, 580, -1);
     gtk_box_pack_start(GTK_BOX(contentBox), speedsBox, FALSE, TRUE, 0);
+    data->driverSpeedsBox = speedsBox;
     
     // Two-column speed display row
     GtkWidget* speedColsBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);

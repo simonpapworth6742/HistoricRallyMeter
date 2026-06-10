@@ -61,6 +61,10 @@ struct AppData {
     int gaugeScale = 1;               // 0=±3s(green), 1=±10s(yellow), 2=±5min(red)
     int64_t gaugeScaleChangeTime = 0; // Timestamp of last scale change (2s cooldown)
     
+    // Compact (800x480-style) driver layout: values drawn inside the gauge
+    GtkWidget* driverSpeedsBox = nullptr;  // left pane, hidden in compact mode
+    bool driverCompactMode = false;
+    
     // Co-pilot window
     GtkWidget* copilotWindow;
     GtkStack* copilotStack;  // Stack for multiple screens

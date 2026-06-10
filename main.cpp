@@ -235,7 +235,7 @@ static gboolean on_driver_configure(GtkWidget* widget, GdkEventConfigure* event,
 }
 
 // Save state on window close
-static gboolean on_window_close_save(GtkWidget* G_GNUC_UNUSED widget, GdkEvent* G_GNUC_UNUSED event, gpointer user_data) {
+static gboolean on_window_close_save(G_GNUC_UNUSED GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     
     // Position/size should already be tracked via configure-event

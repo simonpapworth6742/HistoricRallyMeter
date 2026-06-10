@@ -74,7 +74,9 @@ static void applyDialogStyle(GtkWidget* dialog) {
     apply(dialog);
     g_object_unref(provider);
     
+    G_GNUC_BEGIN_IGNORE_DEPRECATIONS
     GtkWidget* action_area = gtk_dialog_get_action_area(GTK_DIALOG(dialog));
+    G_GNUC_END_IGNORE_DEPRECATIONS
     if (action_area && GTK_IS_BUTTON_BOX(action_area)) {
         gtk_box_set_spacing(GTK_BOX(action_area), 20);
     }

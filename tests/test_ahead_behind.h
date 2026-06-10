@@ -133,6 +133,7 @@ public:
             
             // Format as "Over by xx:xx:xx"
             long over_by = -remaining;
+            ASSERT_TRUE(over_by > 0);
             // Over by 10000 cm = 100m, at 60kph would be ~6 seconds
             
             return true;
