@@ -231,8 +231,20 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     cairo_close_path(cr);
     cairo_fill(cr);
 
-    // Digital display box - white outlined
-    double box_width = 130;
+    // Digital readout text - measured first so the box can size to fit it
+    // (font size is fixed at 22 for sunlight legibility; only the box grows)
+    double seconds = data->aheadBehindSeconds;
+    char digital[24];
+    formatGaugeDigital(digital, sizeof(digital), seconds, data->gaugeScale);
+
+    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+    cairo_set_font_size(cr, 22);
+
+    cairo_text_extents_t dext;
+    cairo_text_extents(cr, digital, &dext);
+
+    // Digital display box - white outlined, sized to the text
+    double box_width = std::max(130.0, dext.x_advance + 16);
     double box_height = 36;
     double box_x = centerX - box_width / 2;
     double box_y = centerY + 18;
@@ -245,17 +257,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     cairo_rectangle(cr, box_x, box_y, box_width, box_height);
     cairo_stroke(cr);
 
-    // Digital readout - large white text
-    double seconds = data->aheadBehindSeconds;
-    char digital[24];
-    formatGaugeDigital(digital, sizeof(digital), seconds, data->gaugeScale);
-
-    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 22);
     cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-
-    cairo_text_extents_t dext;
-    cairo_text_extents(cr, digital, &dext);
     cairo_move_to(cr, centerX - dext.width / 2, box_y + box_height / 2 + dext.height / 2 - 2);
     cairo_show_text(cr, digital);
 
@@ -281,12 +283,12 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     cairo_close_path(cr);
     cairo_fill(cr);
 
-    // Needle hub
+    // Needle hub - white ring to match the needle for contrast
     cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
     cairo_arc(cr, centerX, centerY, 10, 0, 2 * M_PI);
     cairo_fill(cr);
-    cairo_set_source_rgb(cr, 0.5, 0.5, 0.5);
-    cairo_set_line_width(cr, 1);
+    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+    cairo_set_line_width(cr, 2);
     cairo_arc(cr, centerX, centerY, 10, 0, 2 * M_PI);
     cairo_stroke(cr);
 
@@ -322,26 +324,31 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
 
         cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
 
-        // {target}: top-left justified starting at the very top, very small label above
-        double tgt_baseline = 16 * fscale + 5 * fscale + 45 * fscale * 0.78;
-        cairo_set_font_size(cr, 45 * fscale);
-        cairo_move_to(cr, 20, tgt_baseline);
-        cairo_show_text(cr, gtk_label_get_text(data->targetSpeedLabel));
-        drawLabelAbove("Target", 20, tgt_baseline, 45 * fscale);
+        // {current}: top-left, no label; right-aligned to a fixed anchor wide
+        // enough for "###.#" so the digits never shift as the value changes
+        double cur_top_size = 50 * fscale;
+        double cur_baseline_top = 4 * fscale + cur_top_size * 0.78;
+        cairo_set_font_size(cr, cur_top_size);
+        cairo_text_extents(cr, "888.8", &te);
+        double cur_right = 15 + te.x_advance;
+        drawValue(gtk_label_get_text(data->currentSpeedLabel),
+                  cur_right, cur_baseline_top, cur_top_size);
 
-        // {current}: left of the hub (shifted one 80px char right), very small label above
-        double cur_baseline = centerY - 8;
-        double cur_right = centerX - 42 * fscale;
-        double cur_left = drawValue(gtk_label_get_text(data->currentSpeedLabel),
-                                    cur_right, cur_baseline, 80 * fscale);
-        drawLabelAbove("Current", cur_left, cur_baseline, 80 * fscale);
+        // {target}: left of the hub, slightly smaller than before so it stays
+        // clear of the scale numbers; small label above, aligned to the value
+        double val_size = 56 * fscale;
+        double cur_baseline = centerY - 10;
+        double tgt_right = centerX - 36 * fscale;
+        double tgt_left = drawValue(gtk_label_get_text(data->targetSpeedLabel),
+                                    tgt_right, cur_baseline, val_size);
+        drawLabelAbove("Target", tgt_left, cur_baseline, val_size);
 
         // {tot} above {trip}: right side, no labels
         double right_anchor = centerX + radius * 0.72;
         drawValue(gtk_label_get_text(data->totalSpeedLabel),
-                  right_anchor, cur_baseline - 75 * fscale, 64 * fscale);
+                  right_anchor, cur_baseline - 68 * fscale, val_size);
         drawValue(gtk_label_get_text(data->tripSpeedLabel),
-                  right_anchor, cur_baseline, 64 * fscale);
+                  right_anchor, cur_baseline, val_size);
 
         // fps left, cpu right, baseline in line with the bottom of the
         // ahead/behind digital readout box (box top = centerY+18, height 36)
@@ -356,13 +363,17 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         cairo_move_to(cr, width - 15 - te.x_advance, foot_baseline);
         cairo_show_text(cr, cpu_text);
 
-        // Single-display mode: rally clock top-right (replaces the alarm panel's clock)
+        // Single-display mode: rally clock hard top-right, bright white
+        // (replaces the alarm panel's clock)
         if (data->singleDisplayMode && data->copilotRallyClockLabel) {
             double clock_size = std::max(20.0, 28 * fscale);
             cairo_set_font_size(cr, clock_size);
+            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
             const char* clock_text = gtk_label_get_text(data->copilotRallyClockLabel);
             cairo_text_extents(cr, clock_text, &te);
-            cairo_move_to(cr, width - 15 - te.x_advance, 10 + clock_size);
+            // Align the glyph ink (bearing + width), not the advance, so the
+            // visible right edge sits flush with the panel edge
+            cairo_move_to(cr, width - (te.x_bearing + te.width), clock_size);
             cairo_show_text(cr, clock_text);
         }
     }

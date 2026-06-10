@@ -32,6 +32,9 @@ public:
     // Alarm: co-pilot sets distance alarm that rings a doorbell
     int alarm_distance_km = 0;          // 0 = no alarm active
     int64_t alarm_target_counts = 0;    // absolute count target from total_start
+
+    // Force single-display mode even when multiple screens exist
+    bool force_single_display = false;
     
     // Driver window position/size (remembered across sessions)
     int driver_window_x = -1;      // -1 = not set

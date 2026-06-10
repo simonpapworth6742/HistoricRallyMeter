@@ -21,6 +21,7 @@ void on_calibration_start(GtkWidget* widget, gpointer user_data);
 void on_save_calibration(GtkWidget* widget, gpointer user_data);
 void on_reset_calibration_1m(GtkWidget* widget, gpointer user_data);
 void on_save_datetime(GtkWidget* widget, gpointer user_data);
+gboolean on_force_single_display_toggle(GtkSwitch* sw, gboolean state, gpointer user_data);
 void refreshSegmentList(AppData* data);
 void updateCalibrationDisplay(AppData* data);
 void updateDateTimeDisplay(AppData* data);

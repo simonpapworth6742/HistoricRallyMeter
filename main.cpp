@@ -336,21 +336,28 @@ int main(int argc, char* argv[]) {
         std::cerr << "[DEBUG] Step 8c: ToneGenerator started OK" << std::endl;
         app_data.lastUpdateCountTime_ms = getRallyTime_ms(state);
 
-        // Single-display mode: exactly one monitor and it is 1280x400.
+        // Single-display mode: exactly one monitor and it is 1280x400, or the
+        // "force single display mode" option is set in the config.
         // Only the co-pilot window is shown; the compact driver display is
         // embedded in the TwinMaster right panel instead of the alarm panel.
         // Must be decided before the windows are created.
         {
-            GdkDisplay* d = gdk_display_get_default();
-            if (gdk_display_get_n_monitors(d) == 1) {
-                GdkRectangle geom;
-                gdk_monitor_get_geometry(gdk_display_get_monitor(d, 0), &geom);
-                if (is1280x400(geom.width, geom.height)) {
-                    app_data.singleDisplayMode = true;
-                    app_data.driverCompactMode = true;
-                    std::cout << "Single-display mode: one 1280x400 monitor, "
-                              << "co-pilot window only with embedded driver gauge" << std::endl;
+            bool single = state.force_single_display;
+            if (single) {
+                std::cout << "Single-display mode forced by config option" << std::endl;
+            } else {
+                GdkDisplay* d = gdk_display_get_default();
+                if (gdk_display_get_n_monitors(d) == 1) {
+                    GdkRectangle geom;
+                    gdk_monitor_get_geometry(gdk_display_get_monitor(d, 0), &geom);
+                    single = is1280x400(geom.width, geom.height);
                 }
+            }
+            if (single) {
+                app_data.singleDisplayMode = true;
+                app_data.driverCompactMode = true;
+                std::cout << "Single-display mode: co-pilot window only "
+                          << "with embedded driver gauge" << std::endl;
             }
         }
 

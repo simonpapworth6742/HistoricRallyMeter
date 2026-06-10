@@ -909,6 +909,15 @@ void on_exit_app(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     gtk_main_quit();
 }
 
+// "force single display mode" switch; saved to config, applied at next startup
+gboolean on_force_single_display_toggle(G_GNUC_UNUSED GtkSwitch* sw, gboolean state,
+                                        gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->state->force_single_display = state;
+    ConfigFile::save(*data->state);
+    return FALSE;  // allow default handler to update the switch visual state
+}
+
 void on_save_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     

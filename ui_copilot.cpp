@@ -266,7 +266,7 @@ void updateCopilotDisplay(AppData* data) {
 // Create TwinMaster screen - two-column layout for 1280x400
 GtkWidget* createTwinMasterScreen(AppData* data) {
     GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_container_set_border_width(GTK_CONTAINER(screen), 15);
+    gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
     
     // Main area: two columns (left 70%, right 30%)
     GtkWidget* mainArea = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
@@ -308,7 +308,8 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_label_set_xalign(data->totalTimeLabel, 0.0);
     gtk_widget_set_valign(GTK_WIDGET(data->totalTimeLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_margin_start(GTK_WIDGET(data->totalTimeLabel), 10);
-    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalTimeLabel), 3, 0, 1, 1);
+    if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
+        gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalTimeLabel), 3, 0, 1, 1);
     
     // Row 1: Trip distance — heading "Trip" is itself the reset button
     GtkWidget* tripHeadingBtn = gtk_button_new_with_label("Trip");
@@ -334,7 +335,8 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_label_set_xalign(data->tripTimeLabel, 0.0);
     gtk_widget_set_valign(GTK_WIDGET(data->tripTimeLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_margin_start(GTK_WIDGET(data->tripTimeLabel), 10);
-    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripTimeLabel), 3, 1, 1, 1);
+    if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
+        gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripTimeLabel), 3, 1, 1, 1);
     
     // Row 2: Next segment — heading is the next/prev button
     data->nextPrevBtn = gtk_button_new_with_label("--->");
@@ -361,16 +363,20 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_label_set_xalign(data->nextSpeedLabel, 0.0);
     gtk_widget_set_valign(GTK_WIDGET(data->nextSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_margin_start(GTK_WIDGET(data->nextSpeedLabel), 10);
-    gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->nextSpeedLabel), 3, 2, 1, 1);
+    if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
+        gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->nextSpeedLabel), 3, 2, 1, 1);
     
     // ── RIGHT PANEL (30%) ──
     // Normal: clock, alarm buttons, countdown.
     // Single-display mode: embedded compact driver gauge instead (the rally
     // clock is drawn inside the gauge, alarms cannot be set).
     GtkWidget* rightPanel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    // Single-display mode: wider panel so the gauge is height-limited, not width-limited
-    gtk_widget_set_size_request(rightPanel, data->singleDisplayMode ? 430 : 360, -1);
-    gtk_box_pack_start(GTK_BOX(mainArea), rightPanel, FALSE, FALSE, 0);
+    // Single-display mode: wider panel (times/next-speed column is hidden) so
+    // the gauge can grow until it is height-limited. The gauge area's hexpand
+    // propagates to this panel, so it must fill its slot or it gets centred
+    // with dead space either side.
+    gtk_widget_set_size_request(rightPanel, data->singleDisplayMode ? 500 : 360, -1);
+    gtk_box_pack_start(GTK_BOX(mainArea), rightPanel, FALSE, data->singleDisplayMode ? TRUE : FALSE, 0);
 
     if (data->singleDisplayMode) {
         data->copilotGaugeArea = gtk_drawing_area_new();
@@ -469,7 +475,7 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
 // Create Stage Setup screen - horizontal layout for 1280x400
 GtkWidget* createStageSetupScreen(AppData* data) {
     GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_container_set_border_width(GTK_CONTAINER(screen), 10);
+    gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
     
     // Title
     GtkWidget* titleLabel = gtk_label_new("STAGE SETUP");
@@ -698,7 +704,7 @@ GtkWidget* createCalibrationScreen(AppData* data) {
 GtkWidget* createDateTimeScreen(AppData* data) {
     GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_style_context_add_class(gtk_widget_get_style_context(screen), "datetime-screen");
-    gtk_container_set_border_width(GTK_CONTAINER(screen), 10);
+    gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
     
     // Title row with exit button
     GtkWidget* titleRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
@@ -770,6 +776,25 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(inputRow), timeLabel, FALSE, FALSE, 10);
     gtk_box_pack_start(GTK_BOX(inputRow), GTK_WIDGET(data->timeEntry), FALSE, FALSE, 0);
     
+    // Options section
+    GtkWidget* optionsLabel = gtk_label_new("Options:");
+    gtk_style_context_add_class(gtk_widget_get_style_context(optionsLabel), "clock-label");
+    gtk_widget_set_halign(optionsLabel, GTK_ALIGN_START);
+    gtk_widget_set_margin_top(optionsLabel, 10);
+    gtk_box_pack_start(GTK_BOX(leftBox), optionsLabel, FALSE, FALSE, 0);
+    
+    GtkWidget* forceSingleRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+    GtkWidget* forceSingleLabel = gtk_label_new("force single display mode");
+    gtk_style_context_add_class(gtk_widget_get_style_context(forceSingleLabel), "clock-label");
+    GtkWidget* forceSingleSwitch = gtk_switch_new();
+    gtk_switch_set_active(GTK_SWITCH(forceSingleSwitch), data->state->force_single_display);
+    gtk_widget_set_valign(forceSingleSwitch, GTK_ALIGN_CENTER);
+    g_signal_connect(forceSingleSwitch, "state-set",
+                     G_CALLBACK(on_force_single_display_toggle), data);
+    gtk_box_pack_start(GTK_BOX(forceSingleRow), forceSingleLabel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(forceSingleRow), forceSingleSwitch, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(leftBox), forceSingleRow, FALSE, FALSE, 0);
+    
     // Right side: datetime keypad
     data->datetimeKeypad = createDateTimeKeypad(data);
     gtk_box_pack_end(GTK_BOX(mainBox), data->datetimeKeypad, FALSE, FALSE, 10);
@@ -794,7 +819,7 @@ GtkWidget* createDateTimeScreen(AppData* data) {
 GtkWidget* createAutoStartScreen(AppData* data) {
     GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_style_context_add_class(gtk_widget_get_style_context(screen), "datetime-screen");
-    gtk_container_set_border_width(GTK_CONTAINER(screen), 10);
+    gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
     
     GtkWidget* titleLabel = gtk_label_new("AUTO START SETUP");
     gtk_style_context_add_class(gtk_widget_get_style_context(titleLabel), "title-label");

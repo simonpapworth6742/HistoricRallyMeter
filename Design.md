@@ -216,10 +216,12 @@ look at the example guage in gaugepilot-rallymaster-display.png
 With less display area everything is compacted.
 The gauge is identical in style to the wide layout above, and is reactive to the screen size.
 Now the values displayed in the left pane of the wide layout are fitted within the gauge area:
-- {current} is the current speed as above with a very small text label "Current" above it.
+- {current} is the current speed, top-left with no label; it is right-aligned to a fixed anchor wide enough for "###.#" so the digits never shift as the value changes.
 - {tot} and {trip} are the values without labels.
-- {target} has a very small label above it, top-left justified starting at the very top.
-- The fonts for the values start out the same size as in the wide and shallow display, but shrink with the gauge (scaled by gauge radius relative to the wide layout's 256px reference radius).
+- {target} sits left of the hub with a very small "Target" label above it, left-aligned with the value.
+- Target, total and trip share the same font size (56px at full scale); current is slightly smaller (50px). All shrink with the gauge (scaled by gauge radius relative to the wide layout's 256px reference radius).
+- The ahead/behind readout box auto-sizes to its text (minimum 130px wide); the font stays at full size for sunlight legibility.
+- The needle hub has a white ring matching the needle for contrast.
 
 Compact gauge geometry (fills the available area):
 - The gauge radius is width-driven: half the drawing-area width minus 25px (just enough margin for the 18px bezel ring), capped by height minus 95px.
@@ -335,7 +337,7 @@ Layout:
 - Time formatted as space-padded minutes (3 chars) + ":" + zero-padded seconds (2 chars), e.g., "  0:00", " 12:34", "120:00", 
     when more than four chars of minutes, switch to hours:minutes and if more than four chars of hours display "toolong".
 - All fonts bold, all buttons have 2px solid white border for daylight visibility
-- 15px border around the entire screen
+- 5px border around the entire screen (all co-pilot screens)
 - Two-column layout: left panel 70% width (~870px), right panel 30% width (~360px)
 - Left panel:
   - Total/Trip in a GtkGrid (15px below segment info, 10px gap between rows):
@@ -381,7 +383,7 @@ When the application is in single-display mode (exactly one monitor, 1280x400 - 
 - The right panel contains the compact driver gauge layout, identical to the 800x480 driver layout: the gauge with needle and digital readout, with target, current, total and trip values drawn inside the gauge area, fonts scaled down with the gauge size, and the same compact gauge geometry (gauge fills the panel width, arc top may cut into the target line, fps/cpu in line with the readout box bottom).
 - The rally clock (hh:mm:ss) is kept, drawn in the top-right corner of the gauge area at 28px scaled with the gauge (minimum 20px).
 - Alarm buttons are unavailable in this mode, so new alarms cannot be set. An alarm persisted in the config from a previous run still fires: alarm.wav is played when the target is reached and the alarm auto-clears after 5 seconds; no countdown or [clear] button is shown.
-- The left panel and bottom navigation row are unchanged.
+- The left panel has the total/trip times hidden and the next target speed hidden inorder to allow the gauage to be bigger, bottom navigation row are unchanged.
 
 
 
@@ -400,7 +402,11 @@ All fonts to be 20px
 |                                                                                                          |
 |   Rally  Clock:  yyyy/mm/dd  hh:mm:ss        30px                                                        |
 +----------------------------------------------------------------------------------------------------------+
-|   Set Rally Time:    Date: [__________]    Time: [__________]    30px                                        |
+|   Set Rally Time:    Date: [__________]    Time: [__________]    30px                                    |
+|                                                                                                          |
+|   Options:                                                                                               |
+|   force single display mode  (0 )                                                                        |
+|                                                                                                          |
 +----------------------------------------------------------------------------------------------------------+
 |                                [set and save]                          [back]                            |
 +----------------------------------------------------------------------------------------------------------+
@@ -410,6 +416,8 @@ on it, but no ";" and ".".
 
 - The [Exit app] button closes the application
 
+- the Options menu
+    force single display mode is a toggle button that sets a config value in the json file, and forces the use of single display only mode even if mutiple screens exist
 
 **5) Auto Start Setup Screen**
 
