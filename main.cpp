@@ -2,6 +2,7 @@
 #include <exception>
 #include <system_error>
 #include <cstring>
+#include <cstdint>
 #include <string>
 #include <cctype>
 #include <fstream>
@@ -100,19 +101,31 @@ static int connectorPriority(const std::string& name) {
     return type_priority * 100 + number;
 }
 
+// Co-pilot-capable display: exactly 1280x400 (or rotated)
 static bool is1280x400(int w, int h) {
     return (w == 1280 && h == 400) || (w == 400 && h == 1280);
+}
+
+static bool is800x480(int w, int h) {
+    return (w == 800 && h == 480) || (w == 480 && h == 800);
+}
+
+// Small display: suitable for either window (driver also accepts 800x480)
+static bool isSmallDisplay(int w, int h) {
+    return is1280x400(w, h) || is800x480(w, h);
 }
 
 struct DisplayMatch {
     GdkMonitor* monitor;
     int monitor_index;
     std::string connector_name;
-    int priority;  // lower = co-pilot gets it first
+    int priority;          // lower = assigned first
+    bool copilot_capable;  // true only for 1280x400 panels
 };
 
-// Find all 1280x400 monitors, matched to DRM connectors where possible,
-// sorted by connector priority (DSI lowest, then HDMI, then by number)
+// Find all small monitors (1280x400 / 800x480, incl. rotated), matched to DRM
+// connectors where possible, sorted by connector priority (DSI before HDMI,
+// then by connector number; unmatched monitors sort last)
 static std::vector<DisplayMatch> findSmallDisplays(GdkDisplay* display) {
     int n_monitors = gdk_display_get_n_monitors(display);
     auto connectors = getDrmConnectors();
@@ -142,7 +155,7 @@ static std::vector<DisplayMatch> findSmallDisplays(GdkDisplay* display) {
                   << " mfr=" << (manufacturer ? manufacturer : "null")
                   << std::endl;
 
-        if (!is1280x400(geometry.width, geometry.height))
+        if (!isSmallDisplay(geometry.width, geometry.height))
             continue;
 
         DisplayMatch dm;
@@ -150,6 +163,7 @@ static std::vector<DisplayMatch> findSmallDisplays(GdkDisplay* display) {
         dm.monitor_index = i;
         dm.connector_name = "";
         dm.priority = 999;
+        dm.copilot_capable = is1280x400(geometry.width, geometry.height);
 
         for (auto& conn : connectors) {
             if (conn.status != "connected") continue;
@@ -164,15 +178,17 @@ static std::vector<DisplayMatch> findSmallDisplays(GdkDisplay* display) {
             }
         }
 
-        std::cout << "  -> 1280x400 display matched";
+        std::cout << "  -> small display matched ("
+                  << geometry.width << "x" << geometry.height
+                  << (dm.copilot_capable ? ", co-pilot capable" : ", driver only");
         if (!dm.connector_name.empty())
-            std::cout << " (connector: " << dm.connector_name << ", priority " << dm.priority << ")";
-        std::cout << std::endl;
+            std::cout << ", connector: " << dm.connector_name << ", priority " << dm.priority;
+        std::cout << ")" << std::endl;
 
         matches.push_back(dm);
     }
 
-    std::sort(matches.begin(), matches.end(),
+    std::stable_sort(matches.begin(), matches.end(),
               [](const DisplayMatch& a, const DisplayMatch& b) { return a.priority < b.priority; });
 
     return matches;
@@ -319,7 +335,25 @@ int main(int argc, char* argv[]) {
         app_data.toneGen->start();
         std::cerr << "[DEBUG] Step 8c: ToneGenerator started OK" << std::endl;
         app_data.lastUpdateCountTime_ms = getRallyTime_ms(state);
-        
+
+        // Single-display mode: exactly one monitor and it is 1280x400.
+        // Only the co-pilot window is shown; the compact driver display is
+        // embedded in the TwinMaster right panel instead of the alarm panel.
+        // Must be decided before the windows are created.
+        {
+            GdkDisplay* d = gdk_display_get_default();
+            if (gdk_display_get_n_monitors(d) == 1) {
+                GdkRectangle geom;
+                gdk_monitor_get_geometry(gdk_display_get_monitor(d, 0), &geom);
+                if (is1280x400(geom.width, geom.height)) {
+                    app_data.singleDisplayMode = true;
+                    app_data.driverCompactMode = true;
+                    std::cout << "Single-display mode: one 1280x400 monitor, "
+                              << "co-pilot window only with embedded driver gauge" << std::endl;
+                }
+            }
+        }
+
         // Create windows
         std::cerr << "[DEBUG] Step 9: Creating driver window..." << std::endl;
         app_data.driverWindow = createDriverWindow(&app_data);
@@ -335,33 +369,49 @@ int main(int argc, char* argv[]) {
             g_signal_add_emission_hook(clicked_id, 0, on_button_beep, nullptr, nullptr);
         }
         
-        // Find 1280x400 displays sorted by priority (DSI first, then HDMI, lowest number first)
+        // Find small displays sorted by priority (DSI first, then HDMI, lowest number first)
         GdkDisplay* display = gdk_display_get_default();
         auto small_displays = findSmallDisplays(display);
-        bool two_small = (small_displays.size() >= 2);
 
-        std::cout << "Found " << small_displays.size() << " x 1280x400 display(s)" << std::endl;
+        std::cout << "Found " << small_displays.size() << " small display(s)" << std::endl;
 
         GdkMonitor* copilot_monitor = nullptr;
         int copilot_index = -1;
         GdkMonitor* driver_monitor = nullptr;
         int driver_monitor_index = -1;
 
-        if (!small_displays.empty()) {
-            copilot_monitor = small_displays[0].monitor;
-            copilot_index = small_displays[0].monitor_index;
+        // Co-pilot takes the highest-priority co-pilot-capable (1280x400) display
+        size_t copilot_slot = SIZE_MAX;
+        for (size_t s = 0; s < small_displays.size(); s++) {
+            if (small_displays[s].copilot_capable) {
+                copilot_slot = s;
+                break;
+            }
+        }
+        if (copilot_slot != SIZE_MAX) {
+            copilot_monitor = small_displays[copilot_slot].monitor;
+            copilot_index = small_displays[copilot_slot].monitor_index;
             std::cout << "Co-pilot assigned to monitor " << copilot_index;
-            if (!small_displays[0].connector_name.empty())
-                std::cout << " (" << small_displays[0].connector_name << ")";
+            if (!small_displays[copilot_slot].connector_name.empty())
+                std::cout << " (" << small_displays[copilot_slot].connector_name << ")";
             std::cout << std::endl;
         }
 
-        if (two_small) {
-            driver_monitor = small_displays[1].monitor;
-            driver_monitor_index = small_displays[1].monitor_index;
+        // Driver takes the highest-priority remaining small display (1280x400 or 800x480)
+        size_t driver_slot = SIZE_MAX;
+        for (size_t s = 0; s < small_displays.size(); s++) {
+            if (s != copilot_slot) {
+                driver_slot = s;
+                break;
+            }
+        }
+        bool driver_fullscreen = (driver_slot != SIZE_MAX);
+        if (driver_fullscreen) {
+            driver_monitor = small_displays[driver_slot].monitor;
+            driver_monitor_index = small_displays[driver_slot].monitor_index;
             std::cout << "Driver assigned to monitor " << driver_monitor_index;
-            if (!small_displays[1].connector_name.empty())
-                std::cout << " (" << small_displays[1].connector_name << ")";
+            if (!small_displays[driver_slot].connector_name.empty())
+                std::cout << " (" << small_displays[driver_slot].connector_name << ")";
             std::cout << std::endl;
         }
 
@@ -376,23 +426,25 @@ int main(int argc, char* argv[]) {
                                         geometry.width, geometry.height);
             gtk_window_move(GTK_WINDOW(app_data.copilotWindow), geometry.x, geometry.y);
         } else {
-            std::cout << "No 1280x400 display found, opening co-pilot as 1280x400 window" << std::endl;
+            std::cout << "No co-pilot-capable (1280x400) display found, opening co-pilot as 1280x400 window" << std::endl;
             gtk_window_set_default_size(GTK_WINDOW(app_data.copilotWindow), 1280, 400);
             gtk_window_resize(GTK_WINDOW(app_data.copilotWindow), 1280, 400);
         }
 
-        // Position driver window
-        if (two_small) {
-            // Two 1280x400 displays: driver goes fullscreen on the second one
+        // Position driver window (skipped entirely in single-display mode)
+        if (app_data.singleDisplayMode) {
+            std::cout << "Single-display mode: driver window not shown" << std::endl;
+        } else if (driver_fullscreen) {
+            // A small display remains for the driver: fullscreen on it
             GdkRectangle mon_geometry;
             gdk_monitor_get_geometry(driver_monitor, &mon_geometry);
-            std::cout << "Two 1280x400 displays: driver fullscreen on monitor " << driver_monitor_index
+            std::cout << "Driver fullscreen on small display, monitor " << driver_monitor_index
                       << " at (" << mon_geometry.x << "," << mon_geometry.y << ")" << std::endl;
             gtk_window_set_default_size(GTK_WINDOW(app_data.driverWindow),
                                         mon_geometry.width, mon_geometry.height);
             gtk_window_move(GTK_WINDOW(app_data.driverWindow), mon_geometry.x, mon_geometry.y);
         } else {
-            // Not two 1280x400 displays: restore saved size and monitor
+            // No small display remains: restore saved size and monitor
             std::cout << "Restoring driver window: size "
                       << state.driver_window_width << "x" << state.driver_window_height
                       << " on monitor " << state.driver_window_monitor << std::endl;
@@ -456,8 +508,8 @@ int main(int argc, char* argv[]) {
         g_signal_connect(app_data.copilotWindow, "delete-event",
                          G_CALLBACK(on_window_close_save), &app_data);
 
-        // Track driver window position changes (only useful when not two 1280x400 displays)
-        if (!two_small) {
+        // Track driver window position changes (only useful in windowed fallback mode)
+        if (!driver_fullscreen && !app_data.singleDisplayMode) {
             g_signal_connect(app_data.driverWindow, "configure-event",
                              G_CALLBACK(on_driver_configure), &app_data);
         }
@@ -465,10 +517,12 @@ int main(int argc, char* argv[]) {
         // Connect button handlers
         g_signal_connect(app_data.unitToggleBtn, "clicked", G_CALLBACK(on_unit_toggle), &app_data);
 
-        // Show windows
+        // Show windows (driver window stays hidden in single-display mode)
         std::cerr << "[DEBUG] Step 11: Showing windows..." << std::endl;
-        gtk_widget_show_all(app_data.driverWindow);
-        std::cerr << "[DEBUG] Step 11a: Driver window shown" << std::endl;
+        if (!app_data.singleDisplayMode) {
+            gtk_widget_show_all(app_data.driverWindow);
+            std::cerr << "[DEBUG] Step 11a: Driver window shown" << std::endl;
+        }
         gtk_widget_show_all(app_data.copilotWindow);
         std::cerr << "[DEBUG] Step 11b: Copilot window shown" << std::endl;
 
@@ -479,8 +533,8 @@ int main(int argc, char* argv[]) {
                 gdk_display_get_default_screen(display), copilot_index);
         }
 
-        // Fullscreen driver when two 1280x400 displays
-        if (two_small && driver_monitor_index >= 0) {
+        // Fullscreen driver when it has its own small display
+        if (driver_fullscreen && driver_monitor_index >= 0) {
             std::cout << "Fullscreening driver on monitor " << driver_monitor_index << std::endl;
             gtk_window_fullscreen_on_monitor(GTK_WINDOW(app_data.driverWindow),
                 gdk_display_get_default_screen(display), driver_monitor_index);

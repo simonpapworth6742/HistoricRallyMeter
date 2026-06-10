@@ -4,20 +4,41 @@ This environment is a Raspberry Pi 5 with 4GB memory connected to 2 LSI ls7866c 
     Use high-resolution chrono timers for accurate measurement
     C++  version 20
 
-The application is meant to run on dual 1280x400 screens (wide and shallow), search for the two displays by matching the size. During development it has an HDMI 4K screen and two 7inch (1280x400) screen connected. The co-pilot display window opens fullscreen on DSI-2, or if not found opens as a 1280x400 window. The driver display remembers its size and which monitor it is on.
+## Displays
 
-### Display Detection Implementation
-The application reads DRM connector information from `/sys/class/drm/` to identify the DSI-2 connector. It then matches GDK monitors to connectors by resolution (1280x400 or 400x1280 depending on rotation).
+The application presents two windows, each intended for its own in-car display panel:
 
-**Co-pilot display:**
-- Detects the the display by scanning DSI and then HDMI using the lowest value display for the co-pilot (dSI is lower than HDMI) and opens fullscreen on that monitor
-- If DSI-2 not found, opens as a 1280x400 window
+| Window | Purpose | Required resolution |
+|---|---|---|
+| **Co-pilot display** | TwinMaster, segment setup, calibration, date/time screens | Exactly 1280x400 (or 400x1280 rotated) |
+| **Driver display** | Speed gauge and stage readouts | 1280x400 **or** 800x480 (or their rotated equivalents). Uses the compact layout on 800x480 (see "Driver Display - Compact Layout") |
 
-**Driver display:**
-- Default size: 1280x400 (matching screen dimensions)
-- Remembers window size and which monitor it was on in if there are not two 1280x400 displays
-- Window position cannot be saved/restored on Wayland due to compositor security limitations
-- Window is centered on the saved monitor at startup
+Definitions used throughout this section:
+- **Small display**: a monitor whose resolution is exactly 1280x400, 400x1280, 800x480, or 480x800.
+- **Co-pilot-capable display**: a small display of exactly 1280x400 (or 400x1280). The co-pilot window never uses an 800x480 panel.
+- **Development setup**: an HDMI 2K/4K desktop monitor plus one or two small displays. When two small displays are attached the application must use them for the two windows and leave the desktop monitor free.
+
+### Display Detection
+
+1. Read DRM connector information from `/sys/class/drm/` (entries such as `card1-DSI-2`) to obtain each connector's name, connection status, and mode resolution.
+2. Match each GDK monitor to a DRM connector by resolution.
+3. Collect all small displays and sort them by connector priority: **DSI before HDMI, then by connector number, lowest first** (e.g. DSI-1, DSI-2, HDMI-A-1, HDMI-A-2). A monitor that cannot be matched to a connector sorts last.
+
+### Display Assignment
+
+Assignment happens at startup, in this order:
+
+0. **Single-display mode**: if exactly one monitor exists and it is 1280x400, only the co-pilot window is shown, fullscreen on that monitor. The driver window is not shown at all. In this mode the TwinMaster screen's right-hand alarm panel is replaced by the embedded compact driver display (see "TwinMaster Screen - Single-Display Mode"). The remaining rules do not apply.
+1. **Co-pilot window** takes the highest-priority **co-pilot-capable** display and opens fullscreen on it.
+   - Fallback: if no co-pilot-capable display exists, it opens as a normal 1280x400 window (typically on the desktop monitor during development).
+2. **Driver window** takes the highest-priority remaining small display (1280x400 or 800x480, never the one assigned to the co-pilot) and opens fullscreen on it.
+   - Fallback: if no small display remains, it opens as a window using the size remembered from the previous run (default 1280x400), centered on the remembered monitor. If the remembered monitor no longer exists or is the co-pilot's monitor, the first other available monitor is used.
+
+### Window Persistence (driver window fallback only)
+
+- The driver window's size and monitor index are saved to the config file when the window is moved/resized and on shutdown.
+- Window *position* cannot be saved/restored on Wayland due to compositor security limitations, hence centering on the saved monitor at startup.
+- Nothing is persisted when both windows are fullscreen on small displays.
 
 ### Preventing Inactive Window Dimming
 
@@ -182,7 +203,7 @@ look at the example guage in gaugepilot-rallymaster-display.png
 
 ``` Layout notes For display/windows for 800x480 (small 4:3 display):
 +-----------------------------------------+
-|  {target}                               |
+|  {target}                          [KPH]|
 |         -10s ←───┬───→ +10s             |
 |            ╱     │     ╲                |
 |          ╱       │ {tot} ╲              |
@@ -192,15 +213,21 @@ look at the example guage in gaugepilot-rallymaster-display.png
 |  fps:xxx       [±ss.s]           cpu:xxC|
 +-----------------------------------------+
 ```
-With less display area everthing is compacted.
-The guage is idential to the wide layout above, and is rective to the screen size
-Now the values displayed in the left pane of the wide layout are fitted within the guage area
-{current} is the current speed as above with a very small text label current abaove it.
-{tot} and trip are the values without lables
-{target} has a very small label above it. 
-The fonts for the values should start out the same size as in the wide and shallow display, but shrink as the guage shrinks.
+With less display area everything is compacted.
+The gauge is identical in style to the wide layout above, and is reactive to the screen size.
+Now the values displayed in the left pane of the wide layout are fitted within the gauge area:
+- {current} is the current speed as above with a very small text label "Current" above it.
+- {tot} and {trip} are the values without labels.
+- {target} has a very small label above it, top-left justified starting at the very top.
+- The fonts for the values start out the same size as in the wide and shallow display, but shrink with the gauge (scaled by gauge radius relative to the wide layout's 256px reference radius).
 
-The number of digits displayed for any of the values should not effect their position the decimal point should remain the in same place.
+Compact gauge geometry (fills the available area):
+- The gauge radius is width-driven: half the drawing-area width minus 25px (just enough margin for the 18px bezel ring), capped by height minus 95px.
+- The gauge is centred horizontally; the needle hub sits low, 75px above the bottom edge, leaving just enough room below the hub for the ahead/behind readout box and the footer line.
+- The top of the gauge arc may extend up into (cut into) the target line and value area; the target text and clock are drawn on top of the gauge graphics.
+- fps (bottom-left) and cpu (bottom-right) are drawn with their baseline in line with the bottom of the ahead/behind readout box.
+
+The number of digits displayed for any of the values should not affect their position; the decimal point should remain in the same place.
 
 
 
@@ -345,6 +372,16 @@ Layout:
 - [clear] button is only visible when an alarm is active
 
 - Distance alarm: co-pilot presses a km button (2-13) to set an alarm that many km ahead of the current total distance. The target is calculated in pulses and stored in the config file to survive Pi5 restart. When the total distance reaches the target, alarm.wav is played, then the alarm auto-clears after 5 seconds. The countdown ("x,xxx m to alarm") is shown in the right panel. The alarm check runs regardless of which co-pilot screen is visible. Press [clear] to cancel an active alarm.
+
+**TwinMaster Screen - Single-Display Mode**
+
+When the application is in single-display mode (exactly one monitor, 1280x400 - see "Display Assignment"), the right-hand alarm panel is replaced by the compact driver display:
+
+- The right panel is widened to 430px (from 360px) so the gauge is height-limited rather than width-limited; the left panel gives up its fixed 870px minimum width and takes whatever width remains.
+- The right panel contains the compact driver gauge layout, identical to the 800x480 driver layout: the gauge with needle and digital readout, with target, current, total and trip values drawn inside the gauge area, fonts scaled down with the gauge size, and the same compact gauge geometry (gauge fills the panel width, arc top may cut into the target line, fps/cpu in line with the readout box bottom).
+- The rally clock (hh:mm:ss) is kept, drawn in the top-right corner of the gauge area at 28px scaled with the gauge (minimum 20px).
+- Alarm buttons are unavailable in this mode, so new alarms cannot be set. An alarm persisted in the config from a previous run still fires: alarm.wav is played when the target is reached and the alarm auto-clears after 5 seconds; no countdown or [clear] button is shown.
+- The left panel and bottom navigation row are unchanged.
 
 
 

@@ -87,17 +87,23 @@ static void formatGaugeDigital(char* buf, size_t bufsize, double seconds, int sc
 }
 
 // Draw the rally gauge (GaugePilot RallyMaster style) with auto-scaling
-static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
+gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
 
     GtkAllocation alloc;
     gtk_widget_get_allocation(widget, &alloc);
     double width = alloc.width;
     double height = alloc.height;
-    double radius = (std::min(width / 2, height) - 25) * 0.8;
-    // Compact layout: gauge centered and filling the window
+    // Compact layout: gauge fills the panel width (bezel ~18px + small margin);
+    // the arc top may overlap the target text, which is drawn on top of it.
+    // The hub sits low, leaving just enough room for the readout box + footer.
+    // Wide layout keeps larger margins for the scale labels alongside the
+    // left speeds pane.
+    double radius = data->driverCompactMode
+        ? std::min(width / 2 - 25, height - 95)
+        : (std::min(width / 2, height) - 25) * 0.8;
     double centerX = data->driverCompactMode ? width / 2 : width - radius - 20;
-    double centerY = (height + radius) / 2;
+    double centerY = data->driverCompactMode ? height - 75 : (height + radius) / 2;
 
     updateGaugeScale(data);
     GaugeScaleInfo si = getGaugeScaleInfo(data->gaugeScale);
@@ -337,16 +343,28 @@ static gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data
         drawValue(gtk_label_get_text(data->tripSpeedLabel),
                   right_anchor, cur_baseline, 64 * fscale);
 
-        // fps bottom-left, cpu bottom-right
+        // fps left, cpu right, baseline in line with the bottom of the
+        // ahead/behind digital readout box (box top = centerY+18, height 36)
+        double foot_baseline = centerY + 18 + 36;
         double foot_size = std::max(11.0, 14 * fscale);
         cairo_set_font_size(cr, foot_size);
         cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
-        cairo_move_to(cr, 15, height - 10);
+        cairo_move_to(cr, 15, foot_baseline);
         cairo_show_text(cr, gtk_label_get_text(data->updatesPerSecLabel));
         const char* cpu_text = gtk_label_get_text(data->cpuTempLabel);
         cairo_text_extents(cr, cpu_text, &te);
-        cairo_move_to(cr, width - 15 - te.x_advance, height - 10);
+        cairo_move_to(cr, width - 15 - te.x_advance, foot_baseline);
         cairo_show_text(cr, cpu_text);
+
+        // Single-display mode: rally clock top-right (replaces the alarm panel's clock)
+        if (data->singleDisplayMode && data->copilotRallyClockLabel) {
+            double clock_size = std::max(20.0, 28 * fscale);
+            cairo_set_font_size(cr, clock_size);
+            const char* clock_text = gtk_label_get_text(data->copilotRallyClockLabel);
+            cairo_text_extents(cr, clock_text, &te);
+            cairo_move_to(cr, width - 15 - te.x_advance, 10 + clock_size);
+            cairo_show_text(cr, clock_text);
+        }
     }
 
     return FALSE;
@@ -358,8 +376,10 @@ void updateDriverDisplay(AppData* data) {
     auto current_time_ms = getRallyTime_ms(*data->state);
     
     // Switch to compact layout (values drawn inside the gauge) when the
-    // window is closer to 4:3 (e.g. 800x480) than wide-and-shallow 1280x400
-    if (data->driverWindow && data->driverSpeedsBox) {
+    // window is closer to 4:3 (e.g. 800x480) than wide-and-shallow 1280x400.
+    // In single-display mode the gauge is embedded in the co-pilot window and
+    // compact mode is forced on at startup, so skip the aspect-ratio toggle.
+    if (!data->singleDisplayMode && data->driverWindow && data->driverSpeedsBox) {
         int win_w = 0, win_h = 0;
         gtk_window_get_size(GTK_WINDOW(data->driverWindow), &win_w, &win_h);
         bool compact = (win_h > 0) && (static_cast<double>(win_w) / win_h) < 2.2;
@@ -534,6 +554,8 @@ void updateDriverDisplay(AppData* data) {
         
         // Redraw gauge
         gtk_widget_queue_draw(data->rallyGaugeDrawingArea);
+        if (data->copilotGaugeArea)
+            gtk_widget_queue_draw(data->copilotGaugeArea);
     } else {
         gtk_label_set_text(data->targetSpeedLabel, "--.-");
         gtk_label_set_text(data->gaugeTargetLabel, "--.-");
@@ -543,6 +565,9 @@ void updateDriverDisplay(AppData* data) {
         data->aheadBehindSeconds = 0.0;
         if (data->rallyGaugeDrawingArea) {
             gtk_widget_queue_draw(data->rallyGaugeDrawingArea);
+        }
+        if (data->copilotGaugeArea) {
+            gtk_widget_queue_draw(data->copilotGaugeArea);
         }
     }
     

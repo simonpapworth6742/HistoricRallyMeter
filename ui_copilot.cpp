@@ -1,4 +1,5 @@
 #include "ui_copilot.h"
+#include "ui_driver.h"
 #include "calculations.h"
 #include "rally_types.h"
 #include "rally_state.h"
@@ -111,8 +112,10 @@ void updateCopilotDisplay(AppData* data) {
         current_poll.cntr1, current_poll.cntr2,
         data->state->total_start_cntr1, data->state->total_start_cntr2);
     
+    // In single-display mode the countdown/clear widgets do not exist, but a
+    // persisted alarm still fires its sound and auto-clears.
     if (data->state->alarm_distance_km > 0) {
-        gtk_widget_show(data->alarmClearBtn);
+        if (data->alarmClearBtn) gtk_widget_show(data->alarmClearBtn);
         int64_t remaining_counts = data->state->alarm_target_counts - total_count_diff;
         long remaining_m = countsToCentimeters(remaining_counts, data->state->calibration) / 100;
         
@@ -121,24 +124,24 @@ void updateCopilotDisplay(AppData* data) {
                 data->alarmSoundStartTime = current_time_ms;
                 system("aplay alarm.wav &");
             }
-            gtk_label_set_text(data->alarmCountdownLabel, "ALARM!");
+            if (data->alarmCountdownLabel) gtk_label_set_text(data->alarmCountdownLabel, "ALARM!");
             
             if (current_time_ms - data->alarmSoundStartTime > 5000) {
                 data->state->alarm_distance_km = 0;
                 data->state->alarm_target_counts = 0;
                 data->alarmSoundStartTime = 0;
-                gtk_label_set_text(data->alarmCountdownLabel, "");
-                gtk_widget_hide(data->alarmClearBtn);
+                if (data->alarmCountdownLabel) gtk_label_set_text(data->alarmCountdownLabel, "");
+                if (data->alarmClearBtn) gtk_widget_hide(data->alarmClearBtn);
                 ConfigFile::save(*data->state);
             }
-        } else {
+        } else if (data->alarmCountdownLabel) {
             std::stringstream alarmSs;
             alarmSs << formatDistance(remaining_m, 6) << " to alarm";
             gtk_label_set_text(data->alarmCountdownLabel, alarmSs.str().c_str());
         }
     } else {
-        gtk_label_set_text(data->alarmCountdownLabel, "");
-        gtk_widget_hide(data->alarmClearBtn);
+        if (data->alarmCountdownLabel) gtk_label_set_text(data->alarmCountdownLabel, "");
+        if (data->alarmClearBtn) gtk_widget_hide(data->alarmClearBtn);
     }
     
     // Check which screen is visible
@@ -270,8 +273,9 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(screen), mainArea, TRUE, TRUE, 0);
     
     // ── LEFT PANEL (70%): segment info, total, trip ──
+    // Single-display mode: cede width to the embedded gauge panel
     GtkWidget* leftPanel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_widget_set_size_request(leftPanel, 870, -1);
+    gtk_widget_set_size_request(leftPanel, data->singleDisplayMode ? -1 : 870, -1);
     gtk_box_pack_start(GTK_BOX(mainArea), leftPanel, TRUE, TRUE, 0);
     
     // Grid layout for Total/Trip/Next: columns = heading | value | unit | reset/arrow | time/speed
@@ -359,11 +363,25 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_margin_start(GTK_WIDGET(data->nextSpeedLabel), 10);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->nextSpeedLabel), 3, 2, 1, 1);
     
-    // ── RIGHT PANEL (30%): clock, alarm buttons, countdown ──
+    // ── RIGHT PANEL (30%) ──
+    // Normal: clock, alarm buttons, countdown.
+    // Single-display mode: embedded compact driver gauge instead (the rally
+    // clock is drawn inside the gauge, alarms cannot be set).
     GtkWidget* rightPanel = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_widget_set_size_request(rightPanel, 360, -1);
+    // Single-display mode: wider panel so the gauge is height-limited, not width-limited
+    gtk_widget_set_size_request(rightPanel, data->singleDisplayMode ? 430 : 360, -1);
     gtk_box_pack_start(GTK_BOX(mainArea), rightPanel, FALSE, FALSE, 0);
-    
+
+    if (data->singleDisplayMode) {
+        data->copilotGaugeArea = gtk_drawing_area_new();
+        gtk_widget_set_hexpand(data->copilotGaugeArea, TRUE);
+        gtk_widget_set_vexpand(data->copilotGaugeArea, TRUE);
+        g_signal_connect(data->copilotGaugeArea, "draw", G_CALLBACK(on_gauge_draw), data);
+        gtk_box_pack_start(GTK_BOX(rightPanel), data->copilotGaugeArea, TRUE, TRUE, 0);
+
+        data->alarmCountdownLabel = nullptr;
+        data->alarmClearBtn = nullptr;
+    } else {
     // Top row: rally clock
     GtkWidget* topRightRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(rightPanel), topRightRow, FALSE, FALSE, 0);
@@ -420,6 +438,7 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     g_signal_connect(data->alarmClearBtn, "clicked", G_CALLBACK(on_alarm_clear), data);
     gtk_box_pack_start(GTK_BOX(countdownRow), data->alarmClearBtn, FALSE, FALSE, 5);
     gtk_widget_set_no_show_all(data->alarmClearBtn, TRUE);
+    }
     
     // ── BOTTOM ROW: Navigation buttons (20% taller) ──
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
