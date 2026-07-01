@@ -1,4 +1,5 @@
 #include "callbacks.h"
+#include "webserver/rally_web_server.h"
 #include "rally_types.h"
 #include "rally_state.h"
 #include "config_file.h"
@@ -33,6 +34,10 @@ void on_unit_toggle(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     }
 }
 
+static void notifyWebState(AppData* data) {
+    if (data && data->webServer) webNotifyStateChanged(data);
+}
+
 void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     auto current_poll = data->poller->getMostRecent();
@@ -40,6 +45,7 @@ void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->total_start_cntr2 = current_poll.cntr2;
     data->state->total_start_time_ms = getRallyTime_ms(*data->state);
     ConfigFile::save(*data->state);
+    notifyWebState(data);
 }
 
 void on_trip_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
@@ -49,6 +55,7 @@ void on_trip_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->trip_start_cntr2 = current_poll.cntr2;
     data->state->trip_start_time_ms = getRallyTime_ms(*data->state);
     ConfigFile::save(*data->state);
+    notifyWebState(data);
 }
 
 static void applyDialogStyle(GtkWidget* dialog) {
@@ -112,6 +119,7 @@ void performStageGo(AppData* data) {
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
     
     ConfigFile::save(*data->state);
+    notifyWebState(data);
 }
 
 static const int RESPONSE_AUTO_START = 99;
@@ -260,6 +268,7 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     }
     
     ConfigFile::save(*data->state);
+    notifyWebState(data);
 }
 
 gboolean update_display(gpointer user_data) {
@@ -291,6 +300,7 @@ gboolean update_display(gpointer user_data) {
                     data->state->trip_start_cntr2 = current_poll.cntr2;
                     data->state->trip_start_time_ms = data->state->segment_start_time_ms;
                     ConfigFile::save(*data->state);
+                    notifyWebState(data);
                 }
             }
         }
@@ -298,6 +308,13 @@ gboolean update_display(gpointer user_data) {
     
     updateDriverDisplay(data);
     updateCopilotDisplay(data);
+
+    if (data->webServer) {
+        auto now = std::chrono::system_clock::now();
+        int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now.time_since_epoch()).count();
+        data->webServer->poll(now_ms);
+    }
     
     return G_SOURCE_CONTINUE;
 }
@@ -457,6 +474,7 @@ void on_segment_entry_changed(GtkWidget* widget, gpointer user_data) {
             data->state->segments[index].distance_counts = (meters * 1e6) / data->state->calibration;
         }
         ConfigFile::save(*data->state);
+        notifyWebState(data);
     }
 }
 
@@ -468,6 +486,7 @@ void on_segment_auto_toggled(GtkWidget* widget, gpointer user_data) {
     
     data->state->segments[index].autoNext = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
     ConfigFile::save(*data->state);
+    notifyWebState(data);
 }
 
 // Helper function to refresh segment list with editable entries
@@ -600,20 +619,40 @@ void updateDateTimeDisplay(AppData* data) {
     struct tm* tm = localtime(&seconds);
     
     char buf[100];
-    snprintf(buf, sizeof(buf), "%04d/%02d/%02d  %02d:%02d:%02d",
-             tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,
-             tm->tm_hour, tm->tm_min, tm->tm_sec);
+    snprintf(buf, sizeof(buf), "%04d/%02d/%02d",
+             tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
     gtk_label_set_text(data->systemClockLabel, buf);
+    snprintf(buf, sizeof(buf), "%02d:%02d:%02d",
+             tm->tm_hour, tm->tm_min, tm->tm_sec);
+    if (data->systemTimeLabel) gtk_label_set_text(data->systemTimeLabel, buf);
     
     // Rally clock
     int64_t rally_ms = getRallyTime_ms(*data->state);
     time_t rally_seconds = rally_ms / 1000;
     struct tm* rally_tm = localtime(&rally_seconds);
     
-    snprintf(buf, sizeof(buf), "%04d/%02d/%02d  %02d:%02d:%02d",
-             rally_tm->tm_year + 1900, rally_tm->tm_mon + 1, rally_tm->tm_mday,
-             rally_tm->tm_hour, rally_tm->tm_min, rally_tm->tm_sec);
+    snprintf(buf, sizeof(buf), "%04d/%02d/%02d",
+             rally_tm->tm_year + 1900, rally_tm->tm_mon + 1, rally_tm->tm_mday);
     gtk_label_set_text(data->rallyClockLabel, buf);
+    snprintf(buf, sizeof(buf), "%02d:%02d:%02d",
+             rally_tm->tm_hour, rally_tm->tm_min, rally_tm->tm_sec);
+    if (data->rallyTimeLabel) gtk_label_set_text(data->rallyTimeLabel, buf);
+
+    if (data->webUrlLabel && data->webServer && data->state->web_enabled) {
+        std::string url = data->webServer->getWebUrl();
+        // Drop the scheme ("http://") to keep the on-screen address compact.
+        const std::string scheme = "http://";
+        if (url.rfind(scheme, 0) == 0) url = url.substr(scheme.size());
+        gtk_label_set_text(data->webUrlLabel, url.c_str());
+        if (data->webQrArea) {
+            gtk_widget_show(data->webQrArea);
+            gtk_widget_queue_draw(data->webQrArea);
+        }
+        gtk_widget_show(GTK_WIDGET(data->webUrlLabel));
+    } else if (data->webUrlLabel) {
+        gtk_label_set_text(data->webUrlLabel, "(web server disabled)");
+        if (data->webQrArea) gtk_widget_hide(data->webQrArea);
+    }
 }
 
 void on_add_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
@@ -659,6 +698,7 @@ void on_add_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
             gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(data->autoNextCheck), TRUE);
             
             refreshSegmentList(data);
+            notifyWebState(data);
         }
     }
 }
@@ -674,6 +714,7 @@ void on_delete_segment(GtkWidget* widget, gpointer user_data) {
         data->state->segments.erase(data->state->segments.begin() + index);
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
+        notifyWebState(data);
     }
 }
 
@@ -719,6 +760,7 @@ void on_memory_set(GtkWidget* widget, gpointer user_data) {
     data->state->memory_slots[slot] = data->state->segments;
     ConfigFile::save(*data->state);
     updateMemoryRecallStyles(data);
+    notifyWebState(data);
 }
 
 void on_memory_recall(GtkWidget* widget, gpointer user_data) {
@@ -729,6 +771,7 @@ void on_memory_recall(GtkWidget* widget, gpointer user_data) {
         data->state->segment_current_number = data->state->segments.empty() ? -1 : 0;
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
+        notifyWebState(data);
     }
 }
 

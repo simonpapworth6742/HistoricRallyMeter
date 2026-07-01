@@ -4,27 +4,64 @@ A precision timing and speed measurement application for historic car regulation
 
 ## Introduction
 
-In historic car regulation rallies, drivers must maintain set average speeds over multi-segment stages, with timing accuracy measured to within 0.1 seconds over distances ranging from 2 km to hundreds of kilometres. HistoricRallyMeter provides real-time speed, distance, and timing calculations by reading pulse counters connected to the vehicle's gearbox or wheels via I2C, displaying the information across two dedicated screens — one for the driver and one for the co-pilot.
+In historic car regulation rallies, drivers must maintain set average speeds over multi-segment stages, with timing accuracy measured to within 0.1 seconds over distances ranging from 2 km to hundreds of kilometres. HistoricRallyMeter provides real-time speed, distance, and timing calculations by reading pulse counters connected to the vehicle's gearbox or wheels via I2C, displaying the information across dedicated screens — one for the driver and one for the co-pilot.
 
 The driver display shows current speed, target speed, total and trip averages, and a semicircular rally gauge indicating how many seconds ahead or behind the target pace. The co-pilot display provides stage setup, segment management, calibration, and detailed timing controls.
 
+When only one 1280×400 monitor is available (or when forced via config), **single-display mode** shows the co-pilot TwinMaster screen with the compact driver gauge embedded in the right panel.
+
 ## Features
 
-- **Dual 1280x400 displays** — dedicated driver and co-pilot windows, auto-detected and fullscreened on matching monitors
+- **Dual displays** — driver and co-pilot windows on 1280×400 (or 800×480 driver) panels; auto-detected and fullscreened on matching monitors
+- **Single-display mode** — one 1280×400 co-pilot screen with embedded compact driver gauge (configurable via `force_single_display`)
 - **Rally gauge** — semicircular ahead/behind timing indicator with auto-scaling (green/yellow/red) and needle
 - **Real-time speed calculation** — rolling 10-second average from hardware counters polled at up to 200 Hz
-- **Segment management** — multi-segment stages with target speeds, automatic or manual progression
+- **Segment management** — multi-segment stages with target speeds, automatic or manual progression, next/prev segment correction
 - **Ahead/behind timing** — high-precision calculation with speed adjustment arrows and audible tone feedback
 - **Dual counter support** — single gearbox counter or averaged dual wheel counters
 - **Calibration** — stored as millimetres per 1000 counts for integer-precision distance calculation
 - **Persistent state** — all settings, segments, and window positions saved to JSON
+- **Remote web access** — phones on the same WiFi can view live telemetry and control segments via a browser (see below)
+
+## Remote Web Access
+
+The application embeds an HTTP/WebSocket server so co-drivers and crew can use ordinary phone browsers on the same subnet.
+
+**On the device:** open **date/time** on the co-pilot screen. When the web server is enabled, the connection URL and a QR code are shown — scan with a phone camera to open the web client.
+
+**On a phone:** the browser shows:
+
+- **Live view** — rally clock, ahead/behind, current/target speed, trip/total distances and averages, segment info, next/prev correction, reset trip
+- **Setup view** — edit segments, store/recall memory slots, reset trip/total
+
+Telemetry updates at ~10 Hz over WebSocket. Commands (reset, segment edits, next/prev) use the same logic as the on-screen co-pilot controls.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `web_enabled` | `true` | Enable the embedded web server |
+| `web_port` | `8080` | TCP port for HTTP and WebSocket |
+
+The server listens on all interfaces; the URL shown uses the device's LAN IP (e.g. `http://192.168.1.42:8080/`). It is intended for a private in-car network only — there is no authentication or encryption.
+
+## Project Layout
+
+```
+HistoricRallyMeter/     Main GTK application (C++20)
+webserver/                Embedded HTTP/WebSocket server and QR display
+webclient/                Static web app served to phones (HTML/CSS/JS)
+Design.md                 Full design specification
+rally_config.json         Per-installation state (created on first run)
+```
+
+Run the binary from the project directory so it can find `webclient/` and `rally_config.json`.
 
 ## Hardware Requirements
 
 - **Raspberry Pi 5** (4GB+ recommended)
 - **LSI ls7866c 32-bit counters** — two devices on I2C bus 1 at addresses 0x70 and 0x71
-- **Displays** — two 1280x400 screens (e.g. Waveshare 7.9" bar displays) connected via DSI/HDMI; the app also works with a single standard monitor during development
+- **Displays** — co-pilot: 1280×400; driver: 1280×400 or 800×480 (or single 1280×400 in single-display mode); the app also works with a standard monitor during development
 - **Audio output** — for speed adjustment tone feedback (ALSA default device)
+- **Network** (optional) — WiFi or Ethernet for phone web access
 
 ## Installation on Raspberry Pi 5
 
@@ -32,8 +69,10 @@ The driver display shows current speed, target speed, total and trip averages, a
 
 ```bash
 sudo apt update
-sudo apt install -y build-essential pkg-config libgtk-3-dev libasound2-dev git
+sudo apt install -y build-essential pkg-config libgtk-3-dev libasound2-dev libqrencode4 git
 ```
+
+`libqrencode4` is used at runtime for the connection QR code on the Date/Time screen (loaded dynamically; no dev package required).
 
 ### 2. Enable I2C
 
@@ -115,7 +154,7 @@ The shortcut assumes the project is cloned to `~/HistoricRallyMeter`. If you clo
 ./HistoricRallyMeter
 ```
 
-Run from the project directory — the application reads and writes `rally_config.json` relative to the current working directory. On first run, default values are used and saved on exit. You can also launch from the desktop shortcut created in step 6.
+Run from the project directory — the application reads and writes `rally_config.json` relative to the current working directory and serves the web client from `webclient/`. On first run, default values are used and saved on exit. You can also launch from the desktop shortcut created in step 6.
 
 ## Updating to the Latest Version
 
@@ -154,14 +193,18 @@ Application state is stored in `rally_config.json` (created automatically on fir
 - **calibration** — millimetres per 1000 counter increments (set via the co-pilot calibration screen)
 - **counters** — single gearbox counter or dual wheel counters
 - **segments** — target speed and distance for each stage segment
+- **force_single_display** — force single-display mode even when multiple monitors are connected
+- **web_enabled** — enable embedded web server for phone browsers (default true)
+- **web_port** — TCP port for web access (default 8080)
 - **window state** — driver window size and monitor assignment
 
 This file is in `.gitignore` as it contains per-installation state.
 
 ## Development
 
-- **Design specification**: see [Design.md](Design.md) for the full application design and requirements
+- **Design specification**: see [Design.md](Design.md) for the full application design and requirements (including remote web access protocol and UI)
 - **IDE support**: VS Code / Cursor debug configurations are provided in `.vscode/` (launch, tasks, IntelliSense)
 - **C++ standard**: C++20
 - **GUI framework**: GTK3 with Cairo for custom gauge rendering
-- **Dependencies**: GTK3, ALSA (libasound), pthreads
+- **Web server**: GIO sockets on the GLib main loop; static client in `webclient/`
+- **Dependencies**: GTK3, ALSA (libasound), libqrencode (runtime), pthreads, dl

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Historic Rally Meter</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header>
+    <h1>Historic Rally Meter</h1>
+    <div id="conn" class="conn">connecting…</div>
+  </header>
+
+  <nav class="tabs">
+    <button id="tab-live" class="tab active" type="button">Live</button>
+    <button id="tab-setup" class="tab" type="button">Setup</button>
+  </nav>
+
+  <main id="view-live" class="view">
+    <section class="clock-row">
+      <span>Rally Clock</span>
+      <strong id="rally-clock">--:--:--</strong>
+    </section>
+
+    <section id="ahead-behind" class="ahead-behind">
+      <div class="label">AHEAD / BEHIND</div>
+      <div id="ahead-value" class="value">0.0 s</div>
+    </section>
+
+    <section class="speed-grid">
+      <div><span>Current</span><strong id="cur-kph">0.0</strong> <small id="unit-label">kph</small></div>
+      <div><span>Target</span><strong id="target-kph">0.0</strong> <small id="unit-label2">kph</small></div>
+    </section>
+
+    <section class="dist-grid">
+      <div><span>Trip</span><strong id="trip-m">0 m</strong><span id="trip-avg">avg 0.0</span></div>
+      <div><span>Total</span><strong id="total-m">0 m</strong><span id="total-avg">avg 0.0</span></div>
+    </section>
+
+    <section class="segment-row">
+      Segment <strong id="seg-num">0</strong> of <strong id="seg-count">0</strong>
+    </section>
+
+    <section class="actions">
+      <button id="btn-next-prev" type="button" disabled>---&gt;</button>
+      <button id="btn-reset-trip" type="button">Reset Trip</button>
+    </section>
+  </main>
+
+  <main id="view-setup" class="view hidden">
+    <div class="table-wrap">
+      <table id="seg-table">
+        <thead>
+          <tr><th>#</th><th>Target kph</th><th>Distance m</th><th>Auto</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <button id="btn-add-seg" type="button">+ Add segment</button>
+    <section class="memory-row">
+      <span>Memory:</span>
+      <button class="mem-slot" data-slot="1" type="button">1</button>
+      <button class="mem-slot" data-slot="2" type="button">2</button>
+      <button class="mem-slot" data-slot="3" type="button">3</button>
+      <button class="mem-slot" data-slot="4" type="button">4</button>
+      <button class="mem-slot" data-slot="5" type="button">5</button>
+      <button id="btn-mem-store" type="button">Store</button>
+      <button id="btn-mem-recall" type="button">Recall</button>
+    </section>
+    <section class="actions">
+      <button id="btn-reset-trip2" type="button">Reset Trip</button>
+      <button id="btn-reset-total" type="button">Reset Total</button>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

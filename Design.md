@@ -407,6 +407,10 @@ All fonts to be 20px
 |   Options:                                                                                               |
 |   force single display mode  (0 )                                                                        |
 |                                                                                                          |
+|   Phone web access (when web server enabled):                                                            |
+|   http://historicrallymeter.local:8080/   (or device IP if mDNS unavailable)                             |
+|   [ QR code ]  — scan to open web client on a phone on the same subnet                                 |
+|                                                                                                          |
 +----------------------------------------------------------------------------------------------------------+
 |                                [set and save]                          [back]                            |
 +----------------------------------------------------------------------------------------------------------+
@@ -418,6 +422,11 @@ on it, but no ";" and ".".
 
 - the Options menu
     force single display mode is a toggle button that sets a config value in the json file, and forces the use of single display only mode even if mutiple screens exist
+
+- **Phone web access** (shown only when `web_enabled` is true in the config):
+    - Displays the full URL to the web client (scheme `http://`, host from mDNS name `historicrallymeter.local` with fallback to the device's current LAN IP address, port from `web_port`).
+    - Renders a QR code encoding that same URL (minimum size ~120×120 px on screen, high contrast for scanning in daylight).
+    - The QR code and URL update if `web_port` changes after save; they are omitted entirely when the web server is disabled.
 
 **5) Auto Start Setup Screen**
 
@@ -443,6 +452,159 @@ Only allow time to be entered in the 24 hour clock, display an error and don't a
 
 Clear - sets the auto_start time to 0, making it in the past and therefor it has no further effect.
 Set - sets the auto start time in the config file etc. recording the offeset as defined, the screen is updated to show the new values.
+
+## Remote Web Access (mobile phones)
+
+The application serves a small web application so that ordinary browsers on mobile phones, joined to the same subnet as the HistoricRallyMeter device, can view live rally data and control the meter. Multiple phones may connect at once.
+
+Phones can:
+- Receive streamed live updates of trip/total distances, current and average speeds, target speed, and the ahead/behind figure.
+- Reset the trip and total distances.
+- Use the **next/prev** segment correction control (same rules and behaviour as the TwinMaster `[next/prev]` button).
+- View and edit the segment (stage) setup, including storing and recalling memory setups.
+
+### Transport decision
+
+- **No UDP.** Browsers cannot receive raw UDP datagrams, so UDP broadcast is not an option for a browser-based client. On a local subnet the latency advantage of UDP over TCP for small ~10 Hz payloads is negligible (dominated by WiFi airtime and browser render), so nothing is lost by not using it.
+- **WebSocket** is used as the single bidirectional channel. Live telemetry is pushed from the device to every connected phone; control commands (reset, segment edits) travel back up the same connection. WebSocket is reliable and ordered, which is required for control operations that must not be silently dropped.
+- Static assets (HTML/CSS/JS) are delivered over plain HTTP by the same embedded server.
+
+### Server architecture
+
+- The web server is embedded in the existing application and integrated into the GTK/GLib main loop (libsoup, which shares the `GMainContext` with GTK). This avoids a separate networking thread and, crucially, means incoming commands are handled on the same thread that owns `AppData`/`RallyState`.
+- **Thread-safety rule:** all rally state (`RallyState`, including the `segments` vector, trip/total start counters, `segment_current_number`) is single-threaded and lock-free by design. Network commands MUST NOT mutate this state directly from any other thread. Every command is executed on the GLib main loop and routed through the **same functions the on-screen controls already use** (e.g. the trip/total reset handlers and the segment setters in `callbacks.cpp`), so validation, calibration recalculation, and config persistence stay identical to the physical UI. If a non-GLib server library is ever used instead, commands must be marshalled onto the main loop with `g_idle_add()`/`g_main_context_invoke()`.
+- Telemetry is broadcast at a throttled **10 Hz** (decoupled from the 100 Hz internal poll loop) — ample for a human-readable phone display and light on WiFi.
+- After any state change (from a phone or from the on-device screens), the current authoritative state is broadcast to all connected clients so every phone and the dash stay in sync. Conflicts between multiple editors resolve as last-writer-wins.
+
+### Network discovery
+
+- The server listens on a fixed TCP port (default `8080`, configurable).
+- The device advertises itself over mDNS/Avahi (e.g. `historicrallymeter.local`) so phones need not know the IP address.
+- The **Date/Time Setup screen** displays the connection URL as text and as a **QR code** so co-drivers can scan it with a phone camera to open the web client (see "Date/Time Setup Screen").
+
+### Directory layout
+
+The server-side integration and the browser client are kept in separate directories:
+
+- `webserver/` — the C++ code that embeds the HTTP/WebSocket server, serialises telemetry to JSON, and dispatches incoming commands onto the main loop through the existing control functions. One class per file, consistent with the rest of the project.
+- `webclient/` — the static web application served to and executed on the phones (`index.html`, CSS, JS, and any assets). This directory contains no device code; it is a self-contained browser client that the server publishes as static files. (A future option is to compile the C++ gauge rendering to WebAssembly and place the `.wasm` artifact here, but the initial client is plain HTML/CSS/JS with no build step.)
+
+### Message protocol (JSON over WebSocket)
+
+**Telemetry (device → phone), ~10 Hz:**
+```json
+{
+  "type": "telemetry",
+  "rally_clock": "14:53:07",
+  "trip_m": 537,
+  "total_m": 855053,
+  "cur_kph": 38.0,
+  "trip_avg_kph": 41.2,
+  "total_avg_kph": 42.1,
+  "target_kph": 100.0,
+  "ahead_behind_s": -1.8,
+  "segment_number": 2,
+  "segment_count": 3,
+  "next_prev_label": "next",
+  "next_prev_enabled": true
+}
+```
+
+- `next_prev_label` is one of `"next"`, `"prev"`, or `"--->"`, matching the TwinMaster button caption.
+- `next_prev_enabled` is true only when the button would be active on the co-pilot display (within 500 m of the current segment end with a following segment, or within 500 m of the current segment start and not on the first segment); otherwise false and the label is `"--->"`.
+
+**State snapshot (device → phone)** — sent on connect and after any change, so clients can render/refresh the segment editor:
+```json
+{
+  "type": "state",
+  "segment_current_number": 1,
+  "segments": [
+    { "target_speed_kph": 75.0, "distance_m": 1330, "autoNext": true }
+  ]
+}
+```
+
+**Commands (phone → device):**
+```json
+{ "type": "reset_trip" }
+{ "type": "reset_total" }
+{ "type": "next_prev" }
+{ "type": "segment_set", "index": 0, "target_speed_kph": 75.0, "distance_m": 1330, "autoNext": true }
+{ "type": "segment_add", "target_speed_kph": 75.0, "distance_m": 1000, "autoNext": true }
+{ "type": "segment_delete", "index": 2 }
+{ "type": "memory_store", "slot": 1 }
+{ "type": "memory_recall", "slot": 1 }
+```
+
+- Distances are entered/displayed in metres and speeds in KPH (calibration-independent), matching the stage setup screen; the device recomputes counts against the current calibration.
+- `next_prev` invokes the same logic as the TwinMaster `[next/prev]` button (`on_next_prev_segment` in `callbacks.cpp`): when within 500 m of segment end, shortens the current segment to the distance travelled and advances; when within 500 m of segment start (not the first segment), extends the previous segment and resets the current segment start. No effect if neither condition applies (same as a disabled button on the co-pilot display).
+- The device validates every command and ignores malformed or out-of-range ones. Invalid entries produce no state change.
+
+### Web client design
+
+The client is a single responsive page that works in portrait or landscape on a phone browser, styled for legibility (large bold values, high contrast). It connects to the WebSocket on load and reconnects automatically if the connection drops. It has two views selectable by a tab bar:
+
+**1) Live view (default)**
+
+```
++------------------------------------------+
+|  Rally Clock            14:53:07         |
++------------------------------------------+
+|  AHEAD / BEHIND                          |
+|            -1.8 s                         |   <- large, colour-coded
++------------------------------------------+
+|  Current      38.0 kph                   |
+|  Target      100.0 kph                   |
++------------------------------------------+
+|  Trip     537 m     avg 41.2 kph         |
+|  Total 855,053 m    avg 42.1 kph         |
++------------------------------------------+
+|  Segment 2 of 3                          |
++------------------------------------------+
+|  [ next ]              [ Reset Trip ]    |   <- next/prev/---> label from telemetry; greyed when disabled
++------------------------------------------+
+```
+
+- The ahead/behind value is the most prominent element and is colour-coded (e.g. green when ahead, red when behind) for a glance read.
+- Distances use the same auto-formatting as the TwinMaster (metres, switching to km with a unit label for large values).
+- The **next/prev** button shows the caption from `next_prev_label` (`next`, `prev`, or `--->`) and is enabled only when `next_prev_enabled` is true; it sends a `next_prev` command on press, mirroring the TwinMaster `[next/prev]` button rules (500 m window at segment end or start).
+- `Reset Trip` issues a `reset_trip` command; it may require a short press-and-confirm to avoid accidental taps.
+
+**2) Setup view**
+
+```
++------------------------------------------+
+|  # | Target kph | Distance m | Auto | x  |
+|  1 |   75.0     |   1330     | [x]  |[del]|
+|  2 |   75.0     |   1000     | [x]  |[del]|
+|  3 |  100.0     |    250     | [ ]  |[del]|
++------------------------------------------+
+|  [ + Add segment ]                       |
++------------------------------------------+
+|  Memory:  [1][2][3][4][5]                |
+|           [ Store ]   [ Recall ]         |
++------------------------------------------+
+|  [ Reset Trip ]     [ Reset Total ]      |
+```
+
+- Each row edits one segment (target speed, distance, autoNext) and sends a `segment_set` command on change; `+ Add segment` and per-row delete send `segment_add`/`segment_delete`.
+- Memory Store/Recall for the five slots mirror the on-device memory behaviour and send `memory_store`/`memory_recall`.
+- The editor is populated and kept current from the `state` snapshot, so edits made on the device or on another phone appear here.
+
+### Configuration
+
+Two keys are added to `rally_config.json`:
+- `web_enabled` (bool) — enables the embedded web server (default true).
+- `web_port` (int) — TCP port to listen on (default 8080).
+
+### Build requirements (addition)
+
+- HTTP/WebSocket server integrated with the GLib main loop (GIO sockets; static files from `webclient/`).
+- libqrencode (runtime) for QR code on the Date/Time screen (loaded dynamically).
+
+### Security note
+
+The server is an unauthenticated service intended for a private, in-car subnet. Because the control surface can reset distances and alter segments, it should only be exposed on a trusted network. No credentials or transport encryption are provided by default.
 
 ## Unit Tests
 
@@ -603,10 +765,17 @@ Set - sets the auto start time in the config file etc. recording the offeset as 
 ### Date/Time Setup Screen Tests
 - Display system clock in yyyy/mm/dd hh:mm:ss format
 - Display RallyClock (with current offset) in yyyy/mm/dd hh:mm:ss format
+- When `web_enabled` is true, display web client URL and QR code encoding that URL; omit both when `web_enabled` is false
+- QR code resolves to a page loadable on a phone on the same subnet
 - Input fields accept valid date and time values
 - Calculate rallyTimeOffset = input_rally_time_ms - system_time_ms
 - Set and save button stores offset and returns to TwinMaster
 - Back button returns without saving changes
+
+### Remote Web Access Tests
+- WebSocket telemetry includes `next_prev_label` and `next_prev_enabled` consistent with TwinMaster button state
+- `next_prev` command applies same segment correction as co-pilot `[next/prev]` button; no-op when not in 500 m window
+- Multiple connected phones receive broadcast state after `next_prev`, reset, or segment edit
 
 ### Rally-Specific Edge Cases
 - Zero counts (stationary vehicle) - speed displays as 0.00 or "--.--"

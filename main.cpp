@@ -18,6 +18,7 @@
 #include "ui_driver.h"
 #include "ui_copilot.h"
 #include "callbacks.h"
+#include "webserver/rally_web_server.h"
 #include "calculations.h"
 #include "tone_generator.h"
 
@@ -336,6 +337,15 @@ int main(int argc, char* argv[]) {
         std::cerr << "[DEBUG] Step 8c: ToneGenerator started OK" << std::endl;
         app_data.lastUpdateCountTime_ms = getRallyTime_ms(state);
 
+        if (state.web_enabled) {
+            app_data.webServer = new RallyWebServer(&app_data);
+            if (app_data.webServer->start(state.web_port)) {
+                std::cout << "Web server listening on " << app_data.webServer->getWebUrl() << std::endl;
+            } else {
+                std::cerr << "Web server failed to start on port " << state.web_port << std::endl;
+            }
+        }
+
         // Single-display mode: exactly one monitor and it is 1280x400, or the
         // "force single display mode" option is set in the config.
         // Only the co-pilot window is shown; the compact driver display is
@@ -557,6 +567,11 @@ int main(int argc, char* argv[]) {
         if (app_data.toneGen) {
             app_data.toneGen->stop();
             delete app_data.toneGen;
+        }
+        if (app_data.webServer) {
+            app_data.webServer->stop();
+            delete app_data.webServer;
+            app_data.webServer = nullptr;
         }
         delete app_data.poller;
         return 0;

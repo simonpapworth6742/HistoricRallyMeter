@@ -1,0 +1,23 @@
+=== I2C Error Rate Test @ 100 kHz ===
+
+--- Direct CNTR Read (old method) ---
+  Duration:      30.0 seconds
+  Total reads:   12106 (404 reads/sec)
+  C1 errors:     0 (backward: 0, forward: 0)
+  C2 errors:     0 (backward: 0, forward: 0)
+  Total errors:  0 (0.0000% error rate)
+  I/O failures:  c1=0 c2=0
+  Stationary:    12106 reads, 0 errors (0.0000%)
+
+--- ODR Latch Read (correct method per datasheet) ---
+  Duration:      30.0 seconds
+  Total reads:   9654 (322 reads/sec)
+  C1 errors:     0 (backward: 0, forward: 0)
+  C2 errors:     0 (backward: 0, forward: 0)
+  Total errors:  0 (0.0000% error rate)
+  I/O failures:  c1=0 c2=0
+  Stationary:    9654 reads, 0 errors (0.0000%)
+
+--- Summary ---
+Direct CNTR:  0 errors in 12106 reads (0.0000%)
+ODR Latch:    0 errors in 9654 reads (0.0000%)

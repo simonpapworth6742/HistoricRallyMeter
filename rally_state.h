@@ -35,6 +35,10 @@ public:
 
     // Force single-display mode even when multiple screens exist
     bool force_single_display = false;
+
+    // Embedded web server for phone browsers
+    bool web_enabled = true;
+    int web_port = 8080;
     
     // Driver window position/size (remembered across sessions)
     int driver_window_x = -1;      // -1 = not set

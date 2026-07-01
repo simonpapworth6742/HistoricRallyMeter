@@ -6,6 +6,7 @@
 #include "counter_poller.h"
 #include "callbacks.h"
 #include "config_file.h"
+#include "webserver/qr_display.h"
 #include "calculations.h"
 #include <sstream>
 #include <cstdlib>
@@ -724,57 +725,66 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     
     // Left side: clocks, input, buttons
     GtkWidget* leftBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_box_pack_start(GTK_BOX(mainBox), leftBox, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(mainBox), leftBox, FALSE, FALSE, 0);
     
-    // System clock row (30px)
-    GtkWidget* sysBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    // Clocks and the rally-time input share a grid so the date/time input boxes
+    // line up under the date and time columns of the clock readouts:
+    //   col 0 = row label, col 1 = date, col 2 = time.
+    GtkWidget* clockGrid = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(clockGrid), 6);
+    gtk_grid_set_column_spacing(GTK_GRID(clockGrid), 16);
+    gtk_box_pack_start(GTK_BOX(leftBox), clockGrid, FALSE, FALSE, 0);
+
+    // Row 0: System clock (date | time)
     GtkWidget* sysLabel = gtk_label_new("System Clock:");
     gtk_style_context_add_class(gtk_widget_get_style_context(sysLabel), "clock-label");
+    gtk_widget_set_halign(sysLabel, GTK_ALIGN_START);
+    gtk_grid_attach(GTK_GRID(clockGrid), sysLabel, 0, 0, 1, 1);
     data->systemClockLabel = GTK_LABEL(gtk_label_new(""));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->systemClockLabel)), "clock-label");
-    gtk_box_pack_start(GTK_BOX(sysBox), sysLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(sysBox), GTK_WIDGET(data->systemClockLabel), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(leftBox), sysBox, FALSE, FALSE, 0);
-    
-    // Rally clock row (30px)
-    GtkWidget* rallyBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_label_set_xalign(data->systemClockLabel, 0.0);
+    gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->systemClockLabel), 1, 0, 1, 1);
+    data->systemTimeLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->systemTimeLabel)), "clock-label");
+    gtk_label_set_xalign(data->systemTimeLabel, 0.0);
+    gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->systemTimeLabel), 2, 0, 1, 1);
+
+    // Row 1: Rally clock (date | time)
     GtkWidget* rallyLabel = gtk_label_new("Rally  Clock:");
     gtk_style_context_add_class(gtk_widget_get_style_context(rallyLabel), "clock-label");
+    gtk_widget_set_halign(rallyLabel, GTK_ALIGN_START);
+    gtk_grid_attach(GTK_GRID(clockGrid), rallyLabel, 0, 1, 1, 1);
     data->rallyClockLabel = GTK_LABEL(gtk_label_new(""));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->rallyClockLabel)), "clock-label");
-    gtk_box_pack_start(GTK_BOX(rallyBox), rallyLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(rallyBox), GTK_WIDGET(data->rallyClockLabel), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(leftBox), rallyBox, FALSE, FALSE, 0);
-    
-    gtk_box_pack_start(GTK_BOX(leftBox), gtk_label_new(""), FALSE, FALSE, 0);
-    
-    // Input row
-    GtkWidget* inputRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
-    gtk_box_pack_start(GTK_BOX(leftBox), inputRow, FALSE, FALSE, 0);
-    
-    GtkWidget* setLabel = gtk_label_new("Set Rally Time:");
+    gtk_label_set_xalign(data->rallyClockLabel, 0.0);
+    gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->rallyClockLabel), 1, 1, 1, 1);
+    data->rallyTimeLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->rallyTimeLabel)), "clock-label");
+    gtk_label_set_xalign(data->rallyTimeLabel, 0.0);
+    gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->rallyTimeLabel), 2, 1, 1, 1);
+
+    // Row 2: Set rally clock — date box under the date column, time box under time
+    GtkWidget* setLabel = gtk_label_new("Set Rally Clk:");
     gtk_style_context_add_class(gtk_widget_get_style_context(setLabel), "clock-label");
-    GtkWidget* dateLabel = gtk_label_new("Date:");
-    gtk_style_context_add_class(gtk_widget_get_style_context(dateLabel), "clock-label");
+    gtk_widget_set_halign(setLabel, GTK_ALIGN_START);
+    gtk_widget_set_margin_top(setLabel, 6);
+    gtk_grid_attach(GTK_GRID(clockGrid), setLabel, 0, 2, 1, 1);
+
     data->dateEntry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_placeholder_text(data->dateEntry, "yyyy/mm/dd");
-    gtk_widget_set_size_request(GTK_WIDGET(data->dateEntry), 200, -1);
+    gtk_entry_set_width_chars(data->dateEntry, 10);
+    gtk_widget_set_margin_top(GTK_WIDGET(data->dateEntry), 6);
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->dateEntry)), "clock-label");
     g_signal_connect(data->dateEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
-    
-    GtkWidget* timeLabel = gtk_label_new("Time:");
-    gtk_style_context_add_class(gtk_widget_get_style_context(timeLabel), "clock-label");
+    gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->dateEntry), 1, 2, 1, 1);
+
     data->timeEntry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_placeholder_text(data->timeEntry, "hh:mm:ss");
-    gtk_widget_set_size_request(GTK_WIDGET(data->timeEntry), 160, -1);
+    gtk_entry_set_width_chars(data->timeEntry, 8);
+    gtk_widget_set_margin_top(GTK_WIDGET(data->timeEntry), 6);
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->timeEntry)), "clock-label");
     g_signal_connect(data->timeEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
-    
-    gtk_box_pack_start(GTK_BOX(inputRow), setLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(inputRow), dateLabel, FALSE, FALSE, 10);
-    gtk_box_pack_start(GTK_BOX(inputRow), GTK_WIDGET(data->dateEntry), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(inputRow), timeLabel, FALSE, FALSE, 10);
-    gtk_box_pack_start(GTK_BOX(inputRow), GTK_WIDGET(data->timeEntry), FALSE, FALSE, 0);
+    gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->timeEntry), 2, 2, 1, 1);
     
     // Options section
     GtkWidget* optionsLabel = gtk_label_new("Options:");
@@ -794,7 +804,28 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(forceSingleRow), forceSingleLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(forceSingleRow), forceSingleSwitch, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(leftBox), forceSingleRow, FALSE, FALSE, 0);
-    
+
+    // Middle column: phone web access (URL + QR) placed in the open space to the
+    // right of the clock rows (top-aligned, URL level with the System Clock row),
+    // between the narrowed left column and the keypad, so it neither overflows the
+    // left column nor pushes the keypad off-screen.
+    GtkWidget* webBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_widget_set_valign(webBox, GTK_ALIGN_START);
+    gtk_widget_set_halign(webBox, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(mainBox), webBox, TRUE, TRUE, 0);
+
+    data->webUrlLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->webUrlLabel)), "clock-label");
+    gtk_label_set_selectable(data->webUrlLabel, TRUE);
+    gtk_box_pack_start(GTK_BOX(webBox), GTK_WIDGET(data->webUrlLabel), FALSE, FALSE, 0);
+
+    data->webQrArea = gtk_drawing_area_new();
+    gtk_widget_set_size_request(data->webQrArea, 132, 132);
+    gtk_widget_set_halign(data->webQrArea, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_top(data->webQrArea, 6);
+    g_signal_connect(data->webQrArea, "draw", G_CALLBACK(on_qr_draw), data);
+    gtk_box_pack_start(GTK_BOX(webBox), data->webQrArea, FALSE, FALSE, 0);
+
     // Right side: datetime keypad
     data->datetimeKeypad = createDateTimeKeypad(data);
     gtk_box_pack_end(GTK_BOX(mainBox), data->datetimeKeypad, FALSE, FALSE, 10);
@@ -902,6 +933,12 @@ GtkWidget* createCopilotWindow(AppData* data) {
     
     // Create stack for screens
     data->copilotStack = GTK_STACK(gtk_stack_new());
+    // Size each screen to its own content, not the tallest child. The Date/Time
+    // screen (with the phone-access QR code) is taller than the 400px window;
+    // with the default vhomogeneous=TRUE it would inflate every screen's minimum
+    // height and push the TwinMaster nav bar off the bottom of the display.
+    gtk_stack_set_vhomogeneous(data->copilotStack, FALSE);
+    gtk_stack_set_hhomogeneous(data->copilotStack, FALSE);
     gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(data->copilotStack));
     
     // Create all screens

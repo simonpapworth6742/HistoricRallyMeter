@@ -13,6 +13,7 @@ class I2CCounter;
 class RallyState;
 class CounterPoller;
 class ToneGenerator;
+class RallyWebServer;
 
 // Segment structure (high precision)
 struct Segment {
@@ -92,6 +93,10 @@ struct AppData {
     GtkLabel* alarmCountdownLabel;
     GtkWidget* alarmClearBtn;
     int64_t alarmSoundStartTime = 0;    // when doorbell started (0 = not ringing)
+
+    GtkLabel* webUrlLabel = nullptr;
+    GtkWidget* webQrArea = nullptr;
+    RallyWebServer* webServer = nullptr;
     
     // Stage setup screen
     GtkWidget* stageSetupScreen;
@@ -122,7 +127,9 @@ struct AppData {
     GtkWidget* dateTimeScreen;
     GtkWidget* datetimeKeypad;
     GtkLabel* systemClockLabel;
+    GtkLabel* systemTimeLabel;
     GtkLabel* rallyClockLabel;
+    GtkLabel* rallyTimeLabel;
     GtkEntry* dateEntry;
     GtkEntry* timeEntry;
     
