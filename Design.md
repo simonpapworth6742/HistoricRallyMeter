@@ -173,14 +173,16 @@ look at the example guage in gaugepilot-rallymaster-display.png
 - yellow should have a yellow semi circle on the guage, and the amount ahead/behind should be shown as +-ss.s
 - green should have a green semi circle on the guage, and the amount ahead/behind should be shown as +-ss.s
 - the scale on the guage should not change too often, and after changing should wait two seconds before changing again, in effect debouncing.
-- The needle is a narrow triangle (white filled) tapering from a 24px-wide base at the hub to a sharp point at the tip, with a black 1.5px centre line running from hub to tip, and a subtle drop shadow offset by 2px
+- The needle is a narrow triangle (white filled) tapering from a 24px-wide base at the hub to a sharp point at the tip, with a black 1.5px centre line running from hub to tip, and a subtle drop shadow offset by 2px.
+  The Needle is used to convey a lot of information to the driver, both the scale and the distance to the end of the this segment. When in green scale there shoud be a signal arrow "^" pointing along the needle 48px-wide, 20% of the needle length from the central pin this is known as the topmost arrow. If in the yellow scale there should be a second arrow under the topmost arrow and if the red scale a third arrow under the second.
+  If within a segment there should be a small perpedicular line 20% of the needles length from the top of the needle 48px wide, the "arrows" for the scale should move closer to the line based on the percentage of the current segment driven or stay at their start position if not in a segment.
 - The digital readout box (ahead/behind value) is positioned just below the needle hub
 - The gauge provides an intuitive visual indication - needle pointing right means slow down, needle pointing left means speed up
 
 
 ``` Layout notes For display/windows for 1280x400 and larger (wide, shallow display):
 +----------------------------------------------------------------------------------------------------------+
-|   Current↑↑↑↓↓↓         Total                       |                      RALLY GAUGE            [KPH]  |
+|   Current↑↑↑↓↓↓         Total                       |                      RALLY GAUGE                   |
 |    xx.x                 xx.x                        |            -10s ←───┬───→ +10s                     |
 |                                                     |                 ╱   │   ╲                          |
 |   Target                Trip                        |               ╱     ▲    ╲                         |
@@ -193,7 +195,7 @@ look at the example guage in gaugepilot-rallymaster-display.png
 
 - Left side: Four speed values Current, Target, Trip, Total. Trip, Total with large fonts, Current with extra large font and target 70% of the size of Trip.
 - Right side: Rally gauge with semicircular dial, target speed, and timing info
-- Bottom row: Updates counter on left, next segment info in center, unit toggle on right
+- Bottom row: Updates counter (fps) and cpu temperature on the left, next segment info in the center. The driver display has no unit (KPH/MPH) toggle button.
 - The rally gauge should be prominently displayed as a graphical element
 - Use large fonts for speed values as they are primary information for driver
 - All elements arranged to maximize visibility for the driver
@@ -203,7 +205,7 @@ look at the example guage in gaugepilot-rallymaster-display.png
 
 ``` Layout notes For display/windows for 800x480 (small 4:3 display):
 +-----------------------------------------+
-|  {target}                          [KPH]|
+|  {target}                               |
 |         -10s ←───┬───→ +10s             |
 |            ╱     │     ╲                |
 |          ╱       │ {tot} ╲              |
@@ -396,21 +398,17 @@ On entry pre fill the date and time entry box's with the current date and time.
 All fonts to be 20px
 
 +----------------------------------------------------------------------------------------------------------+
-|                                       DATE/TIME SETUP                                   [exit app]       |
+|  DATE/TIME SETUP                                                                            [exit app]    |
 +----------------------------------------------------------------------------------------------------------+
-|   System Clock:  yyyy/mm/dd  hh:mm:ss        30px                                                        |
-|                                                                                                          |
-|   Rally  Clock:  yyyy/mm/dd  hh:mm:ss        30px                                                        |
-+----------------------------------------------------------------------------------------------------------+
-|   Set Rally Time:    Date: [__________]    Time: [__________]    30px                                    |
-|                                                                                                          |
-|   Options:                                                                                               |
-|   force single display mode  (0 )                                                                        |
-|                                                                                                          |
-|   Phone web access (when web server enabled):                                                            |
-|   http://historicrallymeter.local:8080/   (or device IP if mDNS unavailable)                             |
-|   [ QR code ]  — scan to open web client on a phone on the same subnet                                 |
-|                                                                                                          |
+|  System Clock:  yyyy/mm/dd  hh:mm:ss                                                                      |
+|                                          historicrallymeter.local:8080          7    8    9               |
+|  Rally  Clock:  yyyy/mm/dd  hh:mm:ss      (or device IP if mDNS unavailable)    4    5    6               |
+|                                                                                 1    2    3               |
+|  Set Rally Clk: [yyyy/mm/dd] [hh:mm:ss]         +------------+                  /    0    :               |
+|                                                 |            |                 [C]  [   <--   ]           |
+|  Options:                                       |  QR code   |                                            |
+|  force single display mode        ( o)          |  132x132   |                                            |
+|  speed units          [ KPH ]                   +------------+                                            |
 +----------------------------------------------------------------------------------------------------------+
 |                                [set and save]                          [back]                            |
 +----------------------------------------------------------------------------------------------------------+
@@ -422,6 +420,8 @@ on it, but no ";" and ".".
 
 - the Options menu
     force single display mode is a toggle button that sets a config value in the json file, and forces the use of single display only mode even if mutiple screens exist
+
+    speed units is a button showing the current unit ("KPH" or "MPH"); pressing it toggles the `units` config value between KPH and MPH and saves it. This is the only place the units are changed (the driver display no longer has a unit toggle). All speed displays across the driver, co-pilot and web client follow this setting.
 
 - **Phone web access** (shown only when `web_enabled` is true in the config):
     - Displays the full URL to the web client (scheme `http://`, host from mDNS name `historicrallymeter.local` with fallback to the device's current LAN IP address, port from `web_port`).

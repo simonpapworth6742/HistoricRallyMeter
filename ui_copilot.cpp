@@ -805,6 +805,17 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(forceSingleRow), forceSingleSwitch, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(leftBox), forceSingleRow, FALSE, FALSE, 0);
 
+    // Speed units (KPH/MPH) toggle — moved here from the driver display. The button
+    // caption shows the current unit; pressing it flips KPH <-> MPH (on_unit_toggle).
+    GtkWidget* unitsRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+    GtkWidget* unitsRowLabel = gtk_label_new("speed units");
+    gtk_style_context_add_class(gtk_widget_get_style_context(unitsRowLabel), "clock-label");
+    data->unitToggleBtn = GTK_BUTTON(gtk_button_new_with_label(data->state->units ? "MPH" : "KPH"));
+    gtk_widget_set_valign(GTK_WIDGET(data->unitToggleBtn), GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(unitsRow), unitsRowLabel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(unitsRow), GTK_WIDGET(data->unitToggleBtn), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(leftBox), unitsRow, FALSE, FALSE, 0);
+
     // Middle column: phone web access (URL + QR) placed in the open space to the
     // right of the clock rows (top-aligned, URL level with the System Clock row),
     // between the narrowed left column and the keypad, so it neither overflows the

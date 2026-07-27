@@ -296,6 +296,75 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     cairo_arc(cr, centerX, centerY, 4, 0, 2 * M_PI);
     cairo_fill(cr);
 
+    // Scale chevrons + segment-end tick along the needle.
+    // The number of chevrons encodes the active scale (green=1, yellow=2, red=3).
+    // The topmost chevron starts 20% out from the hub; while within a segment the
+    // whole group slides toward the segment-end tick (20% from the tip) in
+    // proportion to how much of the segment has been driven. Outside a segment the
+    // chevrons stay at the start position and the tick is hidden.
+    {
+        double dir_x = cos(needle_angle);
+        double dir_y = sin(needle_angle);
+        int num_chevrons = data->gaugeScale + 1;  // 0->1 (green), 1->2 (yellow), 2->3 (red)
+        if (num_chevrons < 1) num_chevrons = 1;
+        if (num_chevrons > 3) num_chevrons = 3;
+
+        const double f_start = 0.20;  // topmost chevron start, fraction from hub
+        const double f_tick  = 0.80;  // segment-end tick, 20% from the tip
+        double progress = data->inSegment ? data->segmentProgress : 0.0;
+        if (progress < 0.0) progress = 0.0;
+        if (progress > 1.0) progress = 1.0;
+        double f_top = f_start + progress * (f_tick - f_start);
+
+        const double chevron_half_w = 18.0;  // 36px wide
+        const double chevron_depth  = 14.0;  // along the needle
+        const double spacing_px     = 16.0;  // between stacked chevrons
+        double spacing_f = spacing_px / needle_length;
+
+        // Segment-end tick: 48px perpendicular line, only while within a segment.
+        if (data->inSegment) {
+            double tx = centerX + f_tick * needle_length * dir_x;
+            double ty = centerY + f_tick * needle_length * dir_y;
+            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+            cairo_set_line_width(cr, 3.0);
+            cairo_move_to(cr, tx + chevron_half_w * perp_x, ty + chevron_half_w * perp_y);
+            cairo_line_to(cr, tx - chevron_half_w * perp_x, ty - chevron_half_w * perp_y);
+            cairo_stroke(cr);
+        }
+
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+        cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+        for (int i = 0; i < num_chevrons; i++) {
+            double f = f_top - i * spacing_f;
+            if (f < 0.03) break;  // keep clear of the hub
+            double ax = centerX + f * needle_length * dir_x;      // apex (points to tip)
+            double ay = centerY + f * needle_length * dir_y;
+            double bx = ax - chevron_depth * dir_x;               // base, toward hub
+            double by = ay - chevron_depth * dir_y;
+            double e1x = bx + chevron_half_w * perp_x;
+            double e1y = by + chevron_half_w * perp_y;
+            double e2x = bx - chevron_half_w * perp_x;
+            double e2y = by - chevron_half_w * perp_y;
+
+            // Dark under-stroke for contrast against the white needle.
+            cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+            cairo_set_line_width(cr, 6.0);
+            cairo_move_to(cr, e1x, e1y);
+            cairo_line_to(cr, ax, ay);
+            cairo_line_to(cr, e2x, e2y);
+            cairo_stroke(cr);
+
+            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+            cairo_set_line_width(cr, 3.5);
+            cairo_move_to(cr, e1x, e1y);
+            cairo_line_to(cr, ax, ay);
+            cairo_line_to(cr, e2x, e2y);
+            cairo_stroke(cr);
+        }
+        cairo_set_line_cap(cr, CAIRO_LINE_CAP_BUTT);
+        cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER);
+    }
+
     // Compact layout: draw the speed values inside the gauge area.
     // Fonts match the wide layout at full size and shrink with the gauge.
     if (data->driverCompactMode) {
@@ -464,6 +533,26 @@ void updateDriverDisplay(AppData* data) {
         
         // Store for gauge
         data->aheadBehindSeconds = seconds;
+
+        // Fraction of the current segment driven, for the needle's scale chevrons
+        // and segment-end tick. "In segment" while between the segment start and end.
+        {
+            int64_t seg_count_diff = calculateDistanceCounts(*data->state,
+                current_poll.cntr1, current_poll.cntr2,
+                data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+            double seg_total = seg.distance_counts;
+            if (seg_total > 0.0) {
+                double frac = static_cast<double>(seg_count_diff) / seg_total;
+                if (frac < 0.0) frac = 0.0;
+                if (frac > 1.0) frac = 1.0;
+                data->segmentProgress = frac;
+                data->inSegment = (seg_count_diff >= 0 &&
+                                   static_cast<double>(seg_count_diff) <= seg_total);
+            } else {
+                data->segmentProgress = 0.0;
+                data->inSegment = false;
+            }
+        }
         
         // Format as mm:ss.s (not hh:mm:ss.ss)
         ss.str("");
@@ -574,6 +663,8 @@ void updateDriverDisplay(AppData* data) {
         gtk_label_set_text(data->speedAdjustArrowsLabel, "");
         if (data->toneGen) data->toneGen->setCadence(0, 0);
         data->aheadBehindSeconds = 0.0;
+        data->segmentProgress = 0.0;
+        data->inSegment = false;
         if (data->rallyGaugeDrawingArea) {
             gtk_widget_queue_draw(data->rallyGaugeDrawingArea);
         }
@@ -815,7 +906,8 @@ GtkWidget* createDriverWindow(AppData* data) {
     gtk_box_pack_start(GTK_BOX(footerBox), GTK_WIDGET(data->cpuTempLabel), FALSE, FALSE, 10);
     gtk_box_pack_start(GTK_BOX(footerBox), GTK_WIDGET(data->nextSegLabel), TRUE, TRUE, 0);
     
-    // Right side: Rally gauge fills full height with unit toggle overlaid at top right
+    // Right side: Rally gauge fills full height. The unit (KPH/MPH) toggle lives on
+    // the co-pilot Date/Time setup screen, not here.
     GtkWidget* gaugeOverlay = gtk_overlay_new();
     gtk_widget_set_vexpand(gaugeOverlay, TRUE);
     gtk_widget_set_hexpand(gaugeOverlay, TRUE);
@@ -826,11 +918,6 @@ GtkWidget* createDriverWindow(AppData* data) {
     gtk_widget_set_vexpand(data->rallyGaugeDrawingArea, TRUE);
     g_signal_connect(data->rallyGaugeDrawingArea, "draw", G_CALLBACK(on_gauge_draw), data);
     gtk_container_add(GTK_CONTAINER(gaugeOverlay), data->rallyGaugeDrawingArea);
-    
-    data->unitToggleBtn = GTK_BUTTON(gtk_button_new_with_label(data->state->units ? "MPH" : "KPH"));
-    gtk_widget_set_halign(GTK_WIDGET(data->unitToggleBtn), GTK_ALIGN_END);
-    gtk_widget_set_valign(GTK_WIDGET(data->unitToggleBtn), GTK_ALIGN_START);
-    gtk_overlay_add_overlay(GTK_OVERLAY(gaugeOverlay), GTK_WIDGET(data->unitToggleBtn));
     
     // Units label (hidden, kept for update logic compatibility)
     data->unitsLabel = GTK_LABEL(gtk_label_new(data->state->units ? "(MPH)" : "(KPH)"));
