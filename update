@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# update — fetch the latest stable (tagged) release of HistoricRallyMeter and build it.
+#
+# Checks out the highest vX.Y.Z version tag from origin and rebuilds. Your
+# rally_config.json is git-ignored, so your settings are preserved across updates.
+
+set -euo pipefail
+
+# Always operate in the directory this script lives in (the project root),
+# regardless of where it was invoked from.
+cd "$(dirname "$(readlink -f "$0")")"
+
+echo "Fetching latest release information ..."
+git fetch --tags --force --prune origin
+
+# Highest semantic-version tag (vMAJOR.MINOR.PATCH).
+LATEST_TAG=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+if [ -z "$LATEST_TAG" ]; then
+    echo "Error: no version tags (vX.Y.Z) found on origin." >&2
+    exit 1
+fi
+
+CURRENT=$(git describe --tags --exact-match 2>/dev/null || echo "none")
+echo "Latest stable release: $LATEST_TAG (currently on: $CURRENT)"
+
+if [ "$CURRENT" = "$LATEST_TAG" ]; then
+    echo "Already on the latest release; rebuilding to be sure ..."
+else
+    echo "Checking out $LATEST_TAG ..."
+    git checkout --quiet "$LATEST_TAG"
+fi
+
+echo "Building ..."
+make clean
+make all
+
+echo
+echo "Update complete — now on $LATEST_TAG."
+echo "Run ./HistoricRallyMeter from this directory to start."

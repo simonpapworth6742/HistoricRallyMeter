@@ -49,6 +49,7 @@ The server listens on all interfaces; the URL shown uses the device's LAN IP (e.
 HistoricRallyMeter/     Main GTK application (C++20)
 webserver/                Embedded HTTP/WebSocket server and QR display
 webclient/                Static web app served to phones (HTML/CSS/JS)
+update                    Script to fetch and build the latest stable release
 Design.md                 Full design specification
 rally_config.json         Per-installation state (created on first run)
 ```
@@ -158,16 +159,20 @@ Run from the project directory — the application reads and writes `rally_confi
 
 ## Updating to the Latest Version
 
-If you already have HistoricRallyMeter installed and want to update to the latest release:
+If you already have HistoricRallyMeter installed, run the included `update` script from
+the project directory to move to the latest **stable release**:
 
 ```bash
 cd ~/HistoricRallyMeter
-git pull
-make clean
-make all
+./update
 ```
 
-Your `rally_config.json` settings are preserved automatically — it is listed in `.gitignore` and will not be overwritten by the update.
+The script fetches the newest tagged release (`vX.Y.Z`), checks it out, and rebuilds
+(`make clean && make all`). Your `rally_config.json` settings are preserved automatically —
+it is listed in `.gitignore` and is never overwritten by the update.
+
+> The update leaves the repository on a detached checkout at the release tag. To go back
+> to tracking the development line, run `git checkout main`.
 
 If the desktop shortcut has changed, re-copy it:
 
