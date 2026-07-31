@@ -51,4 +51,19 @@ double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elaps
 double calculateAheadBehindFromStageStart(const RallyState& state, int64_t current_time_ms,
                                           int64_t actual_counts_from_stage_start);
 
+// Heading for the co-pilot's next-segment row: the current segment's own
+// target speed, with an arrow toward the change ahead. This is the one fact
+// about the current segment the app can state honestly -- there is no
+// reliable segment or stage number to show instead. Falls back to a
+// placeholder when no segment is running. current_speed is already in the
+// active display unit -- this function does not convert.
+std::string segmentRowHeading(double current_speed, bool has_current_segment);
+
+// Speed cell for that row: the speed coming up. Does not repeat the current
+// speed -- that is already the row's heading -- so this answers "and then
+// what", not "from what". Whole numbers -- roadbook speeds are called as
+// whole figures. next_speed is already in the active display unit; is_mph
+// only selects which unit word follows it.
+std::string segmentSpeedTransition(double next_speed, bool has_next, bool is_mph);
+
 #endif // CALCULATIONS_H

@@ -1,5 +1,6 @@
 #include "calculations.h"
 #include <cmath>
+#include <cstdio>
 #include <ctime>
 #include <chrono>
 #include <iomanip>
@@ -195,6 +196,22 @@ double calculateAheadBehindFromStageStart(const RallyState& state, int64_t curre
     
     double counts_per_second = current_seg.target_speed_counts_per_hour / 3600.0;
     double seconds = diff / counts_per_second;
-    
+
     return seconds;
+}
+
+std::string segmentRowHeading(double current_speed, bool has_current_segment) {
+    if (!has_current_segment) return std::string("--->");
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%.0f >", current_speed);
+    return std::string(buf);
+}
+
+std::string segmentSpeedTransition(double next_speed, bool has_next, bool is_mph) {
+    char buf[32];
+    if (has_next)
+        snprintf(buf, sizeof(buf), "> %.0f %s", next_speed, is_mph ? "mph" : "kph");
+    else
+        snprintf(buf, sizeof(buf), "> END");
+    return std::string(buf);
 }
