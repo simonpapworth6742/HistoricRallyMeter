@@ -154,9 +154,16 @@ struct AppData {
     int updateCount = 0;
     int64_t lastUpdateCountTime_ms = 0;
 
-    // Simulated counters — non-null only when RALLY_SIM_I2C=1.
+    // Sim Control Panel (3rd display, dev/testing only — created only when
+    // RALLY_SIM_I2C=1). Drives the simulated counters in real time.
     SimCounter* simCounter1 = nullptr;
     SimCounter* simCounter2 = nullptr;
+    GtkWidget* controlWindow = nullptr;
+    GtkWidget* controlSpeedButtons[6] = {};  // 25,30,35,40,45,50 km/h
+    GtkWidget* controlStartBtn = nullptr;
+    GtkWidget* controlStopBtn = nullptr;
+    GtkLabel* controlStatusLabel = nullptr;
+    double controlSpeedKph = 0.0;
 };
 #endif // RALLY_NO_GTK
 

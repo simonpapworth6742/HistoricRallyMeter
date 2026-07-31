@@ -10,7 +10,7 @@ TEST_TARGET = run_tests
 
 # Main application sources
 SOURCES = main.cpp i2c_counter.cpp sim_counter.cpp rally_state.cpp config_file.cpp counter_poller.cpp \
-          calculations.cpp ui_driver.cpp ui_copilot.cpp callbacks.cpp tone_generator.cpp \
+          calculations.cpp ui_driver.cpp ui_copilot.cpp ui_control.cpp callbacks.cpp tone_generator.cpp \
           webserver/rally_web_server.cpp webserver/web_telemetry.cpp webserver/web_commands.cpp \
           webserver/qr_display.cpp
 OBJECTS = $(SOURCES:.cpp=.o)

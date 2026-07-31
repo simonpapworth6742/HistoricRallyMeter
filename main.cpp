@@ -21,6 +21,7 @@
 #include "rally_types.h"
 #include "ui_driver.h"
 #include "ui_copilot.h"
+#include "ui_control.h"
 #include "callbacks.h"
 #include "webserver/rally_web_server.h"
 #include "calculations.h"
@@ -329,7 +330,7 @@ int main(int argc, char* argv[]) {
         if (std::getenv("RALLY_SIM_I2C")) {
             std::cerr << "[DEBUG] RALLY_SIM_I2C set: using simulated counters" << std::endl;
         }
-
+        
         if (state.total_start_cntr1 == 0 && state.total_start_cntr2 == 0) {
             state.total_start_cntr1 = counter1->readRegister(REGISTER);
             state.total_start_cntr2 = counter2->readRegister(REGISTER);
@@ -405,7 +406,15 @@ int main(int argc, char* argv[]) {
         std::cerr << "[DEBUG] Step 10: Creating copilot window..." << std::endl;
         app_data.copilotWindow = createCopilotWindow(&app_data);
         std::cerr << "[DEBUG] Step 10: Copilot window created OK" << std::endl;
-        
+
+        // Sim Control Panel: a 3rd window for off-target testing only.
+        // Only created when the simulated sensor feed is active.
+        if (app_data.simCounter1 || app_data.simCounter2) {
+            std::cerr << "[DEBUG] Step 10a: Creating control panel window..." << std::endl;
+            app_data.controlWindow = createControlWindow(&app_data);
+            std::cerr << "[DEBUG] Step 10a: Control panel window created OK" << std::endl;
+        }
+
         // Install global button-click beep
         g_beepToneGen = app_data.toneGen;
         guint clicked_id = g_signal_lookup("clicked", GTK_TYPE_BUTTON);
@@ -569,6 +578,11 @@ int main(int argc, char* argv[]) {
         }
         gtk_widget_show_all(app_data.copilotWindow);
         std::cerr << "[DEBUG] Step 11b: Copilot window shown" << std::endl;
+
+        if (app_data.controlWindow) {
+            gtk_widget_show_all(app_data.controlWindow);
+            std::cerr << "[DEBUG] Step 11c: Control panel window shown" << std::endl;
+        }
 
         // Fullscreen co-pilot on its monitor AFTER showing (required for Wayland)
         if (copilot_monitor && copilot_index >= 0) {

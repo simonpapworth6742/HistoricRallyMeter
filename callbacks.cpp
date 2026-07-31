@@ -6,6 +6,7 @@
 #include "calculations.h"
 #include "ui_driver.h"
 #include "ui_copilot.h"
+#include "ui_control.h"
 #include "counter_poller.h"
 #include "tone_generator.h"
 #include <cmath>
@@ -308,6 +309,7 @@ gboolean update_display(gpointer user_data) {
     
     updateDriverDisplay(data);
     updateCopilotDisplay(data);
+    updateControlDisplay(data);
 
     if (data->webServer) {
         auto now = std::chrono::system_clock::now();
