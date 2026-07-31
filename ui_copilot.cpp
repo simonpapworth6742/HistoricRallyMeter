@@ -14,57 +14,6 @@
 #include <ctime>
 #include <string>
 
-static std::string formatDistance(long meters, int width = 7) {
-    bool negative = meters < 0;
-    std::string num = std::to_string(negative ? -meters : meters);
-    std::string result;
-    int count = 0;
-    for (int i = static_cast<int>(num.size()) - 1; i >= 0; i--) {
-        if (count > 0 && count % 3 == 0) result = ',' + result;
-        result = num[i] + result;
-        count++;
-    }
-    if (negative) result = '-' + result;
-    while (static_cast<int>(result.size()) < width)
-        result = ' ' + result;
-    return result;
-}
-
-// Format elapsed time as space-padded minutes (3+ chars) + ":" + zero-padded
-// seconds. When minutes need more than 4 chars, switch to hours:minutes;
-// when hours need more than 4 chars, display "toolong".
-static std::string formatElapsed(int64_t total_secs) {
-    if (total_secs < 0) total_secs = 0;
-    int64_t minutes = total_secs / 60;
-    char buf[24];
-    if (minutes <= 9999) {
-        snprintf(buf, sizeof(buf), " %3lld:%02lld",
-                 static_cast<long long>(minutes),
-                 static_cast<long long>(total_secs % 60));
-    } else {
-        int64_t hours = minutes / 60;
-        if (hours <= 9999) {
-            snprintf(buf, sizeof(buf), " %3lld:%02lld",
-                     static_cast<long long>(hours),
-                     static_cast<long long>(minutes % 60));
-        } else {
-            snprintf(buf, sizeof(buf), "toolong");
-        }
-    }
-    return buf;
-}
-
-// Format a distance, switching to km above 999,999 m so the value stays
-// within the fixed display width. Sets *unit_out to "m" or "km".
-static std::string formatDistanceAuto(long meters, const char** unit_out, int width = 7) {
-    if (meters > 999999 || meters < -999999) {
-        *unit_out = "km";
-        return formatDistance(meters / 1000, width);
-    }
-    *unit_out = "m";
-    return formatDistance(meters, width);
-}
-
 // Apply CSS styling
 static void applyCopilotCSS() {
     GtkCssProvider* provider = gtk_css_provider_new();
@@ -137,7 +86,7 @@ void updateCopilotDisplay(AppData* data) {
             }
         } else if (data->alarmCountdownLabel) {
             std::stringstream alarmSs;
-            alarmSs << formatDistance(remaining_m, 6) << " to alarm";
+            alarmSs << formatDistanceGrouped(remaining_m) << " to alarm";
             gtk_label_set_text(data->alarmCountdownLabel, alarmSs.str().c_str());
         }
     } else {
@@ -186,11 +135,11 @@ void updateCopilotDisplay(AppData* data) {
     
     std::stringstream ss;
     const char* total_unit = "m";
-    std::string total_str = formatDistanceAuto(total_m, &total_unit);
+    std::string total_str = formatDistanceAutoUnit(total_m, &total_unit);
     gtk_label_set_text(data->totalDistLabel, total_str.c_str());
     gtk_label_set_text(data->totalUnitLabel, total_unit);
-    
-    gtk_label_set_text(data->totalTimeLabel, formatElapsed(total_secs).c_str());
+
+    gtk_label_set_text(data->totalTimeLabel, formatElapsedInterval(total_secs).c_str());
     
     // Trip distance
     int64_t trip_count_diff = calculateDistanceCounts(*data->state,
@@ -201,11 +150,11 @@ void updateCopilotDisplay(AppData* data) {
     int64_t trip_secs = trip_duration_ms / 1000;
     
     const char* trip_unit = "m";
-    std::string trip_str = formatDistanceAuto(trip_m, &trip_unit);
+    std::string trip_str = formatDistanceAutoUnit(trip_m, &trip_unit);
     gtk_label_set_text(data->tripDistLabel, trip_str.c_str());
     gtk_label_set_text(data->tripUnitLabel, trip_unit);
-    
-    gtk_label_set_text(data->tripTimeLabel, formatElapsed(trip_secs).c_str());
+
+    gtk_label_set_text(data->tripTimeLabel, formatElapsedInterval(trip_secs).c_str());
     
     // Next segment info: distance remaining in current segment + speed of next segment
     if (data->state->segment_current_number >= 0 &&
@@ -220,7 +169,7 @@ void updateCopilotDisplay(AppData* data) {
         long travelled_m = countsToCentimeters(seg_count_diff, data->state->calibration) / 100;
         
         const char* next_unit = "m";
-        std::string next_str = formatDistanceAuto(remaining_m, &next_unit);
+        std::string next_str = formatDistanceAutoUnit(remaining_m, &next_unit);
         gtk_label_set_text(data->nextDistLabel, next_str.c_str());
         gtk_label_set_text(data->nextUnitLabel, next_unit);
         
@@ -303,10 +252,13 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_valign(GTK_WIDGET(data->totalUnitLabel), GTK_ALIGN_END);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalUnitLabel), 2, 0, 1, 1);
     
-    // Col 3: Total time
-    data->totalTimeLabel = GTK_LABEL(gtk_label_new("   0:00"));
+    // Col 3: Total time. Right-aligned in a fixed-width column rather than
+    // space-padded, so the column holds whichever monospace font the platform
+    // resolves -- Noto Sans Mono on the box, DejaVu in the sandbox.
+    data->totalTimeLabel = GTK_LABEL(gtk_label_new("0:00"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalTimeLabel)), "time-label");
-    gtk_label_set_xalign(data->totalTimeLabel, 0.0);
+    gtk_label_set_xalign(data->totalTimeLabel, 1.0);
+    gtk_label_set_width_chars(data->totalTimeLabel, 7);
     gtk_widget_set_valign(GTK_WIDGET(data->totalTimeLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_margin_start(GTK_WIDGET(data->totalTimeLabel), 10);
     if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
@@ -330,10 +282,13 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_valign(GTK_WIDGET(data->tripUnitLabel), GTK_ALIGN_END);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripUnitLabel), 2, 1, 1, 1);
     
-    // Col 3: Trip time
-    data->tripTimeLabel = GTK_LABEL(gtk_label_new("   0:00"));
+    // Col 3: Trip time. Right-aligned in a fixed-width column rather than
+    // space-padded, so the column holds whichever monospace font the platform
+    // resolves -- Noto Sans Mono on the box, DejaVu in the sandbox.
+    data->tripTimeLabel = GTK_LABEL(gtk_label_new("0:00"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripTimeLabel)), "time-label");
-    gtk_label_set_xalign(data->tripTimeLabel, 0.0);
+    gtk_label_set_xalign(data->tripTimeLabel, 1.0);
+    gtk_label_set_width_chars(data->tripTimeLabel, 7);
     gtk_widget_set_valign(GTK_WIDGET(data->tripTimeLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_margin_start(GTK_WIDGET(data->tripTimeLabel), 10);
     if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
@@ -362,6 +317,7 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     data->nextSpeedLabel = GTK_LABEL(gtk_label_new("---"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextSpeedLabel)), "time-label");
     gtk_label_set_xalign(data->nextSpeedLabel, 0.0);
+    gtk_label_set_width_chars(data->nextSpeedLabel, 14);
     gtk_widget_set_valign(GTK_WIDGET(data->nextSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_margin_start(GTK_WIDGET(data->nextSpeedLabel), 10);
     if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge

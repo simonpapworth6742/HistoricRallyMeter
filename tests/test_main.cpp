@@ -14,10 +14,11 @@
 #include "test_calibration_independent.h"
 #include "test_sim_counter.h"
 #include "test_counter_poller_real.h"
+#include "test_elapsed.h"
 
 int main() {
     TestRunner runner;
-    
+
     // Create test suites
     TestConfigFile configTests;
     TestDistance distanceTests;
@@ -31,6 +32,7 @@ int main() {
     TestCalibrationIndependent calIndepTests;
     TestSimCounter simCounterTests;
     TestCounterPollerReal realPollerTests;
+    TestElapsed elapsedTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -45,7 +47,7 @@ int main() {
     runner.addSuite(calIndepTests.createSuite());
     runner.addSuite(simCounterTests.createSuite());
     runner.addSuite(realPollerTests.createSuite());
-
+    runner.addSuite(elapsedTests.createSuite());
     // Run all tests
     int failures = runner.runAll();
     
