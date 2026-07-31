@@ -596,6 +596,20 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     data->beepWaypointBuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(beepView));
     gtk_text_buffer_set_text(data->beepWaypointBuffer,
         formatBeepWaypointsKm(data->state->beep_waypoints_m).c_str(), -1);
+
+    // Re-derive the runtime cursor from the distance already travelled so
+    // restarting the app mid-stage does not replay every waypoint already
+    // passed. Mirrors the recompute in on_beep_waypoints_changed, which only
+    // fires on operator edits and never runs at startup since the buffer is
+    // populated before that signal is connected (deliberately, to avoid a
+    // spurious save-on-load).
+    auto initPoll = data->poller->getMostRecent();
+    int64_t initCounts = calculateDistanceCounts(*data->state, initPoll.cntr1, initPoll.cntr2,
+                                                 data->state->total_start_cntr1,
+                                                 data->state->total_start_cntr2);
+    double initTravelled_m = countsToMeters(initCounts, data->state->calibration);
+    data->beepNextIndex = beepCursorFor(data->state->beep_waypoints_m, initTravelled_m);
+
     g_signal_connect(data->beepWaypointBuffer, "changed",
                      G_CALLBACK(on_beep_waypoints_changed), data);
 
