@@ -68,4 +68,15 @@ std::string formatDistanceAutoUnit(long meters, const char** unit_out);
 // font the platform resolves.
 std::string formatElapsedInterval(int64_t total_secs);
 
+// Limit a proposed manual distance correction so the corrected reading can
+// never fall below zero. Clamping the correction rather than the displayed
+// value matters: otherwise repeated downward presses bank an invisible debt
+// that silently swallows the next stretch of real travel.
+long clampDistanceAdjust(long raw_cm, long proposed_adjust_cm);
+
+// Apply a manual distance correction (centimetres) to a raw distance
+// (centimetres) and return whole metres, truncating the same way the
+// uncorrected path does.
+long adjustedDistanceMeters(long raw_cm, long adjust_cm);
+
 #endif // CALCULATIONS_H

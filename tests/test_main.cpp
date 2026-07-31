@@ -15,6 +15,7 @@
 #include "test_sim_counter.h"
 #include "test_counter_poller_real.h"
 #include "test_elapsed.h"
+#include "test_distance_adjust.h"
 
 int main() {
     TestRunner runner;
@@ -33,6 +34,7 @@ int main() {
     TestSimCounter simCounterTests;
     TestCounterPollerReal realPollerTests;
     TestElapsed elapsedTests;
+    TestDistanceAdjust distanceAdjustTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -48,6 +50,7 @@ int main() {
     runner.addSuite(simCounterTests.createSuite());
     runner.addSuite(realPollerTests.createSuite());
     runner.addSuite(elapsedTests.createSuite());
+    runner.addSuite(distanceAdjustTests.createSuite());
     // Run all tests
     int failures = runner.runAll();
     

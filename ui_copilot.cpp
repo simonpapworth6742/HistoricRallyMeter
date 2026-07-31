@@ -40,7 +40,8 @@ static void applyCopilotCSS() {
         "scrollbar slider { min-width: 20px; min-height: 20px; }"
         "scrollbar.vertical slider { min-width: 20px; }"
         "scrollbar trough { min-width: 24px; }"
-        "button.memory-populated { background-image: none; background-color: #FFFFFF; color: #000000; }",
+        "button.memory-populated { background-image: none; background-color: #FFFFFF; color: #000000; }"
+        ".adjust-button { font-size: 16px; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -129,7 +130,9 @@ void updateCopilotDisplay(AppData* data) {
     }
     
     // Total distance
-    long total_m = countsToCentimeters(total_count_diff, data->state->calibration) / 100;
+    long total_m = adjustedDistanceMeters(
+        countsToCentimeters(total_count_diff, data->state->calibration),
+        data->state->total_distance_adjust_cm);
     int64_t total_duration_ms = current_time_ms - data->state->total_start_time_ms;
     int64_t total_secs = total_duration_ms / 1000;
     
@@ -145,7 +148,9 @@ void updateCopilotDisplay(AppData* data) {
     int64_t trip_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
         data->state->trip_start_cntr1, data->state->trip_start_cntr2);
-    long trip_m = countsToCentimeters(trip_count_diff, data->state->calibration) / 100;
+    long trip_m = adjustedDistanceMeters(
+        countsToCentimeters(trip_count_diff, data->state->calibration),
+        data->state->trip_distance_adjust_cm);
     int64_t trip_duration_ms = current_time_ms - data->state->trip_start_time_ms;
     int64_t trip_secs = trip_duration_ms / 1000;
     
@@ -263,7 +268,34 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_margin_start(GTK_WIDGET(data->totalTimeLabel), 10);
     if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
         gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalTimeLabel), 3, 0, 1, 1);
-    
+
+    // Cols 4-6, Total row only: manual distance correction. Wheel slip or a
+    // re-measured route leaves the odometer a known amount out; without this
+    // the only remedy is a full reset, which throws the elapsed time away
+    // too. -10/+10 adjust both Total and Trip (on_distance_adjust handles
+    // that internally); "set" only ever resolves Total. There is no second
+    // row of buttons on Trip -- these three cover both readouts.
+    // Hidden in single-display mode, where the panel gives its width to the
+    // embedded gauge and there is no room for them.
+    if (!data->singleDisplayMode) {
+        struct { const char* label; int delta_m; } controls[] = {
+            { "-10", -10 }, { "set", 0 }, { "+10", 10 },
+        };
+        for (int c = 0; c < 3; c++) {
+            GtkWidget* btn = gtk_button_new_with_label(controls[c].label);
+            gtk_style_context_add_class(gtk_widget_get_style_context(btn), "adjust-button");
+            gtk_widget_set_size_request(btn, 44, 32);
+            gtk_widget_set_valign(btn, GTK_ALIGN_CENTER);
+            if (controls[c].delta_m == 0) {
+                g_signal_connect(btn, "clicked", G_CALLBACK(on_distance_set), data);
+            } else {
+                g_object_set_data(G_OBJECT(btn), "delta_m", GINT_TO_POINTER(controls[c].delta_m));
+                g_signal_connect(btn, "clicked", G_CALLBACK(on_distance_adjust), data);
+            }
+            gtk_grid_attach(GTK_GRID(distGrid), btn, 4 + c, 0, 1, 1);
+        }
+    }
+
     // Row 1: Trip distance — heading "Trip" is itself the reset button
     GtkWidget* tripHeadingBtn = gtk_button_new_with_label("Trip");
     gtk_style_context_add_class(gtk_widget_get_style_context(tripHeadingBtn), "dist-heading");
