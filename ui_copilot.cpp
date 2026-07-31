@@ -8,6 +8,7 @@
 #include "config_file.h"
 #include "webserver/qr_display.h"
 #include "calculations.h"
+#include "tone_generator.h"
 #include <sstream>
 #include <cstdlib>
 #include <iomanip>
@@ -62,7 +63,45 @@ void updateCopilotDisplay(AppData* data) {
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
         data->state->total_start_cntr1, data->state->total_start_cntr2);
-    
+
+    // Beep Assist. Checked here rather than on the stage-setup screen so the
+    // beeps keep coming while the operator is on any screen at all.
+    if (data->state->beep_assist_enabled && !data->state->beep_waypoints_m.empty()) {
+        double travelled_m = countsToMeters(total_count_diff, data->state->calibration);
+        bool stage_active = data->state->segment_current_number >= 0;
+        double elapsed_stage_s = (current_time_ms - data->state->total_start_time_ms) / 1000.0;
+
+        long due = dueBeepWaypoint(data->state->beep_waypoints_m, data->beepNextIndex,
+                                   travelled_m,
+                                   data->state->beep_navigation_mode, data->state->beep_advance_m,
+                                   data->state->beep_timing_mode, data->state->beep_advance_s,
+                                   stage_active, elapsed_stage_s, data->state->segments);
+        if (due >= 0) {
+            // Which mode actually fired decides the sound: Navigation mode
+            // plays the existing one-shot beep twice in quick succession
+            // ("bing bong"), Timing mode plays it once. Both reuse
+            // ToneGenerator::playBeep() unchanged -- no new tone code.
+            double waypoint_m = data->state->beep_waypoints_m[static_cast<size_t>(due)];
+            bool nav_fired = data->state->beep_navigation_mode
+                           && navigationBeepDue(waypoint_m, travelled_m, data->state->beep_advance_m);
+            if (data->toneGen) {
+                data->toneGen->playBeep();
+                if (nav_fired) {
+                    // g_timeout_add, not a blocking sleep -- this runs on the
+                    // GTK main thread and must not stall the UI for 150ms.
+                    g_timeout_add(150, [](gpointer d) -> gboolean {
+                        static_cast<AppData*>(d)->toneGen->playBeep();
+                        return G_SOURCE_REMOVE;
+                    }, data);
+                }
+            }
+            // Advance past the waypoint that fired, not to the end: if a long
+            // polling gap passed several, the rest still get their beep on the
+            // following ticks.
+            data->beepNextIndex = static_cast<size_t>(due) + 1;
+        }
+    }
+
     // In single-display mode the countdown/clear widgets do not exist, but a
     // persisted alarm still fires its sound and auto-clears.
     if (data->state->alarm_distance_km > 0) {
@@ -531,7 +570,101 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     GtkWidget* clearMemBtn = gtk_button_new_with_label("clear memory");
     g_signal_connect(clearMemBtn, "clicked", G_CALLBACK(on_memory_clear), data);
     gtk_box_pack_start(GTK_BOX(memBox), clearMemBtn, FALSE, FALSE, 5);
-    
+
+    // Beep Assist: waypoints the operator wants a warning at, so their eyes
+    // can stay on the roadbook rather than the odometer. Its own column,
+    // between the memory buttons and the keypad.
+    GtkWidget* beepCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_set_size_request(beepCol, 260, -1);
+    gtk_box_pack_start(GTK_BOX(data->stageSetupMainBox), beepCol, FALSE, FALSE, 0);
+
+    GtkWidget* beepTitle = gtk_label_new("Beep Assist Distance");
+    gtk_style_context_add_class(gtk_widget_get_style_context(beepTitle), "segment-label");
+    gtk_label_set_xalign(GTK_LABEL(beepTitle), 0.0);
+    gtk_box_pack_start(GTK_BOX(beepCol), beepTitle, FALSE, FALSE, 0);
+
+    GtkWidget* beepFrame = gtk_frame_new(NULL);
+    gtk_style_context_add_class(gtk_widget_get_style_context(beepFrame), "segment-list-frame");
+    gtk_box_pack_start(GTK_BOX(beepCol), beepFrame, TRUE, TRUE, 0);
+
+    GtkWidget* beepView = gtk_text_view_new();
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(beepView), GTK_WRAP_WORD_CHAR);
+    gtk_style_context_add_class(gtk_widget_get_style_context(beepView), "segment-label");
+    g_signal_connect(beepView, "focus-in-event", G_CALLBACK(on_textview_focus), data);
+    gtk_container_add(GTK_CONTAINER(beepFrame), beepView);
+
+    data->beepWaypointBuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(beepView));
+    gtk_text_buffer_set_text(data->beepWaypointBuffer,
+        formatBeepWaypointsKm(data->state->beep_waypoints_m).c_str(), -1);
+    g_signal_connect(data->beepWaypointBuffer, "changed",
+                     G_CALLBACK(on_beep_waypoints_changed), data);
+
+    // Off/On
+    GtkWidget* activeRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+    gtk_box_pack_start(GTK_BOX(beepCol), activeRow, FALSE, FALSE, 0);
+
+    GtkWidget* beepOnLabel = gtk_label_new("Off/On");
+    gtk_style_context_add_class(gtk_widget_get_style_context(beepOnLabel), "segment-label");
+    gtk_box_pack_start(GTK_BOX(activeRow), beepOnLabel, FALSE, FALSE, 0);
+
+    GtkWidget* beepSwitch = gtk_switch_new();
+    gtk_switch_set_active(GTK_SWITCH(beepSwitch), data->state->beep_assist_enabled);
+    gtk_widget_set_valign(beepSwitch, GTK_ALIGN_CENTER);
+    g_signal_connect(beepSwitch, "state-set", G_CALLBACK(on_beep_enable_toggled), data);
+    gtk_box_pack_start(GTK_BOX(activeRow), beepSwitch, FALSE, FALSE, 0);
+
+    // "Advance by" heads the two lead-in rows below it, right-justified
+    // against the same row as Off/On so it reads as a caption for both rows
+    // beneath it, not as a third item paired with the switch.
+    GtkWidget* advanceHeading = gtk_label_new("Advance by");
+    gtk_style_context_add_class(gtk_widget_get_style_context(advanceHeading), "segment-label");
+    gtk_label_set_xalign(GTK_LABEL(advanceHeading), 1.0);
+    gtk_widget_set_hexpand(advanceHeading, TRUE);
+    gtk_box_pack_start(GTK_BOX(activeRow), advanceHeading, TRUE, TRUE, 0);
+
+    // Two independent lead-in rows: navigation mode is a fixed distance,
+    // timing mode is a fixed number of seconds off the scheduled (roadbook)
+    // arrival time. Both may be on; either firing is enough. Each row is
+    // label, checkbox, entry, left to right, in normal flow.
+    struct { const char* mode_label; const char* placeholder; int mode; } leadIns[] = {
+        { "Navigation mode", "Metres",  0 },
+        { "Timing mode",     "Seconds", 1 },
+    };
+    for (const auto& li : leadIns) {
+        GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+        gtk_box_pack_start(GTK_BOX(beepCol), row, FALSE, FALSE, 0);
+
+        GtkWidget* modeLabel = gtk_label_new(li.mode_label);
+        gtk_style_context_add_class(gtk_widget_get_style_context(modeLabel), "segment-label");
+        gtk_widget_set_hexpand(modeLabel, TRUE);
+        gtk_label_set_xalign(GTK_LABEL(modeLabel), 0.0);
+        gtk_box_pack_start(GTK_BOX(row), modeLabel, TRUE, TRUE, 0);
+
+        GtkWidget* check = gtk_check_button_new();
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(check),
+            li.mode == 1 ? data->state->beep_timing_mode : data->state->beep_navigation_mode);
+        g_object_set_data(G_OBJECT(check), "mode", GINT_TO_POINTER(li.mode));
+        g_signal_connect(check, "toggled", G_CALLBACK(on_beep_mode_toggled), data);
+        gtk_box_pack_start(GTK_BOX(row), check, FALSE, FALSE, 0);
+
+        GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
+        gtk_entry_set_placeholder_text(entry, li.placeholder);
+        gtk_widget_set_size_request(GTK_WIDGET(entry), 90, 40);
+        double stored = (li.mode == 1) ? data->state->beep_advance_s : data->state->beep_advance_m;
+        if (stored > 0.0) {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%.0f", stored);
+            gtk_entry_set_text(entry, buf);
+        }
+        g_object_set_data(G_OBJECT(entry), "mode", GINT_TO_POINTER(li.mode));
+        g_signal_connect(entry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
+        g_signal_connect(entry, "changed", G_CALLBACK(on_beep_advance_changed), data);
+        gtk_box_pack_start(GTK_BOX(row), GTK_WIDGET(entry), FALSE, FALSE, 0);
+
+        if (li.mode == 1) data->beepAdvanceSecondsEntry = entry;
+        else              data->beepAdvanceMetresEntry = entry;
+    }
+
     // Add new segment row (30% larger fonts and buttons)
     GtkWidget* addBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
     gtk_style_context_add_class(gtk_widget_get_style_context(addBox), "new-segment-row");

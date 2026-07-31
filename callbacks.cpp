@@ -44,6 +44,9 @@ void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->total_start_cntr1 = current_poll.cntr1;
     data->state->total_start_cntr2 = current_poll.cntr2;
     data->state->total_start_time_ms = getRallyTime_ms(*data->state);
+    // Waypoints are measured from the Total counter's zero, so re-zeroing it
+    // puts every waypoint back in front of the car.
+    data->beepNextIndex = 0;
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -115,7 +118,10 @@ void performStageGo(AppData* data) {
     data->smoothedSpeed = -1.0;
     data->state->ahead_behind_zero_offset_ms = 0;
     data->autoStartTriggered = false;
-    
+    // Waypoints are measured from the Total counter's zero, so re-zeroing it
+    // puts every waypoint back in front of the car.
+    data->beepNextIndex = 0;
+
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
     
     ConfigFile::save(*data->state);
@@ -420,25 +426,41 @@ GtkWidget* createDateTimeKeypad(AppData* data) {
 // Keypad callbacks
 void on_keypad_digit(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    if (data->activeBuffer) {
+        gtk_text_buffer_insert_at_cursor(data->activeBuffer,
+                                         gtk_button_get_label(GTK_BUTTON(widget)), -1);
+        return;
+    }
     if (!data->activeEntry) return;
-    
+
     const char* digit = gtk_button_get_label(GTK_BUTTON(widget));
     const char* current = gtk_entry_get_text(data->activeEntry);
-    
+
     std::string new_text = std::string(current) + digit;
     gtk_entry_set_text(data->activeEntry, new_text.c_str());
 }
 
 void on_keypad_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    if (data->activeBuffer) {
+        gtk_text_buffer_set_text(data->activeBuffer, "", -1);
+        return;
+    }
     if (!data->activeEntry) return;
     gtk_entry_set_text(data->activeEntry, "");
 }
 
 void on_keypad_backspace(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    if (data->activeBuffer) {
+        GtkTextIter cursor;
+        gtk_text_buffer_get_iter_at_mark(data->activeBuffer, &cursor,
+                                         gtk_text_buffer_get_insert(data->activeBuffer));
+        gtk_text_buffer_backspace(data->activeBuffer, &cursor, TRUE, TRUE);
+        return;
+    }
     if (!data->activeEntry) return;
-    
+
     const char* current = gtk_entry_get_text(data->activeEntry);
     std::string text(current);
     if (!text.empty()) {
@@ -450,7 +472,15 @@ void on_keypad_backspace(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 gboolean on_entry_focus(GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     data->activeEntry = GTK_ENTRY(widget);
+    data->activeBuffer = nullptr;
     gtk_widget_show(data->numericKeypad);
+    return FALSE;
+}
+
+gboolean on_textview_focus(GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->activeEntry = nullptr;   // exactly one keypad target at a time
+    data->activeBuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(widget));
     return FALSE;
 }
 
@@ -1130,4 +1160,62 @@ void on_autostart_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     ConfigFile::save(*data->state);
     gtk_entry_set_text(data->autoStartTimeEntry, "");
     updateAutoStartDisplay(data);
+}
+
+// Re-parse the waypoint list on every edit. Parsing is cheap and forgiving
+// (a malformed token is skipped, not fatal), so there is no need to make the
+// operator confirm -- and no half-entered state to get stuck in.
+void on_beep_waypoints_changed(GtkTextBuffer* buffer, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    GtkTextIter start, end;
+    gtk_text_buffer_get_bounds(buffer, &start, &end);
+    gchar* text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+    data->state->beep_waypoints_m = parseBeepWaypointsKm(text ? text : "");
+    g_free(text);
+
+    // The list changed under the cursor, so the cursor is meaningless; rebuild
+    // it from where the car actually is.
+    auto poll = data->poller->getMostRecent();
+    int64_t counts = calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
+                                             data->state->total_start_cntr1,
+                                             data->state->total_start_cntr2);
+    double travelled_m = countsToMeters(counts, data->state->calibration);
+    data->beepNextIndex = beepCursorFor(data->state->beep_waypoints_m, travelled_m);
+
+    ConfigFile::save(*data->state);
+}
+
+gboolean on_beep_enable_toggled(G_GNUC_UNUSED GtkWidget* widget, gboolean state, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->state->beep_assist_enabled = state;
+    ConfigFile::save(*data->state);
+    return FALSE;  // let the switch draw the new state
+}
+
+void on_beep_mode_toggled(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    bool active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+    if (GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "mode")) == 1)
+        data->state->beep_timing_mode = active;
+    else
+        data->state->beep_navigation_mode = active;
+    ConfigFile::save(*data->state);
+}
+
+void on_beep_advance_changed(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    const char* text = gtk_entry_get_text(GTK_ENTRY(widget));
+    bool is_seconds = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "mode")) == 1;
+    double value = 0.0;
+    try {
+        if (text && *text) value = std::stod(text);
+    } catch (const std::exception&) {
+        // Mid-typing the field is briefly unparseable ("." on its own); treat
+        // that as no lead-in rather than rejecting the keystroke.
+        value = 0.0;
+    }
+    if (value < 0.0) value = 0.0;
+    if (is_seconds) data->state->beep_advance_s = value;
+    else            data->state->beep_advance_m = value;
+    ConfigFile::save(*data->state);
 }
