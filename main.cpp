@@ -11,6 +11,10 @@
 #include <algorithm>
 #include <gtk/gtk.h>
 #include "i2c_counter.h"
+#include "i_counter.h"
+#include "sim_counter.h"
+#include <memory>
+#include <cstdlib>
 #include "rally_state.h"
 #include "config_file.h"
 #include "counter_poller.h"
@@ -275,6 +279,22 @@ static gboolean on_button_beep(GSignalInvocationHint*, guint, const GValue*, gpo
     return TRUE;
 }
 
+// Counts/sec for the simulated counter when RALLY_SIM_I2C=1 (off-target dev).
+// ~1000 c/s stays well under CounterPoller's per-poll jump guard (1000 counts
+// per ~5-10ms poll), so simulated reads are never rejected as spurious.
+static constexpr double kSimCountsPerSecond = 1000.0;
+
+// Build the counter backend: a real I2C counter on hardware, or a simulated
+// counter when RALLY_SIM_I2C=1 so the GUI can start on a dev machine with no
+// /dev/i2c-1. Real hardware is the default, so the Pi target is unaffected.
+static std::unique_ptr<ICounter> makeCounter(int bus, int address) {
+    const char* sim = std::getenv("RALLY_SIM_I2C");
+    if (sim && std::string(sim) == "1") {
+        return std::make_unique<SimCounter>(0u, kSimCountsPerSecond);
+    }
+    return std::make_unique<I2CCounter>(bus, address);
+}
+
 int main(int argc, char* argv[]) {
     try {
         const int I2C_BUS = 1;
@@ -301,31 +321,38 @@ int main(int argc, char* argv[]) {
         
         // Initialize counters from current values if not set
         std::cerr << "[DEBUG] Step 4: Opening I2C counter1 at 0x70..." << std::endl;
-        I2CCounter counter1(I2C_BUS, CNTR_1_ADDRESS);
+        std::unique_ptr<ICounter> counter1 = makeCounter(I2C_BUS, CNTR_1_ADDRESS);
         std::cerr << "[DEBUG] Step 4: counter1 OK" << std::endl;
         std::cerr << "[DEBUG] Step 5: Opening I2C counter2 at 0x71..." << std::endl;
-        I2CCounter counter2(I2C_BUS, CNTR_2_ADDRESS);
+        std::unique_ptr<ICounter> counter2 = makeCounter(I2C_BUS, CNTR_2_ADDRESS);
         std::cerr << "[DEBUG] Step 5: counter2 OK" << std::endl;
-        
+        if (std::getenv("RALLY_SIM_I2C")) {
+            std::cerr << "[DEBUG] RALLY_SIM_I2C set: using simulated counters" << std::endl;
+        }
+
         if (state.total_start_cntr1 == 0 && state.total_start_cntr2 == 0) {
-            state.total_start_cntr1 = counter1.readRegister(REGISTER);
-            state.total_start_cntr2 = counter2.readRegister(REGISTER);
+            state.total_start_cntr1 = counter1->readRegister(REGISTER);
+            state.total_start_cntr2 = counter2->readRegister(REGISTER);
         }
         if (state.trip_start_cntr1 == 0 && state.trip_start_cntr2 == 0) {
-            state.trip_start_cntr1 = counter1.readRegister(REGISTER);
-            state.trip_start_cntr2 = counter2.readRegister(REGISTER);
+            state.trip_start_cntr1 = counter1->readRegister(REGISTER);
+            state.trip_start_cntr2 = counter2->readRegister(REGISTER);
         }
         if (state.segment_start_cntr1 == 0 && state.segment_start_cntr2 == 0) {
-            state.segment_start_cntr1 = counter1.readRegister(REGISTER);
-            state.segment_start_cntr2 = counter2.readRegister(REGISTER);
+            state.segment_start_cntr1 = counter1->readRegister(REGISTER);
+            state.segment_start_cntr2 = counter2->readRegister(REGISTER);
         }
         
         // Create application data
         std::cerr << "[DEBUG] Step 6: Creating AppData..." << std::endl;
         AppData app_data;
-        app_data.counter1 = &counter1;
-        app_data.counter2 = &counter2;
+        app_data.counter1 = counter1.get();
+        app_data.counter2 = counter2.get();
         app_data.register_addr = REGISTER;
+        // Non-null only when RALLY_SIM_I2C=1 (real I2CCounter does not derive
+        // from SimCounter, so this is nullptr on real hardware).
+        app_data.simCounter1 = dynamic_cast<SimCounter*>(counter1.get());
+        app_data.simCounter2 = dynamic_cast<SimCounter*>(counter2.get());
         app_data.state = &state;
         app_data.poller = new CounterPoller();
         std::cerr << "[DEBUG] Step 7: CounterPoller created OK" << std::endl;
