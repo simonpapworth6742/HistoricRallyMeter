@@ -12,10 +12,11 @@
 #include "test_rally_clock.h"
 #include "test_edge_cases.h"
 #include "test_calibration_independent.h"
+#include "test_elapsed.h"
 
 int main() {
     TestRunner runner;
-    
+
     // Create test suites
     TestConfigFile configTests;
     TestDistance distanceTests;
@@ -27,7 +28,8 @@ int main() {
     TestRallyClock clockTests;
     TestEdgeCases edgeCaseTests;
     TestCalibrationIndependent calIndepTests;
-    
+    TestElapsed elapsedTests;
+
     // Add all test suites
     runner.addSuite(configTests.createSuite());
     runner.addSuite(distanceTests.createSuite());
@@ -39,6 +41,7 @@ int main() {
     runner.addSuite(clockTests.createSuite());
     runner.addSuite(edgeCaseTests.createSuite());
     runner.addSuite(calIndepTests.createSuite());
+    runner.addSuite(elapsedTests.createSuite());
     
     // Run all tests
     int failures = runner.runAll();
