@@ -254,3 +254,19 @@ long adjustedDistanceMeters(long raw_cm, long adjust_cm) {
     if (corrected_cm < 0) corrected_cm = 0;
     return corrected_cm / 100;
 }
+
+std::string segmentRowHeading(double current_speed, bool has_current_segment) {
+    if (!has_current_segment) return std::string("--->");
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%.0f >", current_speed);
+    return std::string(buf);
+}
+
+std::string segmentSpeedTransition(double next_speed, bool has_next, bool is_mph) {
+    char buf[32];
+    if (has_next)
+        snprintf(buf, sizeof(buf), "> %.0f %s", next_speed, is_mph ? "mph" : "kph");
+    else
+        snprintf(buf, sizeof(buf), "> END");
+    return std::string(buf);
+}

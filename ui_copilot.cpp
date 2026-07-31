@@ -179,15 +179,23 @@ void updateCopilotDisplay(AppData* data) {
         gtk_label_set_text(data->nextUnitLabel, next_unit);
         
         long next_seg_idx = data->state->segment_current_number + 1;
-        if (next_seg_idx < static_cast<long>(data->state->segments.size())) {
-            const Segment& next_seg = data->state->segments[next_seg_idx];
-            ss.str("");
-            ss << std::fixed << std::setprecision(0) << next_seg.target_speed_kph << " kph";
-            gtk_label_set_text(data->nextSpeedLabel, ss.str().c_str());
-        } else {
-            gtk_label_set_text(data->nextSpeedLabel, "END");
+        bool has_next = next_seg_idx < static_cast<long>(data->state->segments.size());
+        double next_kph = has_next ? data->state->segments[next_seg_idx].target_speed_kph : 0.0;
+        double current_display_speed = cur_seg.target_speed_kph;
+        double next_display_speed = next_kph;
+        // Same conversion updateDriverDisplay() already applies to
+        // targetSpeedLabel -- showing "40 mph" for a 40 km/h segment would be
+        // wrong by a safety-relevant margin, not just a labelling nicety.
+        if (data->state->units) {
+            current_display_speed *= 0.621371;
+            next_display_speed *= 0.621371;
         }
-        
+        gtk_label_set_text(data->nextSpeedLabel,
+            segmentSpeedTransition(next_display_speed, has_next, data->state->units).c_str());
+
+        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn),
+            segmentRowHeading(current_display_speed, true).c_str());
+
         // next/prev button: active within 500m of segment end or start
         bool near_end = (remaining_m >= 0 && remaining_m <= 500) &&
                         (next_seg_idx < static_cast<long>(data->state->segments.size()));
@@ -200,20 +208,19 @@ void updateCopilotDisplay(AppData* data) {
             gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "prev");
             gtk_widget_set_sensitive(data->nextPrevBtn, TRUE);
         } else {
-            gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "--->");
             gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
         }
     } else if (data->state->segments.empty()) {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextUnitLabel, "m");
         gtk_label_set_text(data->nextSpeedLabel, "---");
-        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "--->");
+        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), segmentRowHeading(0.0, false).c_str());
         gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
     } else {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextUnitLabel, "m");
-        gtk_label_set_text(data->nextSpeedLabel, "END");
-        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "--->");
+        gtk_label_set_text(data->nextSpeedLabel, segmentSpeedTransition(0.0, false, false).c_str());
+        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), segmentRowHeading(0.0, false).c_str());
         gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
     }
 }
