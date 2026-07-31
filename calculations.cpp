@@ -243,3 +243,14 @@ std::string formatElapsedInterval(int64_t total_secs) {
     }
     return std::string(buf);
 }
+
+long clampDistanceAdjust(long raw_cm, long proposed_adjust_cm) {
+    if (raw_cm + proposed_adjust_cm < 0) return -raw_cm;
+    return proposed_adjust_cm;
+}
+
+long adjustedDistanceMeters(long raw_cm, long adjust_cm) {
+    long corrected_cm = raw_cm + adjust_cm;
+    if (corrected_cm < 0) corrected_cm = 0;
+    return corrected_cm / 100;
+}

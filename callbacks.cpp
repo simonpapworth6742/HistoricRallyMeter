@@ -15,6 +15,8 @@
 #include <cstring>
 #include <chrono>
 #include <functional>
+#include <string>
+#include <stdexcept>
 
 gboolean on_window_delete(G_GNUC_UNUSED GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, G_GNUC_UNUSED gpointer user_data) {
     gtk_main_quit();
@@ -44,6 +46,9 @@ void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->total_start_cntr1 = current_poll.cntr1;
     data->state->total_start_cntr2 = current_poll.cntr2;
     data->state->total_start_time_ms = getRallyTime_ms(*data->state);
+    // The correction described the old baseline; carrying it across a reset
+    // would silently offset a counter the operator just zeroed.
+    data->state->total_distance_adjust_cm = 0;
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -54,6 +59,9 @@ void on_trip_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->trip_start_cntr1 = current_poll.cntr1;
     data->state->trip_start_cntr2 = current_poll.cntr2;
     data->state->trip_start_time_ms = getRallyTime_ms(*data->state);
+    // The correction described the old baseline; carrying it across a reset
+    // would silently offset a counter the operator just zeroed.
+    data->state->trip_distance_adjust_cm = 0;
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -89,6 +97,93 @@ static void applyDialogStyle(GtkWidget* dialog) {
     }
 }
 
+// Raw, uncorrected distance in centimetres for one of the two counters.
+// Shared by both correction callbacks so they clamp against the same figure
+// the display is derived from.
+static long rawDistanceCm(AppData* data, bool is_trip) {
+    auto poll = data->poller->getMostRecent();
+    int64_t counts = is_trip
+        ? calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
+                                  data->state->trip_start_cntr1, data->state->trip_start_cntr2)
+        : calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
+                                  data->state->total_start_cntr1, data->state->total_start_cntr2);
+    return countsToCentimeters(counts, data->state->calibration);
+}
+
+void on_distance_adjust(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    long delta_cm = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "delta_m")) * 100L;
+
+    // Both counters share the same underlying wheel measurement, so a
+    // wheel-slip correction has to apply to both -- otherwise Trip would
+    // keep showing the slipped, uncorrected value. Clamped independently:
+    // Total and Trip can have travelled different distances at this instant,
+    // so a -10 that is safe for one could still drive the other negative.
+    long& total_adjust = data->state->total_distance_adjust_cm;
+    total_adjust += clampDistanceAdjust(rawDistanceCm(data, false) + total_adjust, delta_cm);
+
+    long& trip_adjust = data->state->trip_distance_adjust_cm;
+    trip_adjust += clampDistanceAdjust(rawDistanceCm(data, true) + trip_adjust, delta_cm);
+
+    ConfigFile::save(*data->state);
+    updateCopilotDisplay(data);
+}
+
+void on_distance_set(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+
+    GtkWidget* dialog = gtk_dialog_new_with_buttons(
+        "Set Total Distance",
+        GTK_WINDOW(gtk_widget_get_toplevel(widget)),
+        GTK_DIALOG_MODAL,
+        "Set", GTK_RESPONSE_OK,
+        "Cancel", GTK_RESPONSE_CANCEL,
+        nullptr);
+
+    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(content), 20);
+
+    GtkWidget* prompt = gtk_label_new("Distance now (metres):");
+    gtk_box_pack_start(GTK_BOX(content), prompt, FALSE, FALSE, 5);
+
+    GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
+    gtk_entry_set_text(entry,
+        std::to_string(adjustedDistanceMeters(rawDistanceCm(data, false),
+                                              data->state->total_distance_adjust_cm)).c_str());
+    gtk_box_pack_start(GTK_BOX(content), GTK_WIDGET(entry), FALSE, FALSE, 5);
+
+    // The main screen has no keypad of its own, and the box has no physical
+    // keyboard, so the dialog brings one with it.
+    GtkEntry* previous_entry = data->activeEntry;
+    data->activeEntry = entry;
+    gtk_box_pack_start(GTK_BOX(content), createNumericKeypad(data), FALSE, FALSE, 5);
+
+    applyDialogStyle(dialog);
+    gtk_widget_show_all(dialog);
+
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_OK) {
+        const char* text = gtk_entry_get_text(entry);
+        try {
+            long wanted_cm = static_cast<long>(std::stod(text) * 100.0);
+            if (wanted_cm >= 0) {
+                // Solve for the correction that makes the reading equal what
+                // the operator entered. Trip's correction is untouched --
+                // "set" has no Trip equivalent.
+                long raw_cm = rawDistanceCm(data, false);
+                data->state->total_distance_adjust_cm = wanted_cm - raw_cm;
+                ConfigFile::save(*data->state);
+            }
+        } catch (const std::exception&) {
+            // Unparseable entry: leave the correction as it was rather than
+            // zeroing a good one on a typo.
+        }
+    }
+
+    data->activeEntry = previous_entry;
+    gtk_widget_destroy(dialog);
+    updateCopilotDisplay(data);
+}
+
 void performStageGo(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
     int64_t current_time = getRallyTime_ms(*data->state);
@@ -114,6 +209,10 @@ void performStageGo(AppData* data) {
     data->aheadBehindSeconds = 0.0;
     data->smoothedSpeed = -1.0;
     data->state->ahead_behind_zero_offset_ms = 0;
+    // Both counters restart here, so both corrections describe a baseline
+    // that no longer exists.
+    data->state->total_distance_adjust_cm = 0;
+    data->state->trip_distance_adjust_cm = 0;
     data->autoStartTriggered = false;
     
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
