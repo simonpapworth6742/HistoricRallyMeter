@@ -1,6 +1,14 @@
-# Build artefacts
+# Build artifacts
 *.o
 HistoricRallyMeter
 HistoricRallyMeter_debug
 run_tests
 i2c_error_test
+test_rally_config.json
+
+# IDE files
+*.swp
+*~
+
+# Config files with runtime data (not secrets, but user-specific)
+rally_config.json
