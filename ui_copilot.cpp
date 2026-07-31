@@ -29,7 +29,7 @@ static void applyCopilotCSS() {
         ".dist-value { font-size: 88px; font-weight: bold; font-family: monospace; }"
         ".dist-unit { font-size: 48px; font-weight: bold; font-family: monospace; }"
         ".time-label { font-size: 36px; font-family: monospace; color: #CCCCCC; }"
-        ".alarm-label { font-size: 20px; }"
+        ".alarm-label { font-size: 20px; min-width: 90px; }"
         ".alarm-button { font-size: 22px; }"
         ".reset-button { font-size: 36px; }"
         ".alarm-countdown { font-size: 28px; color: #FFFFFF; font-family: monospace; }"
@@ -363,13 +363,19 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
         GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
         gtk_box_pack_start(GTK_BOX(parent), row, FALSE, FALSE, 0);
         if (hasLabel) {
-            GtkWidget* lbl = gtk_label_new("Alarm in");
+            // "KM", not "in": the buttons are kilometre distances, and
+            // "Alarm in 2" reads as two minutes.
+            GtkWidget* lbl = gtk_label_new("Alarm KM");
             gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "alarm-label");
+            gtk_label_set_xalign(GTK_LABEL(lbl), 0.0);
+            gtk_widget_set_size_request(lbl, 90, -1);
             gtk_box_pack_start(GTK_BOX(row), lbl, FALSE, FALSE, 3);
         } else {
+            // Spacer matching the label's width, so every button column
+            // lines up under the first row's.
             GtkWidget* spacer = gtk_label_new("");
             gtk_style_context_add_class(gtk_widget_get_style_context(spacer), "alarm-label");
-            gtk_widget_set_size_request(spacer, 70, -1);
+            gtk_widget_set_size_request(spacer, 90, -1);
             gtk_box_pack_start(GTK_BOX(row), spacer, FALSE, FALSE, 3);
         }
         for (int km = from; km <= to; km++) {
@@ -387,15 +393,19 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     addAlarmRow(alarmBox, 8, 10, false);
     addAlarmRow(alarmBox, 11, 13, false);
     
-    // Alarm countdown + clear button
+    // Alarm countdown + clear button, right-aligned under the alarm grid so
+    // the countdown ends level with the buttons above it rather than
+    // floating at the panel's left edge.
     GtkWidget* countdownRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_widget_set_margin_top(countdownRow, 8);
+    gtk_widget_set_halign(countdownRow, GTK_ALIGN_END);
     gtk_box_pack_start(GTK_BOX(rightPanel), countdownRow, FALSE, FALSE, 0);
-    
+
     data->alarmCountdownLabel = GTK_LABEL(gtk_label_new(""));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->alarmCountdownLabel)), "alarm-countdown");
+    gtk_label_set_xalign(data->alarmCountdownLabel, 1.0);
     gtk_box_pack_start(GTK_BOX(countdownRow), GTK_WIDGET(data->alarmCountdownLabel), FALSE, FALSE, 0);
-    
+
     data->alarmClearBtn = gtk_button_new_with_label("clear");
     gtk_style_context_add_class(gtk_widget_get_style_context(data->alarmClearBtn), "alarm-button");
     g_signal_connect(data->alarmClearBtn, "clicked", G_CALLBACK(on_alarm_clear), data);
