@@ -379,13 +379,11 @@ double pulsesPerKm(long calibration) {
 }
 
 std::string calibrationReadoutLine(long distance_m, int64_t counts_avg,
-                                   int64_t counts_s1, int64_t counts_s2,
-                                   long calibration) {
+                                   int64_t counts_s1, int64_t counts_s2) {
     std::stringstream ss;
-    ss << "Device distance: " << formatDistanceGrouped(distance_m) << " m"
-       << "  - Pulses " << counts_avg
-       << " (S1 " << counts_s1 << ": S2 " << counts_s2 << ")"
-       << "  Pulses/KM " << static_cast<long>(pulsesPerKm(calibration) + 0.5);
+    ss << "Device distance: " << distance_m << "m."
+       << " Pulses " << counts_avg
+       << " S1=" << counts_s1 << " S2=" << counts_s2;
     return ss.str();
 }
 

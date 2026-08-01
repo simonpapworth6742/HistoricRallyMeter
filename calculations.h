@@ -148,11 +148,11 @@ long dueBeepWaypoint(const std::vector<double>& waypoints_m, size_t from_index,
 double pulsesPerKm(long calibration);
 
 // The calibration screen's readout line: distance covered, the averaged pulse
-// count, each sensor's own count -- so one wheel sensor disagreeing with the
-// other is visible -- and the resulting pulses per kilometre.
+// count, and each sensor's own count -- so one wheel sensor disagreeing with
+// the other is visible. Pulses/KM is shown separately, in the "Current
+// Calibration" row.
 std::string calibrationReadoutLine(long distance_m, int64_t counts_avg,
-                                   int64_t counts_s1, int64_t counts_s2,
-                                   long calibration);
+                                   int64_t counts_s1, int64_t counts_s2);
 
 // The calibration value (millimetres per 1000 counts) that gives an exact
 // pulses/km figure. Identical arithmetic to pulsesPerKm() -- calibration and
