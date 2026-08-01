@@ -534,6 +534,8 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     
     // ── BOTTOM ROW: Navigation buttons (20% taller) ──
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+    gtk_widget_set_margin_start(buttonBox, 5);
+    gtk_widget_set_margin_end(buttonBox, 5);
     gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 0);
     
     GtkWidget* stageGoBtn = gtk_button_new_with_label("stage go");
