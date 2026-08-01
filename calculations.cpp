@@ -296,5 +296,18 @@ CompactGaugeLayout computeCompactGaugeLayout(double width, double height) {
     L.totalBaseline  = bottom_baseline - L.rowGap;
     L.tripBaseline   = bottom_baseline;
 
+    // Captions sit below the bottom value row, clear of it and of the footer.
+    // They are deliberately not tied to the ahead/behind box, which moves.
+    L.captionBaseline = L.centerY + 20 + L.labelSize * 0.78;
+
     return L;
+}
+
+std::string distanceColumnCaption(const char* unit) {
+    const bool kilometres = (unit != nullptr) && (std::string(unit) == "km");
+    return std::string("Distance (") + (kilometres ? "kilometres" : "metres") + ")";
+}
+
+std::string speedColumnCaption(bool units_mph) {
+    return units_mph ? "Average Speed (Mph)" : "Average Speed (Kmh)";
 }

@@ -12,6 +12,7 @@
 #include <chrono>
 #include <ctime>
 #include <fstream>
+#include <string>
 
 static std::string readCpuTemp() {
     std::ifstream f("/sys/class/thermal/thermal_zone0/temp");
@@ -424,6 +425,31 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         drawValue(gtk_label_get_text(data->tripSpeedLabel), L.tripBaseline);
         drawCaption("Trip", L.tripBaseline);
         drawDistance(gtk_label_get_text(data->driverTripDistLabel), L.tripBaseline);
+
+        // Column captions below each half of the panel. They carry the
+        // units so the values above them do not have to repeat them on
+        // every row -- and they follow the live unit, not a fixed string.
+        {
+            std::string dist_caption =
+                distanceColumnCaption(gtk_label_get_text(data->driverTotalUnitLabel));
+            std::string speed_caption = speedColumnCaption(data->state->units);
+
+            cairo_set_font_size(cr, L.labelSize);
+            cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+
+            // Right-aligned to the same X the distance values themselves
+            // right-align to (RB-DRV-01's L.distanceAnchor), so the
+            // caption's closing ")" sits directly under the values' last
+            // digit rather than centred under a right-aligned column.
+            cairo_text_extents(cr, dist_caption.c_str(), &te);
+            cairo_move_to(cr, L.distanceAnchor - te.x_advance, L.captionBaseline);
+            cairo_show_text(cr, dist_caption.c_str());
+
+            // Centred: there is no value column edge on this side to match.
+            cairo_text_extents(cr, speed_caption.c_str(), &te);
+            cairo_move_to(cr, (L.centerX + width) / 2 - te.x_advance / 2, L.captionBaseline);
+            cairo_show_text(cr, speed_caption.c_str());
+        }
 
         // fps left, cpu right, baseline in line with the bottom of the
         // ahead/behind digital readout box (box top = centerY+18, height 36)
