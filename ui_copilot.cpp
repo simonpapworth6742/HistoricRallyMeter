@@ -44,7 +44,7 @@ static void applyCopilotCSS() {
         "scrollbar.vertical slider { min-width: 20px; }"
         "scrollbar trough { min-width: 24px; }"
         "button.memory-populated { background-image: none; background-color: #FFFFFF; color: #000000; }"
-        ".adjust-button { font-size: 16px; }"
+        ".adjust-button { font-size: 28px; font-weight: bold; font-family: monospace; }"
         ".instruction-label { font-size: 16px; color: #CCCCCC; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
@@ -373,8 +373,8 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
         for (int c = 0; c < 3; c++) {
             GtkWidget* btn = gtk_button_new_with_label(controls[c].label);
             gtk_style_context_add_class(gtk_widget_get_style_context(btn), "adjust-button");
-            gtk_widget_set_size_request(btn, 44, 32);
             gtk_widget_set_valign(btn, GTK_ALIGN_CENTER);
+            if (c == 0) gtk_widget_set_margin_start(btn, 15);
             if (controls[c].delta_m == 0) {
                 g_signal_connect(btn, "clicked", G_CALLBACK(on_distance_set), data);
             } else {
