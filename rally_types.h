@@ -135,6 +135,7 @@ struct AppData {
     GtkWidget* calibrationKeypad;   // Numeric keypad for calibration
     GtkLabel* sensorModeLabel;      // "Currently set to sensor 1 / both sensors"
     GtkLabel* calibrationCurrentLabel;  // "Current Calibration: N pulses/KM"
+    GtkEntry* resetPulsesEntry;  // operator-entered target for RB-CAL-03's reset
 
     // Calibration baseline values (set when "start" is pressed)
     uint64_t cal_start_cntr1 = 0;

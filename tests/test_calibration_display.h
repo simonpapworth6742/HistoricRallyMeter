@@ -48,6 +48,23 @@ public:
             return line.find("(S1 1400: S2 1600)") != std::string::npos;
         });
 
+        suite->addTest("calibration from pulses per km is the reciprocal of pulsesPerKm", []() {
+            // Same formula both directions: 1e9 / x. 600000 mm/1000 counts
+            // round-trips through pulsesPerKm and back.
+            double pulses = pulsesPerKm(600000);
+            return std::abs(calibrationFromPulsesPerKm(pulses) - 600000) <= 1;
+        });
+
+        suite->addTest("1000 pulses per km gives the same calibration as 1m per pulse", []() {
+            // The escape hatch this replaces hardcoded exactly this value.
+            return calibrationFromPulsesPerKm(1000.0) == 1000000;
+        });
+
+        suite->addTest("a zero or negative pulses/km cannot divide by zero", []() {
+            return calibrationFromPulsesPerKm(0.0) == 0
+                && calibrationFromPulsesPerKm(-5.0) == 0;
+        });
+
         return suite;
     }
 };
