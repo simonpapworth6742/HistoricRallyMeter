@@ -65,4 +65,11 @@ std::string calibrationReadoutLine(long distance_m, int64_t counts_avg,
                                    int64_t counts_s1, int64_t counts_s2,
                                    long calibration);
 
+// The calibration value (millimetres per 1000 counts) that gives an exact
+// pulses/km figure. Identical arithmetic to pulsesPerKm() -- calibration and
+// pulses/km are reciprocals of each other through the same 1e9 constant --
+// named separately so each call site reads for what it means. Returns 0 for
+// a non-positive input rather than dividing by zero.
+long calibrationFromPulsesPerKm(double pulses_per_km);
+
 #endif // CALCULATIONS_H

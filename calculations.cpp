@@ -238,3 +238,8 @@ std::string calibrationReadoutLine(long distance_m, int64_t counts_avg,
        << "  Pulses/KM " << static_cast<long>(pulsesPerKm(calibration) + 0.5);
     return ss.str();
 }
+
+long calibrationFromPulsesPerKm(double pulses_per_km) {
+    if (pulses_per_km <= 0.0) return 0;
+    return static_cast<long>((1e9 / pulses_per_km) + 0.5);
+}
