@@ -510,7 +510,28 @@ void updateDriverDisplay(AppData* data) {
     ss.str("");
     ss << std::fixed << std::setprecision(1) << total_speed;
     gtk_label_set_text(data->totalSpeedLabel, ss.str().c_str());
-    
+
+    // Total/Trip distance, reusing the count differences just computed for
+    // the average speeds above -- no additional counter reads. Applies the
+    // same manual correction the co-pilot applies (RB-NAV-03), from the
+    // start: if the two panels ever disagreed about distance travelled, even
+    // briefly, that would be worse than not having the correction at all.
+    long total_dist_m = adjustedDistanceMeters(
+        countsToCentimeters(total_count_diff, data->state->calibration),
+        data->state->total_distance_adjust_cm);
+    const char* total_unit = "m";
+    std::string total_dist_str = formatDistanceAutoUnit(total_dist_m, &total_unit);
+    gtk_label_set_text(data->driverTotalDistLabel, total_dist_str.c_str());
+    gtk_label_set_text(data->driverTotalUnitLabel, total_unit);
+
+    long trip_dist_m = adjustedDistanceMeters(
+        countsToCentimeters(trip_count_diff, data->state->calibration),
+        data->state->trip_distance_adjust_cm);
+    const char* trip_unit = "m";
+    std::string trip_dist_str = formatDistanceAutoUnit(trip_dist_m, &trip_unit);
+    gtk_label_set_text(data->driverTripDistLabel, trip_dist_str.c_str());
+    gtk_label_set_text(data->driverTripUnitLabel, trip_unit);
+
     // Target speed and ahead/behind
     if (data->state->segment_current_number >= 0 && 
         data->state->segment_current_number < static_cast<long>(data->state->segments.size())) {
@@ -889,6 +910,13 @@ GtkWidget* createDriverWindow(AppData* data) {
     gtk_widget_set_halign(GTK_WIDGET(data->tripSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_valign(GTK_WIDGET(data->tripSpeedLabel), GTK_ALIGN_CENTER);
     gtk_box_pack_start(GTK_BOX(rightCol), GTK_WIDGET(data->tripSpeedLabel), TRUE, TRUE, 0);
+
+    // Total/Trip distance: data only, not yet drawn anywhere. RB-DRV-01
+    // places these in the compact-mode gauge per the design mockup.
+    data->driverTotalDistLabel = GTK_LABEL(gtk_label_new("0"));
+    data->driverTotalUnitLabel = GTK_LABEL(gtk_label_new("m"));
+    data->driverTripDistLabel = GTK_LABEL(gtk_label_new("0"));
+    data->driverTripUnitLabel = GTK_LABEL(gtk_label_new("m"));
     
     // Footer row at bottom of LEFT side only (under speeds)
     GtkWidget* footerBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
