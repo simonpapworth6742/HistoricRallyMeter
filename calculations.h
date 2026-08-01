@@ -64,4 +64,39 @@ struct NeedleGeometry {
 
 NeedleGeometry computeNeedleGeometry(double seconds, double max_seconds, double radius);
 
+// The gauge's effective sweep, in seconds: fixed at 3 while the reading is
+// within it (the needle deflects normally, exactly like pristine's green
+// scale), then tracks |seconds| exactly -- not a preset -- up to a cap of
+// 30. Feeding this into computeNeedleGeometry() as max_seconds is what pins
+// the needle horizontal for any reading past 3s: seconds/max_seconds is
+// then always exactly +-1, with no separate clamp needed anywhere else. The
+// tick count (one per second of this value) grows around the pinned needle
+// instead of the needle continuing to sweep a fixed dial.
+double gaugeEffectiveMaxSeconds(double seconds);
+
+// Which zone the reading is in: 0 = green (|seconds| < 10, still deflecting
+// or just pinned), 1 = amber (10 to 30), 2 = red (30 and beyond, capped).
+// Drives the arc colour, the scale-end chevron count, and the digital box's
+// mm:ss/decimal format -- pristine read a single persisted, debounced
+// data->gaugeScale (0/1/2) for all three; this supplies the same numbering,
+// computed fresh from the reading every frame instead.
+int gaugeZone(double seconds);
+
+// Arc colour for a zone (see gaugeZone), matching pristine's exact
+// per-scale RGB triples.
+struct GaugeArcColor { double r, g, b; };
+GaugeArcColor gaugeArcColor(int zone);
+
+// Numeral for a tick on the gauge, one tick per second of the current
+// effective sweep. Empty for the zero tick, which the centre triangle marks
+// instead.
+std::string gaugeTickLabel(int index);
+
+// True while tick numerals should be drawn at all: only in the green zone.
+// Past that, the dial has grown past the point where labelling individual
+// second-ticks is useful -- the arc colour is the at-a-glance signal
+// instead, and a numeral next to a pinned needle would claim a precision
+// the needle position no longer carries.
+bool gaugeTickLabelsVisible(double seconds);
+
 #endif // CALCULATIONS_H
