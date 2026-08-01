@@ -602,8 +602,7 @@ void updateCalibrationDisplay(AppData* data) {
     
     long total_m = countsToCentimeters(cntr_a, data->state->calibration) / 100;
     gtk_label_set_text(data->totalDistCalLabel,
-        calibrationReadoutLine(total_m, cntr_a, cntr1_diff, cntr2_diff,
-                               data->state->calibration).c_str());
+        calibrationReadoutLine(total_m, cntr_a, cntr1_diff, cntr2_diff).c_str());
 }
 
 // Helper function to update date/time display
