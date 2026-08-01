@@ -604,6 +604,11 @@ void updateCalibrationDisplay(AppData* data) {
     gtk_label_set_text(data->totalDistCalLabel,
         calibrationReadoutLine(total_m, cntr_a, cntr1_diff, cntr2_diff,
                                data->state->calibration).c_str());
+
+    char current[64];
+    snprintf(current, sizeof(current), "Current Calibration: %ld pulses/KM",
+             static_cast<long>(pulsesPerKm(data->state->calibration) + 0.5));
+    gtk_label_set_text(data->calibrationCurrentLabel, current);
 }
 
 // Helper function to update date/time display
