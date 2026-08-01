@@ -99,4 +99,16 @@ std::string gaugeTickLabel(int index);
 // the needle position no longer carries.
 bool gaugeTickLabelsVisible(double seconds);
 
+// Angle (Cairo convention, same as NeedleGeometry::angle) for the major tick
+// labelled `index` seconds, given the gauge's current effective sweep
+// max_val (see gaugeEffectiveMaxSeconds). Uses the same seconds/max_val
+// mapping as computeNeedleGeometry() so a tick numeral "i" always sits at
+// the angle a reading of exactly i seconds would put the needle at -- even
+// when max_val itself is fractional (e.g. max_val = 3.9 while still
+// deflecting within the inner zone). Do not divide by a truncated tick
+// count instead of max_val here: that would place tick "i" at
+// i/tick_count of the sweep, i.e. i * (max_val / tick_count) seconds, not
+// i seconds, whenever max_val has a fractional remainder.
+double gaugeTickAngle(int index, double max_val);
+
 #endif // CALCULATIONS_H

@@ -9,7 +9,6 @@
 #include <sstream>
 #include <cmath>
 #include <cstdio>
-#include <chrono>
 #include <ctime>
 #include <fstream>
 #include <string>
@@ -24,7 +23,9 @@ static std::string readCpuTemp() {
     return buf;
 }
 
-// Format the digital readout based on scale
+// Format the digital readout based on scale. `scale` here is the caller's
+// zone number (see gaugeZone()) -- not a persisted scale field -- but the
+// formatting itself is intentionally unchanged from pristine:
 // Red (±5min): ±hhh:mm:ss   Yellow/Green (±10s/±3s): ±ss.s
 static void formatGaugeDigital(char* buf, size_t bufsize, double seconds, int scale) {
     double abs_sec = std::abs(seconds);
@@ -95,7 +96,8 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     cairo_arc(cr, centerX, centerY, radius, M_PI, 2 * M_PI);
     cairo_stroke(cr);
 
-    // Coloured graduated arc (green/yellow/red depending on scale)
+    // Coloured graduated arc (green/amber/red depending on the continuous
+    // zone the reading currently falls in -- see gaugeZone()).
     int arc_segments = 40;
     for (int i = 0; i <= arc_segments; i++) {
         double frac = -1.0 + (2.0 * i) / arc_segments;
@@ -119,8 +121,12 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     bool labels_visible = gaugeTickLabelsVisible(seconds);
     int tick_count = static_cast<int>(max_val);
     for (int i = -tick_count; i <= tick_count; i++) {
-        double frac = static_cast<double>(i) / tick_count;
-        double angle = M_PI + M_PI / 2 + frac * (M_PI / 2);
+        // gaugeTickAngle() uses max_val (the true sweep end), matching
+        // computeNeedleGeometry()'s seconds/max_seconds mapping -- not
+        // tick_count, which is max_val truncated to a whole number of
+        // ticks. See its header comment for why dividing by tick_count
+        // instead would misplace ticks whenever max_val is fractional.
+        double angle = gaugeTickAngle(i, max_val);
 
         double x1 = centerX + (radius - 20) * cos(angle);
         double y1 = centerY + (radius - 20) * sin(angle);
@@ -163,6 +169,11 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
 
     // Unit labels
     const char* unit = "sec";
+    // Set explicitly rather than relying on the tick-numeral loop above:
+    // that loop only selects a font face when labels_visible (green zone),
+    // so in amber/red the unit labels would otherwise inherit whatever
+    // face cairo last had selected.
+    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
     cairo_set_font_size(cr, 11);
     cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
 
@@ -246,7 +257,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     cairo_fill(cr);
 
     // Scale chevrons + segment-end tick along the needle.
-    // The number of chevrons encodes the active scale (green=1, yellow=2, red=3).
+    // The number of chevrons encodes the current zone (green=1, amber=2, red=3).
     // The topmost chevron starts 20% out from the hub; while within a segment the
     // whole group slides toward the segment-end tick (20% from the tip) in
     // proportion to how much of the segment has been driven. Outside a segment the

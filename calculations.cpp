@@ -247,3 +247,8 @@ std::string gaugeTickLabel(int index) {
 bool gaugeTickLabelsVisible(double seconds) {
     return gaugeZone(seconds) == 0;
 }
+
+double gaugeTickAngle(int index, double max_val) {
+    double frac = static_cast<double>(index) / max_val;
+    return M_PI + M_PI / 2 + frac * (M_PI / 2);
+}

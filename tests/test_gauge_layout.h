@@ -89,6 +89,33 @@ public:
                 && !gaugeTickLabelsVisible(-15.0);
         });
 
+        suite->addTest("tick angle matches the needle angle for the same seconds value", []() {
+            // A tick labelled i seconds must sit at the same angle the
+            // needle would be at for a reading of exactly i seconds -- the
+            // whole point of numbering the ticks at all.
+            double max_val = 10.0;
+            for (int i = -10; i <= 10; i++) {
+                NeedleGeometry n = computeNeedleGeometry(static_cast<double>(i), max_val, 375.0);
+                double tick_angle = gaugeTickAngle(i, max_val);
+                if (std::abs(n.angle - tick_angle) > 1e-9) return false;
+            }
+            return true;
+        });
+
+        suite->addTest("tick angle is exact even when max_val is fractional", []() {
+            // Reviewer's worked example: reading = 3.9s -> max_val = 3.9,
+            // tick_count (truncated) = 3. Before the fix, tick "3" was
+            // placed at angle = i/tick_count of the sweep, i.e. 3.9
+            // seconds' worth of deflection instead of 3 -- a 0.9s error.
+            // gaugeTickAngle() must divide by max_val (3.9), not
+            // tick_count (3), so tick "3" lands exactly where a genuine
+            // 3-second reading would put the needle.
+            double max_val = 3.9;
+            NeedleGeometry three_sec_needle = computeNeedleGeometry(3.0, max_val, 375.0);
+            double tick_three_angle = gaugeTickAngle(3, max_val);
+            return std::abs(three_sec_needle.angle - tick_three_angle) < 1e-9;
+        });
+
         return suite;
     }
 };
