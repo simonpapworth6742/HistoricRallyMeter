@@ -66,6 +66,45 @@ public:
             return L.tripBaseline < L.centerY;
         });
 
+        suite->addTest("error box covers the needle hub", []() {
+            // The box is lifted so its top edge is above the hub; drawn after
+            // the needle it then paints the hub out, which is the point.
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return L.boxY < L.centerY
+                && (L.boxY + L.boxHeight) > L.centerY;
+        });
+
+        suite->addTest("error box is 50px tall", []() {
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return std::abs(L.boxHeight - 50.0) < 0.001;
+        });
+
+        suite->addTest("footer sits on the bottom edge of the error box", []() {
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return std::abs(L.footBaseline - (L.boxY + L.boxHeight)) < 0.001;
+        });
+
+        suite->addTest("footer text never shrinks below 11px", []() {
+            // Below ~11px the fps/cpu readout is unreadable on the box's
+            // 800x480 panel at arm's length.
+            CompactGaugeLayout tiny = computeCompactGaugeLayout(320, 200);
+            return tiny.footSize >= 11.0;
+        });
+
+        // TODO(RB-DRV-03/RB-DRV-02 merge): re-enable once this branch is
+        // merged with rb-drv-02-gauge-column-captions, which adds
+        // CompactGaugeLayout::captionBaseline. RB-DRV-03 was cut from
+        // RB-DRV-01, a sibling of RB-DRV-02, so captionBaseline does not
+        // exist here yet -- it will exist once both branches land on box.
+        //
+        // suite->addTest("captions clear the error box", []() {
+        //     // The captions were previously top-aligned with the box. Now
+        //     // the box has moved up over the hub, they must not follow it
+        //     // there.
+        //     CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+        //     return L.captionBaseline > L.boxY;
+        // });
+
         return suite;
     }
 };

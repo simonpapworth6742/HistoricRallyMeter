@@ -102,6 +102,10 @@ struct CompactGaugeLayout {
     double targetBaseline;  // Target speed
     double totalBaseline;   // Total average speed / Total distance
     double tripBaseline;    // Trip average speed / Trip distance
+    double boxY;            // ahead/behind readout box, top edge
+    double boxHeight;       // ahead/behind readout box height
+    double footBaseline;    // fps/cpu footer baseline
+    double footSize;        // fps/cpu footer font size
 };
 
 CompactGaugeLayout computeCompactGaugeLayout(double width, double height);
