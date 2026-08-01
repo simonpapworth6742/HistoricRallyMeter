@@ -606,16 +606,16 @@ void refreshSegmentList(AppData* data) {
         long distance_m = static_cast<long>(seg.distance_m);
         
         GtkWidget* row = gtk_list_box_row_new();
-        GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-        gtk_style_context_add_class(gtk_widget_get_style_context(box), "segment-row");
-        gtk_container_add(GTK_CONTAINER(row), box);
-        
+        GtkWidget* grid = gtk_grid_new();
+        gtk_grid_set_column_spacing(GTK_GRID(grid), SEGMENT_COL_SPACING);
+        gtk_style_context_add_class(gtk_widget_get_style_context(grid), "segment-row");
+        gtk_container_add(GTK_CONTAINER(row), grid);
+
         // Speed entry (editable)
         std::stringstream ss;
         ss << std::fixed << std::setprecision(2) << target_kph;
         GtkWidget* speedEntry = gtk_entry_new();
         gtk_entry_set_text(GTK_ENTRY(speedEntry), ss.str().c_str());
-        gtk_widget_set_size_request(speedEntry, 100, 36);
         g_object_set_data(G_OBJECT(speedEntry), "app_data", data);
         g_object_set_data(G_OBJECT(speedEntry), "entry_type", (gpointer)"speed");
         g_signal_connect(speedEntry, "changed", G_CALLBACK(on_segment_entry_changed), GINT_TO_POINTER(i));
@@ -626,7 +626,6 @@ void refreshSegmentList(AppData* data) {
         ss << distance_m;
         GtkWidget* distEntry = gtk_entry_new();
         gtk_entry_set_text(GTK_ENTRY(distEntry), ss.str().c_str());
-        gtk_widget_set_size_request(distEntry, 100, 36);
         g_object_set_data(G_OBJECT(distEntry), "app_data", data);
         g_object_set_data(G_OBJECT(distEntry), "entry_type", (gpointer)"distance");
         g_signal_connect(distEntry, "changed", G_CALLBACK(on_segment_entry_changed), GINT_TO_POINTER(i));
@@ -650,16 +649,25 @@ void refreshSegmentList(AppData* data) {
         
         // Delete button
         GtkWidget* deleteBtn = gtk_button_new_with_label("del");
-        gtk_widget_set_size_request(deleteBtn, -1, 36);
         g_object_set_data(G_OBJECT(deleteBtn), "app_data", data);
         g_signal_connect(deleteBtn, "clicked", G_CALLBACK(on_delete_segment), GINT_TO_POINTER(i));
-        
-        gtk_box_pack_start(GTK_BOX(box), speedEntry, FALSE, FALSE, 5);
-        gtk_box_pack_start(GTK_BOX(box), distEntry, FALSE, FALSE, 5);
-        gtk_box_pack_start(GTK_BOX(box), autoCheck, FALSE, FALSE, 15);
-        gtk_box_pack_start(GTK_BOX(box), timeLabel, FALSE, FALSE, 5);
-        gtk_box_pack_start(GTK_BOX(box), deleteBtn, FALSE, FALSE, 5);
-        
+
+        gtk_widget_set_size_request(speedEntry, SEGMENT_COL_SPEED, 36);
+        gtk_grid_attach(GTK_GRID(grid), speedEntry, 0, 0, 1, 1);
+
+        gtk_widget_set_size_request(distEntry, SEGMENT_COL_DISTANCE, 36);
+        gtk_grid_attach(GTK_GRID(grid), distEntry, 1, 0, 1, 1);
+
+        gtk_widget_set_size_request(autoCheck, SEGMENT_COL_AUTO, -1);
+        gtk_grid_attach(GTK_GRID(grid), autoCheck, 2, 0, 1, 1);
+
+        gtk_label_set_xalign(GTK_LABEL(timeLabel), 0.0);
+        gtk_widget_set_size_request(timeLabel, SEGMENT_COL_TIME, -1);
+        gtk_grid_attach(GTK_GRID(grid), timeLabel, 3, 0, 1, 1);
+
+        gtk_widget_set_size_request(deleteBtn, SEGMENT_COL_DELETE, 36);
+        gtk_grid_attach(GTK_GRID(grid), deleteBtn, 4, 0, 1, 1);
+
         gtk_list_box_insert(data->segmentListBox, row, -1);
         gtk_widget_show_all(row);
     }

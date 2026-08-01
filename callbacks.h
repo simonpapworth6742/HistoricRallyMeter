@@ -4,6 +4,18 @@
 #include <gtk/gtk.h>
 #include "rally_types.h"
 
+// Column widths for the stage-setup segment table, in pixels. Declared once
+// and used by both the header row in createStageSetupScreen() and the data
+// rows in refreshSegmentList(): the two were previously laid out by different
+// mechanisms with separately hand-tuned paddings, so they lined up only by
+// coincidence and drifted apart whenever a value's width changed.
+constexpr int SEGMENT_COL_SPEED    = 140;
+constexpr int SEGMENT_COL_DISTANCE = 170;
+constexpr int SEGMENT_COL_AUTO     = 60;
+constexpr int SEGMENT_COL_TIME     = 70;
+constexpr int SEGMENT_COL_DELETE   = 70;
+constexpr int SEGMENT_COL_SPACING  = 15;
+
 gboolean on_window_delete(GtkWidget* widget, GdkEvent* event, gpointer user_data);
 void on_unit_toggle(GtkWidget* widget, gpointer user_data);
 void on_total_reset(GtkWidget* widget, gpointer user_data);
