@@ -633,33 +633,34 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     // Row 1: Distance with counter breakdown
     // Format: "Total distance: xxx,xxx m  (counts calculated: CNTR_A  1: CNTR_1  2: CNTR_2)"
     data->totalDistCalLabel = GTK_LABEL(gtk_label_new("Total distance: 0 m  (counts calculated: 0   1: 0   2: 0)"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistCalLabel)), "clock-label");
     gtk_widget_set_halign(GTK_WIDGET(data->totalDistCalLabel), GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(leftBox), GTK_WIDGET(data->totalDistCalLabel), FALSE, FALSE, 0);
-    
-    gtk_box_pack_start(GTK_BOX(leftBox), gtk_label_new(""), FALSE, FALSE, 0);
-    
+
     // Row 2: Input field
     GtkWidget* inputRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(leftBox), inputRow, FALSE, FALSE, 0);
-    
+
     GtkWidget* inputLabel = gtk_label_new("Actual distance covered:");
+    gtk_style_context_add_class(gtk_widget_get_style_context(inputLabel), "clock-label");
     data->rallyDistEntry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_placeholder_text(data->rallyDistEntry, "500-100000");
     gtk_widget_set_size_request(GTK_WIDGET(data->rallyDistEntry), 150, -1);
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->rallyDistEntry)), "clock-label");
     g_signal_connect(data->rallyDistEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
-    GtkWidget* unitLabel = gtk_label_new("meters");
+    GtkWidget* unitLabel = gtk_label_new("metres");
+    gtk_style_context_add_class(gtk_widget_get_style_context(unitLabel), "clock-label");
 
     gtk_box_pack_start(GTK_BOX(inputRow), inputLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(inputRow), GTK_WIDGET(data->rallyDistEntry), FALSE, FALSE, 10);
     gtk_box_pack_start(GTK_BOX(inputRow), unitLabel, FALSE, FALSE, 0);
-    
-    gtk_box_pack_start(GTK_BOX(leftBox), gtk_label_new(""), FALSE, FALSE, 0);
-    
+
     // Row 3: Sensor mode selection
     GtkWidget* sensorRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(leftBox), sensorRow, FALSE, FALSE, 0);
-    
+
     data->sensorModeLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->sensorModeLabel)), "clock-label");
     gtk_widget_set_halign(GTK_WIDGET(data->sensorModeLabel), GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(sensorRow), GTK_WIDGET(data->sensorModeLabel), FALSE, FALSE, 0);
     updateSensorModeLabel(data);
@@ -684,16 +685,16 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     data->calibrationCurrentLabel = GTK_LABEL(gtk_label_new(NULL));
     gtk_label_set_markup(GTK_LABEL(data->calibrationCurrentLabel),
         "Current <span foreground=\"#FFDD00\">Calibration 0 pulses/KM</span>. Reset to");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->calibrationCurrentLabel)), "clock-label");
     gtk_widget_set_halign(GTK_WIDGET(data->calibrationCurrentLabel), GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(currentCalRow), GTK_WIDGET(data->calibrationCurrentLabel), FALSE, FALSE, 0);
 
     data->resetPulsesEntry = GTK_ENTRY(gtk_entry_new());
-    gtk_widget_set_size_request(GTK_WIDGET(data->resetPulsesEntry), 100, -1);
+    gtk_entry_set_width_chars(data->resetPulsesEntry, 6);
+    gtk_entry_set_max_width_chars(data->resetPulsesEntry, 6);
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->resetPulsesEntry)), "clock-label");
     g_signal_connect(data->resetPulsesEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     gtk_box_pack_start(GTK_BOX(currentCalRow), GTK_WIDGET(data->resetPulsesEntry), FALSE, FALSE, 0);
-
-    GtkWidget* pulsesUnitLabel = gtk_label_new("pulses/KM");
-    gtk_box_pack_start(GTK_BOX(currentCalRow), pulsesUnitLabel, FALSE, FALSE, 0);
 
     GtkWidget* resetPulsesBtn = gtk_button_new_with_label("Reset");
     g_signal_connect(resetPulsesBtn, "clicked", G_CALLBACK(on_reset_calibration_pulses), data);
