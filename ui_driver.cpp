@@ -405,10 +405,11 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         drawValue(gtk_label_get_text(data->currentSpeedLabel), L.curBaseline);
         drawCaption("Current", L.curBaseline);
 
-        // {target}: top of the stacked rows. No colour distinction yet --
-        // pristine draws it in the same white as everything else; RB-DRV-06
-        // is where the whole palette (including this row) gets colour.
-        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        // Target is the value being driven toward -- the one number the
+        // driver is actively trying to match, so it is the only row pulled
+        // out of white. Current already reads as "closest to Target" by
+        // sitting directly beneath it (RB-DRV-01's row order).
+        cairo_set_source_rgb(cr, 1.0, 0.867, 0.0);  // #FFDD00
         drawValue(gtk_label_get_text(data->targetSpeedLabel), L.targetBaseline);
         drawCaption("Target", L.targetBaseline);
 
@@ -418,9 +419,10 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         drawCaption("Total", L.totalBaseline);
         drawDistance(gtk_label_get_text(data->driverTotalDistLabel), L.totalBaseline);
 
-        // {trip}: bottom row, mirrored by the Trip distance on the left.
-        // RB-DRV-06 recolours this pair; here it stays as it was.
-        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        // Trip speed and Trip distance share a colour so the eye groups them
+        // as one reading, instead of scanning four undifferentiated white
+        // numbers and working out which distance belongs to which speed.
+        cairo_set_source_rgb(cr, 0.0, 1.0, 1.0);  // #00FFFF
         drawValue(gtk_label_get_text(data->tripSpeedLabel), L.tripBaseline);
         drawCaption("Trip", L.tripBaseline);
         drawDistance(gtk_label_get_text(data->driverTripDistLabel), L.tripBaseline);
