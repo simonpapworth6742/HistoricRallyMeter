@@ -4,6 +4,7 @@
 #include "test_framework.h"
 #include "../calculations.h"
 #include <cmath>
+#include <string>
 
 // Geometry tests for the compact (800x480) driver gauge layout. The same
 // arithmetic is mirrored in tools/layout-preview/DriverWindowTextLayout.html;
@@ -64,6 +65,28 @@ public:
             // The bottom row must not collide with the hub at centerY.
             CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
             return L.tripBaseline < L.centerY;
+        });
+
+        suite->addTest("caption clears the Trip row above it", []() {
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return L.captionBaseline > L.tripBaseline;
+        });
+
+        suite->addTest("distance caption follows the metre/kilometre switch", []() {
+            // The caption carries the unit, so it must track the automatic
+            // switch formatDistanceAutoUnit() makes above 999,999 m -- a
+            // hard-coded "metres" would misread a km value by 1000x.
+            return distanceColumnCaption("m") == "Distance (metres)"
+                && distanceColumnCaption("km") == "Distance (kilometres)";
+        });
+
+        suite->addTest("distance caption defaults to metres on a null unit", []() {
+            return distanceColumnCaption(nullptr) == "Distance (metres)";
+        });
+
+        suite->addTest("speed caption follows the KPH/MPH setting", []() {
+            return speedColumnCaption(false) == "Average Speed (Kmh)"
+                && speedColumnCaption(true) == "Average Speed (Mph)";
         });
 
         return suite;

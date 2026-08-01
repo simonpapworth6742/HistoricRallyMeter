@@ -191,8 +191,18 @@ struct CompactGaugeLayout {
     double targetBaseline;  // Target speed
     double totalBaseline;   // Total average speed / Total distance
     double tripBaseline;    // Trip average speed / Trip distance
+    double captionBaseline; // column captions, under the value rows
 };
 
 CompactGaugeLayout computeCompactGaugeLayout(double width, double height);
+
+// Caption for the driver gauge's distance column. The caption carries the
+// unit rather than each value repeating it, so it has to follow the
+// automatic m/km switch that formatDistanceAutoUnit() applies to the values.
+std::string distanceColumnCaption(const char* unit);
+
+// Caption for the driver gauge's average-speed column, following the
+// KPH/MPH setting from the date/time screen.
+std::string speedColumnCaption(bool units_mph);
 
 #endif // CALCULATIONS_H
