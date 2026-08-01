@@ -19,6 +19,7 @@
 #include "test_segment_row.h"
 #include "test_beep_assist.h"
 #include "test_calibration_display.h"
+#include "test_stage_summary.h"
 
 int main() {
     TestRunner runner;
@@ -41,6 +42,7 @@ int main() {
     TestSegmentRow segmentRowTests;
     TestBeepAssist beepAssistTests;
     TestCalibrationDisplay calDisplayTests;
+    TestStageSummary stageSummaryTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -60,6 +62,7 @@ int main() {
     runner.addSuite(segmentRowTests.createSuite());
     runner.addSuite(beepAssistTests.createSuite());
     runner.addSuite(calDisplayTests.createSuite());
+    runner.addSuite(stageSummaryTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

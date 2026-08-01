@@ -393,3 +393,15 @@ long calibrationFromPulsesPerKm(double pulses_per_km) {
     if (pulses_per_km <= 0.0) return 0;
     return static_cast<long>((1e9 / pulses_per_km) + 0.5);
 }
+
+std::string stageSummary(const std::vector<Segment>& segments) {
+    if (segments.empty()) return std::string("No stage");
+
+    std::stringstream ss;
+    for (size_t i = 0; i < segments.size(); i++) {
+        if (i > 0) ss << ", ";
+        ss << static_cast<long>(segments[i].distance_m) << "m@"
+           << std::fixed << std::setprecision(2) << segments[i].target_speed_kph << "kph";
+    }
+    return ss.str();
+}

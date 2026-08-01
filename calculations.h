@@ -160,4 +160,12 @@ std::string calibrationReadoutLine(long distance_m, int64_t counts_avg,
 // a non-positive input rather than dividing by zero.
 long calibrationFromPulsesPerKm(double pulses_per_km);
 
+// Summary of the loaded stage for the Stage Go confirmation, built directly
+// from the segments the operator has entered or recalled -- the app tracks
+// no separate stage name or number, so this is the only truthful thing to
+// show. Formatting matches refreshSegmentList()'s own display exactly
+// (whole metres, speed to two decimal places), so the dialog can never show
+// a number the operator does not already recognise from the segments page.
+std::string stageSummary(const std::vector<Segment>& segments);
+
 #endif // CALCULATIONS_H
