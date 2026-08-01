@@ -51,4 +51,18 @@ double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elaps
 double calculateAheadBehindFromStageStart(const RallyState& state, int64_t current_time_ms,
                                           int64_t actual_counts_from_stage_start);
 
+// Counts per kilometre implied by a calibration value (millimetres per 1000
+// counts). This is the figure the operator compares against a known-good
+// number, so the screen shows it directly rather than leaving it to be
+// derived from the raw calibration. Returns 0 for a non-positive calibration
+// rather than dividing by zero.
+double pulsesPerKm(long calibration);
+
+// The calibration screen's readout line: distance covered, the averaged pulse
+// count, each sensor's own count -- so one wheel sensor disagreeing with the
+// other is visible -- and the resulting pulses per kilometre.
+std::string calibrationReadoutLine(long distance_m, int64_t counts_avg,
+                                   int64_t counts_s1, int64_t counts_s2,
+                                   long calibration);
+
 #endif // CALCULATIONS_H

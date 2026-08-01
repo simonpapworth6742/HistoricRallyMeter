@@ -600,14 +600,10 @@ void updateCalibrationDisplay(AppData* data) {
         cntr_a = cntr1_diff;
     }
     
-    // Distance in meters
     long total_m = countsToCentimeters(cntr_a, data->state->calibration) / 100;
-    
-    // Format: "Total distance: xxx,xxx m  (counts calculated: CNTR_A  1: CNTR_1  2: CNTR_2)"
-    std::stringstream ss;
-    ss << "Total distance: " << total_m << " m  (counts calculated: " << cntr_a 
-       << "   1: " << cntr1_diff << "   2: " << cntr2_diff << ")";
-    gtk_label_set_text(data->totalDistCalLabel, ss.str().c_str());
+    gtk_label_set_text(data->totalDistCalLabel,
+        calibrationReadoutLine(total_m, cntr_a, cntr1_diff, cntr2_diff,
+                               data->state->calibration).c_str());
 }
 
 // Helper function to update date/time display
@@ -871,12 +867,16 @@ void on_reset_calibration_1m(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data
     updateCalibrationDisplay(data);
 }
 
-static void updateSensorModeLabel(AppData* data) {
-    if (data->state->counters) {
-        gtk_label_set_text(data->sensorModeLabel, "Currently set to both sensors");
-    } else {
-        gtk_label_set_text(data->sensorModeLabel, "Currently set to sensor 1");
-    }
+void updateSensorModeLabel(AppData* data) {
+    // The sensor selection silently changes what every other number on this
+    // screen means, so the phrase itself is highlighted in the same yellow
+    // the driver panel uses for the live speed.
+    const char* phrase = data->state->counters
+        ? "using Sensors 1+2 (avg)"
+        : "using Sensor 1";
+    std::string markup = std::string("Currently <span foreground=\"#FFDD00\">")
+                       + phrase + "</span>";
+    gtk_label_set_markup(data->sensorModeLabel, markup.c_str());
 }
 
 void on_set_sensor_1(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {

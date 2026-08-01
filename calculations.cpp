@@ -1,4 +1,5 @@
 #include "calculations.h"
+#include <algorithm>
 #include <cmath>
 #include <ctime>
 #include <chrono>
@@ -195,6 +196,45 @@ double calculateAheadBehindFromStageStart(const RallyState& state, int64_t curre
     
     double counts_per_second = current_seg.target_speed_counts_per_hour / 3600.0;
     double seconds = diff / counts_per_second;
-    
+
     return seconds;
+}
+
+// Thousands-grouped rendering of a distance in metres, e.g. 1234567 ->
+// "1,234,567". Local to this file: the calibration readout is currently the
+// only caller.
+static std::string formatDistanceGrouped(long distance_m) {
+    std::string digits = std::to_string(std::llabs(static_cast<long long>(distance_m)));
+    std::string grouped;
+    int count = 0;
+    for (auto it = digits.rbegin(); it != digits.rend(); ++it) {
+        if (count != 0 && count % 3 == 0) {
+            grouped.push_back(',');
+        }
+        grouped.push_back(*it);
+        ++count;
+    }
+    std::reverse(grouped.begin(), grouped.end());
+    if (distance_m < 0) {
+        grouped.insert(grouped.begin(), '-');
+    }
+    return grouped;
+}
+
+double pulsesPerKm(long calibration) {
+    if (calibration <= 0) return 0.0;
+    // kph = counts_per_hour * calibration / 1e9, so one km takes
+    // 1e9 / calibration counts.
+    return 1e9 / static_cast<double>(calibration);
+}
+
+std::string calibrationReadoutLine(long distance_m, int64_t counts_avg,
+                                   int64_t counts_s1, int64_t counts_s2,
+                                   long calibration) {
+    std::stringstream ss;
+    ss << "Device distance: " << formatDistanceGrouped(distance_m) << " m"
+       << "  - Pulses " << counts_avg
+       << " (S1 " << counts_s1 << ": S2 " << counts_s2 << ")"
+       << "  Pulses/KM " << static_cast<long>(pulsesPerKm(calibration) + 0.5);
+    return ss.str();
 }
