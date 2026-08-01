@@ -99,14 +99,13 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // Coloured graduated arc (green/amber/red depending on the continuous
     // zone the reading currently falls in -- see gaugeZone()).
     int arc_segments = 40;
-    for (int i = 0; i <= arc_segments; i++) {
+    for (int i = 0; i < arc_segments; i++) {
         double frac = -1.0 + (2.0 * i) / arc_segments;
         double angle = M_PI + M_PI/2 + frac * (M_PI / 2);
         double next_frac = -1.0 + (2.0 * (i + 1)) / arc_segments;
         double next_angle = M_PI + M_PI/2 + next_frac * (M_PI / 2);
 
-        double intensity = 0.3 + 0.7 * std::abs(frac);
-        cairo_set_source_rgb(cr, arc.r * intensity, arc.g * intensity, arc.b * intensity);
+        cairo_set_source_rgb(cr, arc.r, arc.g, arc.b);
         cairo_set_line_width(cr, 12);
         cairo_arc(cr, centerX, centerY, radius, angle, next_angle);
         cairo_stroke(cr);
@@ -166,29 +165,6 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         cairo_show_text(cr, label.c_str());
         cairo_restore(cr);
     }
-
-    // Unit labels
-    const char* unit = "sec";
-    // Set explicitly rather than relying on the tick-numeral loop above:
-    // that loop only selects a font face when labels_visible (green zone),
-    // so in amber/red the unit labels would otherwise inherit whatever
-    // face cairo last had selected.
-    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 11);
-    cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
-
-    char left_label[16], right_label[16];
-    snprintf(left_label, sizeof(left_label), "- %s", unit);
-    snprintf(right_label, sizeof(right_label), "%s +", unit);
-
-    cairo_text_extents_t ext;
-    cairo_text_extents(cr, left_label, &ext);
-    cairo_move_to(cr, centerX - radius + 5, centerY - 5);
-    cairo_show_text(cr, left_label);
-
-    cairo_text_extents(cr, right_label, &ext);
-    cairo_move_to(cr, centerX + radius - ext.width - 5, centerY - 5);
-    cairo_show_text(cr, right_label);
 
     // Center triangle marker at 0
     cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
