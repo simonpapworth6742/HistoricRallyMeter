@@ -232,35 +232,9 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     cairo_close_path(cr);
     cairo_fill(cr);
 
-    // Digital readout text - measured first so the box can size to fit it
-    // (font size is fixed at 22 for sunlight legibility; only the box grows)
     double seconds = data->aheadBehindSeconds;
     char digital[24];
     formatGaugeDigital(digital, sizeof(digital), seconds, data->gaugeScale);
-
-    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 22);
-
-    cairo_text_extents_t dext;
-    cairo_text_extents(cr, digital, &dext);
-
-    // Digital display box - white outlined, sized to the text
-    double box_width = std::max(130.0, dext.x_advance + 16);
-    double box_height = 36;
-    double box_x = centerX - box_width / 2;
-    double box_y = centerY + 18;
-
-    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
-    cairo_rectangle(cr, box_x, box_y, box_width, box_height);
-    cairo_fill(cr);
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    cairo_set_line_width(cr, 2.0);
-    cairo_rectangle(cr, box_x, box_y, box_width, box_height);
-    cairo_stroke(cr);
-
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    cairo_move_to(cr, centerX - dext.width / 2, box_y + box_height / 2 + dext.height / 2 - 2);
-    cairo_show_text(cr, digital);
 
     // Needle (narrow white triangle)
     double needle_seconds = seconds;
@@ -296,6 +270,47 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
     cairo_arc(cr, centerX, centerY, 4, 0, 2 * M_PI);
     cairo_fill(cr);
+
+    // Digital ahead/behind readout. Drawn after the needle and hub so that in
+    // compact mode it paints the hub out: the hub carries no information, and
+    // this readout is the one thing the driver looks at, so it takes the
+    // centre of the dial. The wide layout keeps the original smaller box
+    // below the hub, where there is nothing to cover.
+    {
+        double digital_size = data->driverCompactMode ? 32.0 : 22.0;
+        cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+        cairo_set_font_size(cr, digital_size);
+
+        cairo_text_extents_t dext;
+        cairo_text_extents(cr, digital, &dext);
+
+        double box_width, box_height, box_y, border;
+        if (data->driverCompactMode) {
+            CompactGaugeLayout L = computeCompactGaugeLayout(width, height);
+            box_width  = std::max(180.0, dext.x_advance + 24);
+            box_height = L.boxHeight;
+            box_y      = L.boxY;
+            border     = 3.0;
+        } else {
+            box_width  = std::max(130.0, dext.x_advance + 16);
+            box_height = 36.0;
+            box_y      = centerY + 18;
+            border     = 2.0;
+        }
+        double box_x = centerX - box_width / 2;
+
+        cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+        cairo_rectangle(cr, box_x, box_y, box_width, box_height);
+        cairo_fill(cr);
+        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        cairo_set_line_width(cr, border);
+        cairo_rectangle(cr, box_x, box_y, box_width, box_height);
+        cairo_stroke(cr);
+
+        cairo_move_to(cr, centerX - dext.width / 2,
+                          box_y + box_height / 2 + dext.height / 2 - 2);
+        cairo_show_text(cr, digital);
+    }
 
     // Scale chevrons + segment-end tick along the needle.
     // The number of chevrons encodes the active scale (green=1, yellow=2, red=3).
@@ -452,9 +467,9 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         }
 
         // fps left, cpu right, baseline in line with the bottom of the
-        // ahead/behind digital readout box (box top = centerY+18, height 36)
-        double foot_baseline = centerY + 18 + 36;
-        double foot_size = std::max(11.0, 14 * L.fscale);
+        // ahead/behind digital readout box.
+        double foot_baseline = L.footBaseline;
+        double foot_size = L.footSize;
         cairo_set_font_size(cr, foot_size);
         cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
         cairo_move_to(cr, 15, foot_baseline);

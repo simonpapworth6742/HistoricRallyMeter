@@ -446,8 +446,21 @@ CompactGaugeLayout computeCompactGaugeLayout(double width, double height) {
     L.totalBaseline  = bottom_baseline - L.rowGap;
     L.tripBaseline   = bottom_baseline;
 
-    // Captions sit below the bottom value row, clear of it and of the footer.
-    // They are deliberately not tied to the ahead/behind box, which moves.
+    // The ahead/behind readout is lifted so its top edge sits above the hub.
+    // Drawn after the needle, it paints the hub out -- the hub carries no
+    // information the driver needs, and the readout is what they actually
+    // look at, so it gets the centre of the dial.
+    L.boxHeight = 50.0;
+    L.boxY      = L.centerY - 10;
+
+    // Footer rides on the bottom edge of the box, so the two never overlap
+    // however the box is sized.
+    L.footSize     = std::max(11.0, 14 * L.fscale);
+    L.footBaseline = L.boxY + L.boxHeight;
+
+    // Captions were previously hung off the box's top edge. The box has
+    // moved up over the hub, so they get their own offset below the value
+    // rows, independent of wherever the box now sits.
     L.captionBaseline = L.centerY + 20 + L.labelSize * 0.78;
 
     return L;
