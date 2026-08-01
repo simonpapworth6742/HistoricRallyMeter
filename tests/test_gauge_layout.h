@@ -1,0 +1,73 @@
+#ifndef TEST_GAUGE_LAYOUT_H
+#define TEST_GAUGE_LAYOUT_H
+
+#include "test_framework.h"
+#include "../calculations.h"
+#include <cmath>
+
+// Geometry tests for the compact (800x480) driver gauge layout. The same
+// arithmetic is mirrored in tools/layout-preview/DriverWindowTextLayout.html;
+// if that mockup is edited, these expectations move with it.
+class TestGaugeLayout {
+public:
+    TestSuite* createSuite() {
+        auto* suite = new TestSuite("Compact Gauge Layout");
+
+        suite->addTest("radius and centre match the 800x480 box", []() {
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            // radius = min(width/2 - 25, height - 95) = min(375, 385) = 375
+            return std::abs(L.radius - 375.0) < 0.001
+                && std::abs(L.centerX - 400.0) < 0.001
+                && std::abs(L.centerY - 405.0) < 0.001;
+        });
+
+        suite->addTest("fscale never exceeds 1.0", []() {
+            // A gauge larger than the reference must not scale fonts UP, or
+            // the values overflow the panel on a wide display.
+            CompactGaugeLayout big = computeCompactGaugeLayout(1600, 900);
+            CompactGaugeLayout small = computeCompactGaugeLayout(400, 240);
+            return std::abs(big.fscale - 1.0) < 0.001 && small.fscale < 1.0;
+        });
+
+        suite->addTest("distance anchor sits left of centre, scaled by radius", []() {
+            // Not mirrored off centerX like rightAnchor -- distanceAnchor is
+            // where the "Distance (metres)" caption's own text ends up
+            // right-aligning to, an absolute offset from the arc's own
+            // radius, not a centre-relative gap.
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            // radius = 375, so distanceAnchor = 375 * 0.72 = 270.
+            return std::abs(L.distanceAnchor - 270.0) < 0.001
+                && L.distanceAnchor < L.centerX;
+        });
+
+        suite->addTest("Target sits above Total sits above Trip", []() {
+            // Smaller baseline = higher on screen. Rows must be one rowGap
+            // apart so a distance on the left lines up with its speed.
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return L.targetBaseline < L.totalBaseline
+                && L.totalBaseline < L.tripBaseline
+                && std::abs((L.totalBaseline - L.targetBaseline) - L.rowGap) < 0.001
+                && std::abs((L.tripBaseline - L.totalBaseline) - L.rowGap) < 0.001;
+        });
+
+        suite->addTest("row gap is 48 at full scale", []() {
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return std::abs(L.rowGap - 48.0) < 0.001;
+        });
+
+        suite->addTest("Current sits above every other row", []() {
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return L.curBaseline < L.targetBaseline;
+        });
+
+        suite->addTest("Trip row clears the needle hub", []() {
+            // The bottom row must not collide with the hub at centerY.
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return L.tripBaseline < L.centerY;
+        });
+
+        return suite;
+    }
+};
+
+#endif // TEST_GAUGE_LAYOUT_H

@@ -20,6 +20,7 @@
 #include "test_beep_assist.h"
 #include "test_calibration_display.h"
 #include "test_stage_summary.h"
+#include "test_gauge_layout.h"
 
 int main() {
     TestRunner runner;
@@ -43,6 +44,7 @@ int main() {
     TestBeepAssist beepAssistTests;
     TestCalibrationDisplay calDisplayTests;
     TestStageSummary stageSummaryTests;
+    TestGaugeLayout gaugeLayoutTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -63,6 +65,7 @@ int main() {
     runner.addSuite(beepAssistTests.createSuite());
     runner.addSuite(calDisplayTests.createSuite());
     runner.addSuite(stageSummaryTests.createSuite());
+    runner.addSuite(gaugeLayoutTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

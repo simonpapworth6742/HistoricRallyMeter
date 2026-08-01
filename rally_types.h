@@ -54,6 +54,10 @@ struct AppData {
     GtkLabel* updatesPerSecLabel;
     GtkLabel* cpuTempLabel;
     GtkLabel* unitsLabel;  // Shows KPH or MPH in header
+    GtkLabel* driverTotalDistLabel;
+    GtkLabel* driverTotalUnitLabel;
+    GtkLabel* driverTripDistLabel;
+    GtkLabel* driverTripUnitLabel;
     GtkButton* unitToggleBtn;
     
     // Rally gauge

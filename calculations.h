@@ -168,4 +168,31 @@ long calibrationFromPulsesPerKm(double pulses_per_km);
 // a number the operator does not already recognise from the segments page.
 std::string stageSummary(const std::vector<Segment>& segments);
 
+// Geometry of the compact (800x480-style) driver gauge layout. Pure
+// arithmetic with no GTK or Cairo dependency, so the numbers can be
+// unit-tested with no display. The same computation is mirrored in
+// tools/layout-preview/DriverWindowTextLayout.html -- edit both together.
+struct CompactGaugeLayout {
+    double radius;          // arc radius
+    double centerX;         // hub x
+    double centerY;         // hub y
+    double fscale;          // font scale, 1.0 at the reference radius
+    double valSize;         // Current/Target/Total/Trip value font size
+    double labelSize;       // row caption font size
+    double labelGap;        // gap between a value's anchor and its caption
+    double rowGap;          // vertical spacing between value rows
+    double rightAnchor;     // right edge every speed value aligns to
+    double distanceAnchor;  // right edge every distance value AND the
+                             // "Distance (metres)" caption (RB-DRV-02) align
+                             // to -- both right-aligned to the same X, so a
+                             // value's last digit and the caption's closing
+                             // ")" always share one vertical edge
+    double curBaseline;     // Current speed, top of the panel
+    double targetBaseline;  // Target speed
+    double totalBaseline;   // Total average speed / Total distance
+    double tripBaseline;    // Trip average speed / Trip distance
+};
+
+CompactGaugeLayout computeCompactGaugeLayout(double width, double height);
+
 #endif // CALCULATIONS_H
