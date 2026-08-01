@@ -14,6 +14,8 @@
 #include "test_calibration_independent.h"
 #include "test_elapsed.h"
 #include "test_beep_assist.h"
+#include "test_sim_counter.h"
+#include "test_counter_poller_real.h"
 
 int main() {
     TestRunner runner;
@@ -31,6 +33,8 @@ int main() {
     TestCalibrationIndependent calIndepTests;
     TestElapsed elapsedTests;
     TestBeepAssist beepAssistTests;
+    TestSimCounter simCounterTests;
+    TestCounterPollerReal realPollerTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -45,6 +49,8 @@ int main() {
     runner.addSuite(calIndepTests.createSuite());
     runner.addSuite(elapsedTests.createSuite());
     runner.addSuite(beepAssistTests.createSuite());
+    runner.addSuite(simCounterTests.createSuite());
+    runner.addSuite(realPollerTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

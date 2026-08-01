@@ -9,7 +9,8 @@
 #endif
 
 // Forward declarations
-class I2CCounter;
+class ICounter;
+class SimCounter;
 class RallyState;
 class CounterPoller;
 class ToneGenerator;
@@ -34,8 +35,8 @@ struct CounterPoll {
 #ifndef RALLY_NO_GTK
 // Application data structure (requires GTK)
 struct AppData {
-    I2CCounter* counter1;
-    I2CCounter* counter2;
+    ICounter* counter1;
+    ICounter* counter2;
     uint8_t register_addr;
     RallyState* state;
     CounterPoller* poller;
@@ -172,6 +173,17 @@ struct AppData {
     
     int updateCount = 0;
     int64_t lastUpdateCountTime_ms = 0;
+
+    // Sim Control Panel (3rd display, dev/testing only — created only when
+    // RALLY_SIM_I2C=1). Drives the simulated counters in real time.
+    SimCounter* simCounter1 = nullptr;
+    SimCounter* simCounter2 = nullptr;
+    GtkWidget* controlWindow = nullptr;
+    GtkWidget* controlSpeedButtons[6] = {};  // 25,30,35,40,45,50 km/h
+    GtkWidget* controlStartBtn = nullptr;
+    GtkWidget* controlStopBtn = nullptr;
+    GtkLabel* controlStatusLabel = nullptr;
+    double controlSpeedKph = 0.0;
 };
 #endif // RALLY_NO_GTK
 
