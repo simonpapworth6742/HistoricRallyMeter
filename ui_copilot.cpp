@@ -25,10 +25,10 @@ static void applyCopilotCSS() {
         ".title-label { font-size: 22px; }"
         ".info-label { font-size: 20px; }"
         ".clock-label { font-size: 30px; font-family: monospace; }"
-        ".dist-heading { font-size: 48px; font-weight: bold; font-family: monospace; }"
-        ".dist-value { font-size: 88px; font-weight: bold; font-family: monospace; }"
-        ".dist-unit { font-size: 48px; font-weight: bold; font-family: monospace; }"
-        ".time-label { font-size: 36px; font-family: monospace; color: #CCCCCC; }"
+        ".dist-heading { font-size: 28px; font-weight: bold; font-family: monospace; }"
+        ".dist-value { font-size: 64px; font-weight: bold; font-family: monospace; }"
+        ".dist-unit { font-size: 20px; font-weight: bold; font-family: monospace; }"
+        ".time-label { font-size: 22px; font-family: monospace; color: #CCCCCC; }"
         ".alarm-label { font-size: 20px; }"
         ".alarm-button { font-size: 22px; }"
         ".reset-button { font-size: 36px; }"
@@ -56,7 +56,17 @@ void updateCopilotDisplay(AppData* data) {
     // Rally clock
     std::string rally_time = formatTime(current_time_ms);
     gtk_label_set_text(data->copilotRallyClockLabel, rally_time.c_str());
-    
+
+    // Re-assert the window's fixed size every tick: GTK grows a window to
+    // fit its widest-ever content but never shrinks it back down, so a
+    // single transient spike in a distance value (e.g. a big Next-segment
+    // reading, however briefly shown) would otherwise leave the co-pilot
+    // window oversized -- overlapping the driver panel -- for the rest of
+    // the session, even once the values shrink back to normal.
+    if (!data->singleDisplayMode) {
+        gtk_window_resize(GTK_WINDOW(data->copilotWindow), 1280, 400);
+    }
+
     // Alarm check runs regardless of which screen is visible
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
@@ -124,7 +134,7 @@ void updateCopilotDisplay(AppData* data) {
     {
         double offset_s = data->state->ahead_behind_zero_offset_ms / 1000.0;
         char lbl[64];
-        snprintf(lbl, sizeof(lbl), "Adj. driver Zero (%.2fs)", offset_s);
+        snprintf(lbl, sizeof(lbl), "driver Zero (%.2f)", offset_s);
         gtk_button_set_label(GTK_BUTTON(data->adjZeroBtn), lbl);
     }
     
@@ -244,7 +254,13 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     data->totalDistLabel = GTK_LABEL(gtk_label_new("0"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistLabel)), "dist-value");
     gtk_label_set_xalign(data->totalDistLabel, 1.0);
+    // Fixed at exactly 7 chars ("999,999", the widest 6-digit value) so the
+    // rest of the row can never shift right, no matter how large the
+    // underlying distance grows -- min and max both pinned, with ellipsis
+    // at the front as the last resort if a value ever exceeds 6 digits.
     gtk_label_set_width_chars(data->totalDistLabel, 7);
+    gtk_label_set_max_width_chars(data->totalDistLabel, 7);
+    gtk_label_set_ellipsize(data->totalDistLabel, PANGO_ELLIPSIZE_START);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalDistLabel), 1, 0, 1, 1);
     
     data->totalUnitLabel = GTK_LABEL(gtk_label_new("m"));
@@ -258,7 +274,7 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     data->totalTimeLabel = GTK_LABEL(gtk_label_new("0:00"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalTimeLabel)), "time-label");
     gtk_label_set_xalign(data->totalTimeLabel, 1.0);
-    gtk_label_set_width_chars(data->totalTimeLabel, 7);
+    gtk_widget_set_size_request(GTK_WIDGET(data->totalTimeLabel), 90, -1);
     gtk_widget_set_valign(GTK_WIDGET(data->totalTimeLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_margin_start(GTK_WIDGET(data->totalTimeLabel), 10);
     if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
@@ -275,6 +291,8 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripDistLabel)), "dist-value");
     gtk_label_set_xalign(data->tripDistLabel, 1.0);
     gtk_label_set_width_chars(data->tripDistLabel, 7);
+    gtk_label_set_max_width_chars(data->tripDistLabel, 7);
+    gtk_label_set_ellipsize(data->tripDistLabel, PANGO_ELLIPSIZE_START);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripDistLabel), 1, 1, 1, 1);
     
     data->tripUnitLabel = GTK_LABEL(gtk_label_new("m"));
@@ -288,7 +306,7 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     data->tripTimeLabel = GTK_LABEL(gtk_label_new("0:00"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripTimeLabel)), "time-label");
     gtk_label_set_xalign(data->tripTimeLabel, 1.0);
-    gtk_label_set_width_chars(data->tripTimeLabel, 7);
+    gtk_widget_set_size_request(GTK_WIDGET(data->tripTimeLabel), 90, -1);
     gtk_widget_set_valign(GTK_WIDGET(data->tripTimeLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_margin_start(GTK_WIDGET(data->tripTimeLabel), 10);
     if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
@@ -306,6 +324,8 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextDistLabel)), "dist-value");
     gtk_label_set_xalign(data->nextDistLabel, 1.0);
     gtk_label_set_width_chars(data->nextDistLabel, 7);
+    gtk_label_set_max_width_chars(data->nextDistLabel, 7);
+    gtk_label_set_ellipsize(data->nextDistLabel, PANGO_ELLIPSIZE_START);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->nextDistLabel), 1, 2, 1, 1);
     
     data->nextUnitLabel = GTK_LABEL(gtk_label_new("m"));
@@ -317,7 +337,7 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     data->nextSpeedLabel = GTK_LABEL(gtk_label_new("---"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextSpeedLabel)), "time-label");
     gtk_label_set_xalign(data->nextSpeedLabel, 0.0);
-    gtk_label_set_width_chars(data->nextSpeedLabel, 14);
+    gtk_widget_set_size_request(GTK_WIDGET(data->nextSpeedLabel), 90, -1);
     gtk_widget_set_valign(GTK_WIDGET(data->nextSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_margin_start(GTK_WIDGET(data->nextSpeedLabel), 10);
     if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
@@ -409,7 +429,7 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     
     GtkWidget* stageGoBtn = gtk_button_new_with_label("stage go");
     GtkWidget* segmentsBtn = gtk_button_new_with_label("segments");
-    data->adjZeroBtn = gtk_button_new_with_label("Adj. driver Zero (0.00s)");
+    data->adjZeroBtn = gtk_button_new_with_label("driver Zero (0.00)");
     GtkWidget* calBtn = gtk_button_new_with_label("calibration");
     GtkWidget* datetimeBtn = gtk_button_new_with_label("date/time");
 
