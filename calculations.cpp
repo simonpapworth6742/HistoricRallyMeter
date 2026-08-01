@@ -1,4 +1,5 @@
 #include "calculations.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -253,4 +254,47 @@ long adjustedDistanceMeters(long raw_cm, long adjust_cm) {
     long corrected_cm = raw_cm + adjust_cm;
     if (corrected_cm < 0) corrected_cm = 0;
     return corrected_cm / 100;
+}
+
+CompactGaugeLayout computeCompactGaugeLayout(double width, double height) {
+    constexpr double REF_RADIUS = 256.0;  // gauge radius in the 1280x400 layout
+
+    CompactGaugeLayout L{};
+    // The gauge fills the panel width (bezel ~18px + a small margin); the hub
+    // sits low, leaving room for the readout box and the footer beneath it.
+    L.radius  = std::min(width / 2 - 25, height - 95);
+    L.centerX = width / 2;
+    L.centerY = height - 75;
+    // Clamped at 1.0: a larger gauge must not scale the fonts UP, or the
+    // values run off the panel.
+    L.fscale  = std::min(1.0, L.radius / REF_RADIUS);
+
+    L.valSize   = 44 * L.fscale;
+    L.labelSize = 16 * L.fscale;
+    L.labelGap  = 8 * L.fscale;
+    L.rowGap    = 48 * L.fscale;
+
+    // rightAnchor: symmetric about the hub, far enough out to clear the arc.
+    // Every speed value right-aligns to it.
+    L.rightAnchor = L.centerX + L.radius * 0.72;
+    // distanceAnchor: where every distance value AND the "Distance (metres)"
+    // caption below it (RB-DRV-02) both right-align to, so a value's last
+    // digit and the caption's closing ")" always share one vertical edge --
+    // no text measurement needed, both anchor to the identical X.
+    L.distanceAnchor = L.radius * 0.72;
+
+    // Current sits alone at the top of the panel. Its baseline is derived
+    // from the old 50px heading size so the block does not shift when the
+    // value font drops to valSize to match the rows below.
+    const double cur_top_size = 50 * L.fscale;
+    L.curBaseline = 4 * L.fscale + cur_top_size * 0.78;
+
+    // Target on top, Total beneath it, Trip on the bottom row just above the
+    // hub -- so the eye travels target -> what you are actually averaging.
+    const double bottom_baseline = L.centerY - 10;
+    L.targetBaseline = bottom_baseline - 2 * L.rowGap;
+    L.totalBaseline  = bottom_baseline - L.rowGap;
+    L.tripBaseline   = bottom_baseline;
+
+    return L;
 }

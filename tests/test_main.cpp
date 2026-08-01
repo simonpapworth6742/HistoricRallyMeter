@@ -14,6 +14,7 @@
 #include "test_calibration_independent.h"
 #include "test_elapsed.h"
 #include "test_distance_adjust.h"
+#include "test_gauge_layout.h"
 
 int main() {
     TestRunner runner;
@@ -31,6 +32,7 @@ int main() {
     TestCalibrationIndependent calIndepTests;
     TestElapsed elapsedTests;
     TestDistanceAdjust distanceAdjustTests;
+    TestGaugeLayout gaugeLayoutTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -45,6 +47,7 @@ int main() {
     runner.addSuite(calIndepTests.createSuite());
     runner.addSuite(elapsedTests.createSuite());
     runner.addSuite(distanceAdjustTests.createSuite());
+    runner.addSuite(gaugeLayoutTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

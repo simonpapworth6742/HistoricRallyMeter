@@ -368,61 +368,67 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // Compact layout: draw the speed values inside the gauge area.
     // Fonts match the wide layout at full size and shrink with the gauge.
     if (data->driverCompactMode) {
-        constexpr double REF_RADIUS = 256.0;  // gauge radius in the 1280x400 layout
-        double fscale = std::min(1.0, radius / REF_RADIUS);
+        CompactGaugeLayout L = computeCompactGaugeLayout(width, height);
 
         cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
         cairo_text_extents_t te;
 
-        // Right-aligned value: fixed right anchor keeps the decimal point in place.
-        // Returns the left edge of the drawn text so labels can align to it.
-        auto drawValue = [&](const char* text, double right_x, double baseline, double size) {
-            cairo_set_font_size(cr, size);
+        // Right-aligned value: a fixed right anchor keeps the decimal point
+        // in place as the digits change.
+        auto drawValue = [&](const char* text, double baseline) {
+            cairo_set_font_size(cr, L.valSize);
             cairo_text_extents(cr, text, &te);
-            double x = right_x - te.x_advance;
-            cairo_move_to(cr, x, baseline);
+            cairo_move_to(cr, L.rightAnchor - te.x_advance, baseline);
             cairo_show_text(cr, text);
-            return x;
         };
-        // Very small label just above the value, left-aligned with it
-        auto drawLabelAbove = [&](const char* text, double left_x, double value_baseline, double value_size) {
-            cairo_set_font_size(cr, 16 * fscale);
-            cairo_move_to(cr, left_x, value_baseline - value_size * 0.78 - 5 * fscale);
+        // Row caption, written just to the right of the value column so the
+        // values themselves stay in one unbroken vertical line.
+        auto drawCaption = [&](const char* text, double baseline) {
+            cairo_set_font_size(cr, L.labelSize);
+            cairo_move_to(cr, L.rightAnchor + L.labelGap, baseline);
+            cairo_show_text(cr, text);
+        };
+        // Right-aligned distance, on the same baseline as its speed, to
+        // distanceAnchor -- the same X the "Distance (metres)" caption
+        // right-aligns to (RB-DRV-02), so the value's last digit and the
+        // caption's closing ")" share one vertical edge.
+        auto drawDistance = [&](const char* text, double baseline) {
+            cairo_set_font_size(cr, L.valSize);
+            cairo_text_extents(cr, text, &te);
+            cairo_move_to(cr, L.distanceAnchor - te.x_advance, baseline);
             cairo_show_text(cr, text);
         };
 
+        // {current}: top of the panel, on the same anchor and at the same
+        // size as the average speeds, so every digit lines up.
         cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        drawValue(gtk_label_get_text(data->currentSpeedLabel), L.curBaseline);
+        drawCaption("Current", L.curBaseline);
 
-        // {current}: top-left, no label; right-aligned to a fixed anchor wide
-        // enough for "###.#" so the digits never shift as the value changes
-        double cur_top_size = 50 * fscale;
-        double cur_baseline_top = 4 * fscale + cur_top_size * 0.78;
-        cairo_set_font_size(cr, cur_top_size);
-        cairo_text_extents(cr, "888.8", &te);
-        double cur_right = 15 + te.x_advance;
-        drawValue(gtk_label_get_text(data->currentSpeedLabel),
-                  cur_right, cur_baseline_top, cur_top_size);
+        // {target}: top of the stacked rows. No colour distinction yet --
+        // pristine draws it in the same white as everything else; RB-DRV-06
+        // is where the whole palette (including this row) gets colour.
+        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        drawValue(gtk_label_get_text(data->targetSpeedLabel), L.targetBaseline);
+        drawCaption("Target", L.targetBaseline);
 
-        // {target}: left of the hub, slightly smaller than before so it stays
-        // clear of the scale numbers; small label above, aligned to the value
-        double val_size = 56 * fscale;
-        double cur_baseline = centerY - 10;
-        double tgt_right = centerX - 36 * fscale;
-        double tgt_left = drawValue(gtk_label_get_text(data->targetSpeedLabel),
-                                    tgt_right, cur_baseline, val_size);
-        drawLabelAbove("Target", tgt_left, cur_baseline, val_size);
+        // {tot}: white, mirrored by the Total distance on the left.
+        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        drawValue(gtk_label_get_text(data->totalSpeedLabel), L.totalBaseline);
+        drawCaption("Total", L.totalBaseline);
+        drawDistance(gtk_label_get_text(data->driverTotalDistLabel), L.totalBaseline);
 
-        // {tot} above {trip}: right side, no labels
-        double right_anchor = centerX + radius * 0.72;
-        drawValue(gtk_label_get_text(data->totalSpeedLabel),
-                  right_anchor, cur_baseline - 68 * fscale, val_size);
-        drawValue(gtk_label_get_text(data->tripSpeedLabel),
-                  right_anchor, cur_baseline, val_size);
+        // {trip}: bottom row, mirrored by the Trip distance on the left.
+        // RB-DRV-06 recolours this pair; here it stays as it was.
+        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        drawValue(gtk_label_get_text(data->tripSpeedLabel), L.tripBaseline);
+        drawCaption("Trip", L.tripBaseline);
+        drawDistance(gtk_label_get_text(data->driverTripDistLabel), L.tripBaseline);
 
         // fps left, cpu right, baseline in line with the bottom of the
         // ahead/behind digital readout box (box top = centerY+18, height 36)
         double foot_baseline = centerY + 18 + 36;
-        double foot_size = std::max(11.0, 14 * fscale);
+        double foot_size = std::max(11.0, 14 * L.fscale);
         cairo_set_font_size(cr, foot_size);
         cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
         cairo_move_to(cr, 15, foot_baseline);
@@ -435,7 +441,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         // Single-display mode: rally clock hard top-right, bright white
         // (replaces the alarm panel's clock)
         if (data->singleDisplayMode && data->copilotRallyClockLabel) {
-            double clock_size = std::max(20.0, 28 * fscale);
+            double clock_size = std::max(20.0, 28 * L.fscale);
             cairo_set_font_size(cr, clock_size);
             cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
             const char* clock_text = gtk_label_get_text(data->copilotRallyClockLabel);
