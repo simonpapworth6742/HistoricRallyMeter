@@ -1,5 +1,6 @@
 #include "ui_copilot.h"
 #include "ui_driver.h"
+#include "ui_control.h"
 #include "calculations.h"
 #include "rally_types.h"
 #include "rally_state.h"
@@ -15,6 +16,7 @@
 #include <iomanip>
 #include <ctime>
 #include <string>
+#include <vector>
 
 // Apply CSS styling
 static void applyCopilotCSS() {
@@ -60,10 +62,14 @@ static void fireBeepAssist(AppData* data, double waypoint_m, double travelled_m,
     // Navigation mode plays the existing one-shot beep twice in quick
     // succession ("bing bong"), Timing mode plays it once. Both reuse
     // ToneGenerator::playBeep() unchanged -- no new tone code.
+    // No audio device in the sandbox (Docker/Xvfb) means playBeep() is
+    // silently a no-op there -- this is the only visible confirmation
+    // that the waypoint logic itself fired.
     std::cerr << "Beep Assist fired: waypoint " << waypoint_m
               << "m, travelled " << travelled_m << "m"
               << (navigation ? " (navigation, double beep)" : " (timing, single beep)")
               << std::endl;
+    flashBeepWarning(data, navigation);
     if (data->toneGen) {
         data->toneGen->playBeep();
         if (navigation) {

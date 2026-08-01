@@ -61,7 +61,9 @@ static void applyControlCSS() {
         "font-weight: bold; font-size: 22px; border: 2px solid #FFFFFF; background-image: none; }"
         "window.control-window button.active-speed { background-color: #FFFFFF; color: #1B5E20; background-image: none; }"
         "window.control-window button.control-start-button { border-color: #76FF03; }"
-        "window.control-window button.control-stop-button { background-color: #B71C1C; background-image: none; }",
+        "window.control-window button.control-stop-button { background-color: #B71C1C; background-image: none; }"
+        "window.control-window .beep-flash { font-size: 22px; background-color: #FFEB3B; "
+        "color: #000000; padding: 6px; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -128,8 +130,34 @@ GtkWidget* createControlWindow(AppData* data) {
     g_signal_connect(data->controlStopBtn, "clicked", G_CALLBACK(on_control_stop_clicked), data);
     gtk_box_pack_start(GTK_BOX(hbox), data->controlStopBtn, TRUE, TRUE, 0);
 
+    // Stands in for the beep sound, which the sandbox can't play (no ALSA
+    // device) -- blank until a navigation/timing beep fires, then flashes.
+    data->beepFlashLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_class(
+        gtk_widget_get_style_context(GTK_WIDGET(data->beepFlashLabel)), "beep-flash");
+    gtk_widget_set_no_show_all(GTK_WIDGET(data->beepFlashLabel), TRUE);
+    gtk_box_pack_start(GTK_BOX(vbox), GTK_WIDGET(data->beepFlashLabel), FALSE, FALSE, 0);
+
     updateControlDisplay(data);
     return window;
+}
+
+void flashBeepWarning(AppData* data, bool navigation_fired) {
+    if (!data->beepFlashLabel) return;
+
+    gtk_label_set_text(data->beepFlashLabel,
+        navigation_fired ? "BEEP: NAVIGATION" : "BEEP: TIMING");
+    gtk_widget_show(GTK_WIDGET(data->beepFlashLabel));
+
+    // Clears itself rather than the next beep overwriting it, so a single
+    // beep during a quiet stretch is still visibly transient. 4s, not 1.5s:
+    // an operator watching the sandbox manually needs time to actually
+    // notice it, not just a log-scale confirmation.
+    g_timeout_add(4000, [](gpointer d) -> gboolean {
+        AppData* app_data = static_cast<AppData*>(d);
+        if (app_data->beepFlashLabel) gtk_widget_hide(GTK_WIDGET(app_data->beepFlashLabel));
+        return G_SOURCE_REMOVE;
+    }, data);
 }
 
 void updateControlDisplay(AppData* data) {
@@ -139,7 +167,14 @@ void updateControlDisplay(AppData* data) {
 
     std::ostringstream status;
     if (running) {
-        status << "RUNNING @ " << static_cast<int>(data->controlSpeedKph) << " km/h";
+        // Pulses/km alongside the speed: the sim generates its pulses from
+        // this calibration (applySpeedToSimCounters), so a mismatch between
+        // "the speed I asked for" and "the calibration actually driving the
+        // counters" is exactly the kind of thing worth seeing at a glance
+        // here rather than only on the Calibration screen.
+        long pulses_per_km = static_cast<long>(pulsesPerKm(data->state->calibration) + 0.5);
+        status << static_cast<int>(data->controlSpeedKph) << " km/h at "
+               << pulses_per_km << " pulses per KM";
     } else {
         status << "STOPPED";
     }
