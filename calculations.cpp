@@ -195,6 +195,24 @@ double calculateAheadBehindFromStageStart(const RallyState& state, int64_t curre
     
     double counts_per_second = current_seg.target_speed_counts_per_hour / 3600.0;
     double seconds = diff / counts_per_second;
-    
+
     return seconds;
+}
+
+NeedleGeometry computeNeedleGeometry(double seconds, double max_seconds, double radius) {
+    NeedleGeometry n{};
+
+    // Peg at the scale ends. Past full deflection the needle stops moving and
+    // the digital readout carries the real magnitude -- a needle that wrapped
+    // round would read as the opposite error.
+    double clamped = seconds;
+    if (clamped > max_seconds)  clamped = max_seconds;
+    if (clamped < -max_seconds) clamped = -max_seconds;
+
+    n.angle = M_PI + M_PI / 2 + (clamped / max_seconds) * (M_PI / 2);
+    // 5% short of the tick ring so the bar's flat tip does not foul the ticks
+    // it is being read against.
+    n.length = (radius - 10) * 0.95;
+    n.halfWidth = 3.0;
+    return n;
 }

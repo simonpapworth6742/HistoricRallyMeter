@@ -51,4 +51,17 @@ double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elaps
 double calculateAheadBehindFromStageStart(const RallyState& state, int64_t current_time_ms,
                                           int64_t actual_counts_from_stage_start);
 
+// Geometry of the gauge needle for a given ahead/behind reading. Pure
+// arithmetic so the clamping and angle mapping can be unit-tested without a
+// display. The needle is a constant-width bar the same width as the major
+// ticks, so it reads as "which tick am I on" rather than "roughly this
+// direction".
+struct NeedleGeometry {
+    double angle;      // radians, Cairo convention (3*PI/2 is straight up)
+    double length;     // hub to tip
+    double halfWidth;  // half the bar's width
+};
+
+NeedleGeometry computeNeedleGeometry(double seconds, double max_seconds, double radius);
+
 #endif // CALCULATIONS_H
