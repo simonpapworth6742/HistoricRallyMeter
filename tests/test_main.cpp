@@ -18,6 +18,7 @@
 #include "test_distance_adjust.h"
 #include "test_segment_row.h"
 #include "test_beep_assist.h"
+#include "test_calibration_display.h"
 
 int main() {
     TestRunner runner;
@@ -39,6 +40,7 @@ int main() {
     TestDistanceAdjust distanceAdjustTests;
     TestSegmentRow segmentRowTests;
     TestBeepAssist beepAssistTests;
+    TestCalibrationDisplay calDisplayTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -57,6 +59,7 @@ int main() {
     runner.addSuite(distanceAdjustTests.createSuite());
     runner.addSuite(segmentRowTests.createSuite());
     runner.addSuite(beepAssistTests.createSuite());
+    runner.addSuite(calDisplayTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();

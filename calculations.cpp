@@ -1,4 +1,5 @@
 #include "calculations.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -368,4 +369,22 @@ long dueBeepWaypoint(const std::vector<double>& waypoints_m, size_t from_index,
         if (nav_due || timing_due) return static_cast<long>(i);
     }
     return -1;
+}
+
+double pulsesPerKm(long calibration) {
+    if (calibration <= 0) return 0.0;
+    // kph = counts_per_hour * calibration / 1e9, so one km takes
+    // 1e9 / calibration counts.
+    return 1e9 / static_cast<double>(calibration);
+}
+
+std::string calibrationReadoutLine(long distance_m, int64_t counts_avg,
+                                   int64_t counts_s1, int64_t counts_s2,
+                                   long calibration) {
+    std::stringstream ss;
+    ss << "Device distance: " << formatDistanceGrouped(distance_m) << " m"
+       << "  - Pulses " << counts_avg
+       << " (S1 " << counts_s1 << ": S2 " << counts_s2 << ")"
+       << "  Pulses/KM " << static_cast<long>(pulsesPerKm(calibration) + 0.5);
+    return ss.str();
 }

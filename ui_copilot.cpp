@@ -831,10 +831,10 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     GtkWidget* sensorRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(leftBox), sensorRow, FALSE, FALSE, 0);
     
-    data->sensorModeLabel = GTK_LABEL(gtk_label_new(
-        data->state->counters ? "Currently set to both sensors" : "Currently set to sensor 1"));
+    data->sensorModeLabel = GTK_LABEL(gtk_label_new(""));
     gtk_widget_set_halign(GTK_WIDGET(data->sensorModeLabel), GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(sensorRow), GTK_WIDGET(data->sensorModeLabel), FALSE, FALSE, 0);
+    updateSensorModeLabel(data);
     
     GtkWidget* sensor1Btn = gtk_button_new_with_label("Set sensor 1");
     g_signal_connect(sensor1Btn, "clicked", G_CALLBACK(on_set_sensor_1), data);
@@ -852,9 +852,11 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
     gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 5);
     
-    GtkWidget* startBtn = gtk_button_new_with_label("start");
-    GtkWidget* saveBtn = gtk_button_new_with_label("save");
-    GtkWidget* backBtn = gtk_button_new_with_label("back");
+    // "start" did not say that it zeroes the counters, which is the one
+    // irreversible thing on this screen.
+    GtkWidget* startBtn = gtk_button_new_with_label("Start/Zero");
+    GtkWidget* saveBtn = gtk_button_new_with_label("Save Calibration");
+    GtkWidget* backBtn = gtk_button_new_with_label("Back");
     
     g_signal_connect(startBtn, "clicked", G_CALLBACK(on_calibration_start), data);
     g_signal_connect(saveBtn, "clicked", G_CALLBACK(on_save_calibration), data);
