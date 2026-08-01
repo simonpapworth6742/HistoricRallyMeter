@@ -209,4 +209,17 @@ std::string distanceColumnCaption(const char* unit);
 // KPH/MPH setting from the date/time screen.
 std::string speedColumnCaption(bool units_mph);
 
+// Geometry of the gauge needle for a given ahead/behind reading. Pure
+// arithmetic so the clamping and angle mapping can be unit-tested without a
+// display. The needle is a constant-width bar the same width as the major
+// ticks, so it reads as "which tick am I on" rather than "roughly this
+// direction".
+struct NeedleGeometry {
+    double angle;      // radians, Cairo convention (3*PI/2 is straight up)
+    double length;     // hub to tip
+    double halfWidth;  // half the bar's width
+};
+
+NeedleGeometry computeNeedleGeometry(double seconds, double max_seconds, double radius);
+
 #endif // CALCULATIONS_H

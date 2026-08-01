@@ -110,6 +110,9 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     GaugeScaleInfo si = getGaugeScaleInfo(data->gaugeScale);
     double max_val = si.max_seconds;
 
+    // Needle bar half-width, declared here so the major ticks can match it.
+    constexpr double NEEDLE_HALF_WIDTH = 3.0;
+
     // Background
     cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
     cairo_paint(cr);
@@ -164,7 +167,9 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         double x2 = centerX + (radius + 8) * cos(angle);
         double y2 = centerY + (radius + 8) * sin(angle);
 
-        cairo_set_line_width(cr, 2.5);
+        // Same width as the needle bar, so a reading is a direct comparison
+        // between two identical marks rather than a thin line against a wedge.
+        cairo_set_line_width(cr, NEEDLE_HALF_WIDTH * 2);
         cairo_move_to(cr, x1, y1);
         cairo_line_to(cr, x2, y2);
         cairo_stroke(cr);
@@ -236,39 +241,32 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     char digital[24];
     formatGaugeDigital(digital, sizeof(digital), seconds, data->gaugeScale);
 
-    // Needle (narrow white triangle)
-    double needle_seconds = seconds;
-    if (needle_seconds > max_val) needle_seconds = max_val;
-    if (needle_seconds < -max_val) needle_seconds = -max_val;
+    // Needle: a constant-width bar rather than a tapered triangle, so its
+    // edges stay parallel to the major ticks all the way out and the driver
+    // reads a tick number instead of estimating a direction.
+    NeedleGeometry needle = computeNeedleGeometry(seconds, max_val, radius);
+    double needle_angle = needle.angle;
+    double needle_length = needle.length;
 
-    double needle_angle = M_PI + M_PI/2 + (needle_seconds / max_val) * (M_PI / 2);
-    double needle_length = radius - 25;
-    double half_width = 12.0;
-
-    double tip_x = centerX + needle_length * cos(needle_angle);
-    double tip_y = centerY + needle_length * sin(needle_angle);
+    double dir_x = cos(needle_angle);
+    double dir_y = sin(needle_angle);
     double perp_x = -sin(needle_angle);
     double perp_y = cos(needle_angle);
+    double tip_x = centerX + needle_length * dir_x;
+    double tip_y = centerY + needle_length * dir_y;
 
-    // White filled triangle
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    cairo_move_to(cr, tip_x, tip_y);
-    cairo_line_to(cr, centerX + half_width * perp_x, centerY + half_width * perp_y);
-    cairo_line_to(cr, centerX - half_width * perp_x, centerY - half_width * perp_y);
+    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+    cairo_move_to(cr, tip_x + needle.halfWidth * perp_x, tip_y + needle.halfWidth * perp_y);
+    cairo_line_to(cr, tip_x - needle.halfWidth * perp_x, tip_y - needle.halfWidth * perp_y);
+    cairo_line_to(cr, centerX - needle.halfWidth * perp_x, centerY - needle.halfWidth * perp_y);
+    cairo_line_to(cr, centerX + needle.halfWidth * perp_x, centerY + needle.halfWidth * perp_y);
     cairo_close_path(cr);
     cairo_fill(cr);
 
-    // Needle hub - white ring to match the needle for contrast
-    cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
-    cairo_arc(cr, centerX, centerY, 10, 0, 2 * M_PI);
-    cairo_fill(cr);
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    cairo_set_line_width(cr, 2);
-    cairo_arc(cr, centerX, centerY, 10, 0, 2 * M_PI);
-    cairo_stroke(cr);
-
-    cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
-    cairo_arc(cr, centerX, centerY, 4, 0, 2 * M_PI);
+    // Hub: a plain filled disc in the needle's own colour. The old ring and
+    // inner dot were decoration on the one part of the dial that carries no
+    // reading -- and in compact mode the readout box covers it anyway.
+    cairo_arc(cr, centerX, centerY, 8, 0, 2 * M_PI);
     cairo_fill(cr);
 
     // Digital ahead/behind readout. Drawn after the needle and hub so that in
@@ -319,8 +317,6 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // proportion to how much of the segment has been driven. Outside a segment the
     // chevrons stay at the start position and the tick is hidden.
     {
-        double dir_x = cos(needle_angle);
-        double dir_y = sin(needle_angle);
         int num_chevrons = data->gaugeScale + 1;  // 0->1 (green), 1->2 (yellow), 2->3 (red)
         if (num_chevrons < 1) num_chevrons = 1;
         if (num_chevrons > 3) num_chevrons = 3;
