@@ -354,6 +354,11 @@ int main(int argc, char* argv[]) {
         // from SimCounter, so this is nullptr on real hardware).
         app_data.simCounter1 = dynamic_cast<SimCounter*>(counter1.get());
         app_data.simCounter2 = dynamic_cast<SimCounter*>(counter2.get());
+        // Sim Control Panel starts stopped, not running at whatever speed
+        // the last session left it -- an operator opening a fresh sandbox
+        // should see a parked vehicle, not one already in motion.
+        if (app_data.simCounter1) app_data.simCounter1->setPaused(true);
+        if (app_data.simCounter2) app_data.simCounter2->setPaused(true);
         app_data.state = &state;
         app_data.poller = new CounterPoller();
         std::cerr << "[DEBUG] Step 7: CounterPoller created OK" << std::endl;

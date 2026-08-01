@@ -189,6 +189,11 @@ struct AppData {
     GtkWidget* controlStopBtn = nullptr;
     GtkLabel* controlStatusLabel = nullptr;
     double controlSpeedKph = 0.0;
+
+    // Beep Assist has no audible feedback in the sandbox (no ALSA device),
+    // so this label stands in for the sound: it flashes briefly whenever a
+    // navigation or timing beep fires, naming which mode triggered it.
+    GtkLabel* beepFlashLabel = nullptr;
 };
 #endif // RALLY_NO_GTK
 

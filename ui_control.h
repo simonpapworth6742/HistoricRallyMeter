@@ -14,4 +14,10 @@ GtkWidget* createControlWindow(AppData* data);
 // (controlStatusLabel is nullptr, so it's a no-op).
 void updateControlDisplay(AppData* data);
 
+// Flashes beepFlashLabel for ~1.5s naming which mode fired -- the sandbox
+// has no audio device, so this is the only visible confirmation that a
+// navigation or timing beep actually triggered. Safe to call even if
+// createControlWindow() was never called (beepFlashLabel is nullptr).
+void flashBeepWarning(AppData* data, bool navigation_fired);
+
 #endif // UI_CONTROL_H
