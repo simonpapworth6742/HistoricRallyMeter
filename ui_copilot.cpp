@@ -10,6 +10,7 @@
 #include "calculations.h"
 #include "tone_generator.h"
 #include <sstream>
+#include <iostream>
 #include <cstdlib>
 #include <iomanip>
 #include <ctime>
@@ -53,6 +54,31 @@ static void applyCopilotCSS() {
     g_object_unref(provider);
 }
 
+// Plays and reports one beep -- shared by the independent navigation and
+// timing checks in updateCopilotDisplay() so a tick where both are due
+// fires both, back to back, rather than one silently eating the other's
+// beep for the same waypoint.
+static void fireBeepAssist(AppData* data, double waypoint_m, double travelled_m, bool navigation) {
+    // Navigation mode plays the existing one-shot beep twice in quick
+    // succession ("bing bong"), Timing mode plays it once. Both reuse
+    // ToneGenerator::playBeep() unchanged -- no new tone code.
+    std::cerr << "Beep Assist fired: waypoint " << waypoint_m
+              << "m, travelled " << travelled_m << "m"
+              << (navigation ? " (navigation, double beep)" : " (timing, single beep)")
+              << std::endl;
+    if (data->toneGen) {
+        data->toneGen->playBeep();
+        if (navigation) {
+            // g_timeout_add, not a blocking sleep -- this runs on the GTK
+            // main thread and must not stall the UI for 150ms.
+            g_timeout_add(150, [](gpointer d) -> gboolean {
+                static_cast<AppData*>(d)->toneGen->playBeep();
+                return G_SOURCE_REMOVE;
+            }, data);
+        }
+    }
+}
+
 void updateCopilotDisplay(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
     auto current_time_ms = getRallyTime_ms(*data->state);
@@ -83,34 +109,33 @@ void updateCopilotDisplay(AppData* data) {
         bool stage_active = data->state->segment_current_number >= 0;
         double elapsed_stage_s = (current_time_ms - data->state->total_start_time_ms) / 1000.0;
 
-        long due = dueBeepWaypoint(data->state->beep_waypoints_m, data->beepNextIndex,
-                                   travelled_m,
-                                   data->state->beep_navigation_mode, data->state->beep_advance_m,
-                                   data->state->beep_timing_mode, data->state->beep_advance_s,
-                                   stage_active, elapsed_stage_s, data->state->segments);
-        if (due >= 0) {
-            // Which mode actually fired decides the sound: Navigation mode
-            // plays the existing one-shot beep twice in quick succession
-            // ("bing bong"), Timing mode plays it once. Both reuse
-            // ToneGenerator::playBeep() unchanged -- no new tone code.
-            double waypoint_m = data->state->beep_waypoints_m[static_cast<size_t>(due)];
-            bool nav_fired = data->state->beep_navigation_mode
-                           && navigationBeepDue(waypoint_m, travelled_m, data->state->beep_advance_m);
-            if (data->toneGen) {
-                data->toneGen->playBeep();
-                if (nav_fired) {
-                    // g_timeout_add, not a blocking sleep -- this runs on the
-                    // GTK main thread and must not stall the UI for 150ms.
-                    g_timeout_add(150, [](gpointer d) -> gboolean {
-                        static_cast<AppData*>(d)->toneGen->playBeep();
-                        return G_SOURCE_REMOVE;
-                    }, data);
-                }
-            }
-            // Advance past the waypoint that fired, not to the end: if a long
-            // polling gap passed several, the rest still get their beep on the
-            // following ticks.
-            data->beepNextIndex = static_cast<size_t>(due) + 1;
+        // Navigation and timing are independent warnings, each checked
+        // against its own cursor. A single shared cursor (the old design)
+        // let whichever condition tripped first silently consume the OTHER
+        // mode's beep for that same waypoint -- e.g. a navigation lead-in
+        // (advance_m) tripping ahead of the scheduled time meant the timing
+        // beep for that waypoint never fired at all, even though the two
+        // are meant to be separate warnings that can both be due.
+        long nav_due = dueBeepWaypoint(data->state->beep_waypoints_m, data->beepNextNavIndex,
+                                       travelled_m,
+                                       data->state->beep_navigation_mode, data->state->beep_advance_m,
+                                       false, 0.0,
+                                       stage_active, elapsed_stage_s, data->state->segments);
+        if (nav_due >= 0) {
+            fireBeepAssist(data, data->state->beep_waypoints_m[static_cast<size_t>(nav_due)],
+                           travelled_m, /*navigation=*/true);
+            data->beepNextNavIndex = static_cast<size_t>(nav_due) + 1;
+        }
+
+        long timing_due = dueBeepWaypoint(data->state->beep_waypoints_m, data->beepNextTimingIndex,
+                                          travelled_m,
+                                          false, 0.0,
+                                          data->state->beep_timing_mode, data->state->beep_advance_s,
+                                          stage_active, elapsed_stage_s, data->state->segments);
+        if (timing_due >= 0) {
+            fireBeepAssist(data, data->state->beep_waypoints_m[static_cast<size_t>(timing_due)],
+                           travelled_m, /*navigation=*/false);
+            data->beepNextTimingIndex = static_cast<size_t>(timing_due) + 1;
         }
     }
 
@@ -638,13 +663,23 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     // Beep Assist: waypoints the operator wants a warning at, so their eyes
     // can stay on the roadbook rather than the odometer. Its own column,
     // between the memory buttons and the keypad.
+    // Width is not an explicit size_request -- it's set by beepTitle's own
+    // natural size ("Beep Assist KM"), and every row below it is
+    // built to fit within that same budget rather than forcing the column
+    // wider. A size_request minimum was tried here through several rounds
+    // (260/200/150px) and had zero effect: the leadIns rows below always
+    // needed ~370px regardless of what floor was set on the column itself.
     GtkWidget* beepCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-    gtk_widget_set_size_request(beepCol, 260, -1);
     gtk_box_pack_start(GTK_BOX(data->stageSetupMainBox), beepCol, FALSE, FALSE, 0);
 
-    GtkWidget* beepTitle = gtk_label_new("Beep Assist Distance");
+    // Wraps rather than setting the column's width -- "Off/On ... Advance
+    // by" is the narrower, authoritative row; the title would otherwise be
+    // the widest thing in the column and push it out past "by".
+    GtkWidget* beepTitle = gtk_label_new("Beep Assist KM");
     gtk_style_context_add_class(gtk_widget_get_style_context(beepTitle), "segment-label");
     gtk_label_set_xalign(GTK_LABEL(beepTitle), 0.0);
+    gtk_label_set_line_wrap(GTK_LABEL(beepTitle), TRUE);
+    gtk_label_set_max_width_chars(GTK_LABEL(beepTitle), 14);
     gtk_box_pack_start(GTK_BOX(beepCol), beepTitle, FALSE, FALSE, 0);
 
     GtkWidget* beepFrame = gtk_frame_new(NULL);
@@ -672,13 +707,24 @@ GtkWidget* createStageSetupScreen(AppData* data) {
                                                  data->state->total_start_cntr1,
                                                  data->state->total_start_cntr2);
     double initTravelled_m = countsToMeters(initCounts, data->state->calibration);
-    data->beepNextIndex = beepCursorFor(data->state->beep_waypoints_m, initTravelled_m);
+    data->beepNextNavIndex = beepCursorFor(data->state->beep_waypoints_m, initTravelled_m);
+    data->beepNextTimingIndex = beepCursorFor(data->state->beep_waypoints_m, initTravelled_m);
 
     g_signal_connect(data->beepWaypointBuffer, "changed",
                      G_CALLBACK(on_beep_waypoints_changed), data);
 
+    // Forces every row below to the same width as the widest one (whichever
+    // that turns out to be) so the entry fields genuinely align to the same
+    // right edge as "Advance by" -- hexpand does not work for this: it
+    // propagates a widget's expand request up through its parent boxes,
+    // but beepCol itself is packed with expand=FALSE into stageSetupMainBox,
+    // which blocks that propagation, so a bare hexpand on a row never
+    // actually stretched it past its own natural content width.
+    GtkSizeGroup* beepRowWidth = gtk_size_group_new(GTK_SIZE_GROUP_HORIZONTAL);
+
     // Off/On
     GtkWidget* activeRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+    gtk_size_group_add_widget(beepRowWidth, activeRow);
     gtk_box_pack_start(GTK_BOX(beepCol), activeRow, FALSE, FALSE, 0);
 
     GtkWidget* beepOnLabel = gtk_label_new("Off/On");
@@ -691,32 +737,51 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     g_signal_connect(beepSwitch, "state-set", G_CALLBACK(on_beep_enable_toggled), data);
     gtk_box_pack_start(GTK_BOX(activeRow), beepSwitch, FALSE, FALSE, 0);
 
-    // "Advance by" heads the two lead-in rows below it, right-justified
-    // against the same row as Off/On so it reads as a caption for both rows
-    // beneath it, not as a third item paired with the switch.
+    // "Mode" heads the checkbox column shared by the two rows below, the
+    // same way "Advance by" heads their entry column -- so each row itself
+    // only needs the bare mode name. Both headings share their own row,
+    // separate from "Off/On" above them: Mode left-aligned, Advance by
+    // right-aligned.
+    GtkWidget* headingRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_size_group_add_widget(beepRowWidth, headingRow);
+    gtk_box_pack_start(GTK_BOX(beepCol), headingRow, FALSE, FALSE, 0);
+
+    GtkWidget* modeHeading = gtk_label_new("Mode");
+    gtk_style_context_add_class(gtk_widget_get_style_context(modeHeading), "segment-label");
+    gtk_label_set_xalign(GTK_LABEL(modeHeading), 0.0);
+    gtk_box_pack_start(GTK_BOX(headingRow), modeHeading, FALSE, FALSE, 0);
+
     GtkWidget* advanceHeading = gtk_label_new("Advance by");
     gtk_style_context_add_class(gtk_widget_get_style_context(advanceHeading), "segment-label");
-    gtk_label_set_xalign(GTK_LABEL(advanceHeading), 1.0);
-    gtk_widget_set_hexpand(advanceHeading, TRUE);
-    gtk_box_pack_start(GTK_BOX(activeRow), advanceHeading, TRUE, TRUE, 0);
+    gtk_box_pack_end(GTK_BOX(headingRow), advanceHeading, FALSE, FALSE, 0);
 
     // Two independent lead-in rows: navigation mode is a fixed distance,
     // timing mode is a fixed number of seconds off the scheduled (roadbook)
-    // arrival time. Both may be on; either firing is enough. Each row is
-    // label, checkbox, entry, left to right, in normal flow.
+    // arrival time. Both may be on; either firing is enough.
+    //
+    // Root cause of the column's width overflow, confirmed by measuring
+    // gtk_widget_get_preferred_width() on each row's individual children
+    // (querying the GtkSizeGroup-member rows themselves is invalid -- a
+    // SizeGroup member always reports the group's synced width, which is
+    // what sent the first two rounds of measurement down the wrong path):
+    // the Metres/Seconds GtkEntry's natural width was 168px. The 90px in
+    // gtk_widget_set_size_request(entry, 90, 30) is only a *minimum* --
+    // with no gtk_entry_set_width_chars()/max_width_chars() call, GTK fell
+    // back to its own default natural-width heuristic for a bare entry,
+    // nearly double the intended 90px.
     struct { const char* mode_label; const char* placeholder; int mode; } leadIns[] = {
-        { "Navigation mode", "Metres",  0 },
-        { "Timing mode",     "Seconds", 1 },
+        { "Navigation", "Metres",  0 },
+        { "Timing",     "Seconds", 1 },
     };
     for (const auto& li : leadIns) {
         GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+        gtk_size_group_add_widget(beepRowWidth, row);
         gtk_box_pack_start(GTK_BOX(beepCol), row, FALSE, FALSE, 0);
 
         GtkWidget* modeLabel = gtk_label_new(li.mode_label);
         gtk_style_context_add_class(gtk_widget_get_style_context(modeLabel), "segment-label");
-        gtk_widget_set_hexpand(modeLabel, TRUE);
         gtk_label_set_xalign(GTK_LABEL(modeLabel), 0.0);
-        gtk_box_pack_start(GTK_BOX(row), modeLabel, TRUE, TRUE, 0);
+        gtk_box_pack_start(GTK_BOX(row), modeLabel, FALSE, FALSE, 0);
 
         GtkWidget* check = gtk_check_button_new();
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(check),
@@ -725,9 +790,15 @@ GtkWidget* createStageSetupScreen(AppData* data) {
         g_signal_connect(check, "toggled", G_CALLBACK(on_beep_mode_toggled), data);
         gtk_box_pack_start(GTK_BOX(row), check, FALSE, FALSE, 0);
 
+        // Single-line height (30px), matching the checkbox/label row rather
+        // than the taller 40px used elsewhere for touch targets. Width
+        // explicitly capped at 6 chars ("999999") -- both the floor and
+        // the ceiling GTK needs to stop defaulting to ~168px.
         GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
         gtk_entry_set_placeholder_text(entry, li.placeholder);
-        gtk_widget_set_size_request(GTK_WIDGET(entry), 90, 40);
+        gtk_entry_set_width_chars(entry, 6);
+        gtk_entry_set_max_width_chars(entry, 6);
+        gtk_widget_set_size_request(GTK_WIDGET(entry), -1, 30);
         double stored = (li.mode == 1) ? data->state->beep_advance_s : data->state->beep_advance_m;
         if (stored > 0.0) {
             char buf[32];
@@ -737,7 +808,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
         g_object_set_data(G_OBJECT(entry), "mode", GINT_TO_POINTER(li.mode));
         g_signal_connect(entry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
         g_signal_connect(entry, "changed", G_CALLBACK(on_beep_advance_changed), data);
-        gtk_box_pack_start(GTK_BOX(row), GTK_WIDGET(entry), FALSE, FALSE, 0);
+        gtk_box_pack_end(GTK_BOX(row), GTK_WIDGET(entry), FALSE, FALSE, 0);
 
         if (li.mode == 1) data->beepAdvanceSecondsEntry = entry;
         else              data->beepAdvanceMetresEntry = entry;

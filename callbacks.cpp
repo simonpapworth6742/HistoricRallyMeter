@@ -52,7 +52,8 @@ void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->total_distance_adjust_cm = 0;
     // Waypoints are measured from the Total counter's zero, so re-zeroing it
     // puts every waypoint back in front of the car.
-    data->beepNextIndex = 0;
+    data->beepNextNavIndex = 0;
+    data->beepNextTimingIndex = 0;
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -218,7 +219,8 @@ void performStageGo(AppData* data) {
     data->autoStartTriggered = false;
     // Waypoints are measured from the Total counter's zero, so re-zeroing it
     // puts every waypoint back in front of the car.
-    data->beepNextIndex = 0;
+    data->beepNextNavIndex = 0;
+    data->beepNextTimingIndex = 0;
 
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
     
@@ -1310,7 +1312,8 @@ void on_beep_waypoints_changed(GtkTextBuffer* buffer, gpointer user_data) {
                                              data->state->total_start_cntr1,
                                              data->state->total_start_cntr2);
     double travelled_m = countsToMeters(counts, data->state->calibration);
-    data->beepNextIndex = beepCursorFor(data->state->beep_waypoints_m, travelled_m);
+    data->beepNextNavIndex = beepCursorFor(data->state->beep_waypoints_m, travelled_m);
+    data->beepNextTimingIndex = beepCursorFor(data->state->beep_waypoints_m, travelled_m);
 
     ConfigFile::save(*data->state);
 }
