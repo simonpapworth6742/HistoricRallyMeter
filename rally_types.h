@@ -116,11 +116,17 @@ struct AppData {
     GtkTextBuffer* activeBuffer = nullptr;
     GtkWidget* memoryRecallBtns[5] = {};  // Recall buttons for memory slots
 
-    // Beep Assist runtime cursor: index of the next waypoint not yet beeped.
-    // Deliberately not persisted -- on restart it is re-derived from the
+    // Beep Assist runtime cursors: index of the next waypoint not yet beeped,
+    // one per mode. Separate cursors so navigation and timing can each fire
+    // independently for the same waypoint -- a shared cursor meant whichever
+    // condition tripped first silently consumed the OTHER mode's beep for
+    // that waypoint too (e.g. a navigation lead-in tripping before the
+    // scheduled time meant the timing beep never fired at all).
+    // Deliberately not persisted -- on restart they are re-derived from the
     // distance already travelled, so a power blip mid-stage does not replay
     // every waypoint the car has already passed.
-    size_t beepNextIndex = 0;
+    size_t beepNextNavIndex = 0;
+    size_t beepNextTimingIndex = 0;
     GtkTextBuffer* beepWaypointBuffer = nullptr;
     GtkEntry* beepAdvanceMetresEntry = nullptr;
     GtkEntry* beepAdvanceSecondsEntry = nullptr;

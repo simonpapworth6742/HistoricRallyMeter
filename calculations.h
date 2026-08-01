@@ -103,9 +103,10 @@ bool timingBeepDue(double waypoint_m, double elapsed_stage_s,
 
 // Index of the first waypoint due under either active mode, or -1 if none is
 // due. Navigation and timing are independent triggers on the same waypoint
-// list -- either firing is enough. With both on, whichever condition is met
-// first in real time is naturally the one that fires, since this is polled
-// continuously and the caller advances from_index past whatever fires.
+// list -- either firing is enough. The caller runs this once per mode, each
+// against its own cursor (see AppData::beepNextNavIndex/beepNextTimingIndex),
+// so navigation and timing can each fire independently for the same
+// waypoint rather than one consuming the other's beep.
 long dueBeepWaypoint(const std::vector<double>& waypoints_m, size_t from_index,
                      double travelled_m,
                      bool navigation_mode, double advance_m,
