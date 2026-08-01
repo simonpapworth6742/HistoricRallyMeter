@@ -353,45 +353,39 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_label_set_xalign(data->copilotRallyClockLabel, 1.0);
     gtk_box_pack_end(GTK_BOX(topRightRow), GTK_WIDGET(data->copilotRallyClockLabel), FALSE, FALSE, 0);
     
-    // Alarm buttons: 3 rows of 4
+    // Alarm buttons: label on its own row, then a flush-left 4x3 grid --
+    // no per-row indent, so every column lines up squarely under the label
+    // rather than being pushed right by a label-width spacer.
     GtkWidget* alarmBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     gtk_widget_set_margin_top(alarmBox, 10);
+    gtk_widget_set_halign(alarmBox, GTK_ALIGN_END);
     gtk_box_pack_start(GTK_BOX(rightPanel), alarmBox, FALSE, FALSE, 0);
-    
+
+    // "KM", not "in": the buttons are kilometre distances, and
+    // "Alarm in 2" reads as two minutes.
+    GtkWidget* alarmLabel = gtk_label_new("Alarm KM");
+    gtk_style_context_add_class(gtk_widget_get_style_context(alarmLabel), "alarm-label");
+    gtk_label_set_xalign(GTK_LABEL(alarmLabel), 0.0);
+    gtk_box_pack_start(GTK_BOX(alarmBox), alarmLabel, FALSE, FALSE, 0);
+
     // Alarm buttons: 4 rows of 3, 30% larger (62x47)
-    auto addAlarmRow = [&](GtkWidget* parent, int from, int to, bool hasLabel) {
+    auto addAlarmRow = [&](GtkWidget* parent, int from, int to) {
         GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
         gtk_box_pack_start(GTK_BOX(parent), row, FALSE, FALSE, 0);
-        if (hasLabel) {
-            // "KM", not "in": the buttons are kilometre distances, and
-            // "Alarm in 2" reads as two minutes.
-            GtkWidget* lbl = gtk_label_new("Alarm KM");
-            gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "alarm-label");
-            gtk_label_set_xalign(GTK_LABEL(lbl), 0.0);
-            gtk_widget_set_size_request(lbl, 90, -1);
-            gtk_box_pack_start(GTK_BOX(row), lbl, FALSE, FALSE, 3);
-        } else {
-            // Spacer matching the label's width, so every button column
-            // lines up under the first row's.
-            GtkWidget* spacer = gtk_label_new("");
-            gtk_style_context_add_class(gtk_widget_get_style_context(spacer), "alarm-label");
-            gtk_widget_set_size_request(spacer, 90, -1);
-            gtk_box_pack_start(GTK_BOX(row), spacer, FALSE, FALSE, 3);
-        }
         for (int km = from; km <= to; km++) {
             GtkWidget* btn = gtk_button_new_with_label(std::to_string(km).c_str());
             gtk_style_context_add_class(gtk_widget_get_style_context(btn), "alarm-button");
-            gtk_widget_set_size_request(btn, 62, 47);
+            gtk_widget_set_size_request(btn, 68, 47);
             g_object_set_data(G_OBJECT(btn), "km", GINT_TO_POINTER(km));
             g_signal_connect(btn, "clicked", G_CALLBACK(on_alarm_set), data);
             gtk_box_pack_start(GTK_BOX(row), btn, FALSE, FALSE, 2);
         }
     };
-    
-    addAlarmRow(alarmBox, 2, 4, true);
-    addAlarmRow(alarmBox, 5, 7, false);
-    addAlarmRow(alarmBox, 8, 10, false);
-    addAlarmRow(alarmBox, 11, 13, false);
+
+    addAlarmRow(alarmBox, 2, 4);
+    addAlarmRow(alarmBox, 5, 7);
+    addAlarmRow(alarmBox, 8, 10);
+    addAlarmRow(alarmBox, 11, 13);
     
     // Alarm countdown + clear button, right-aligned under the alarm grid so
     // the countdown ends level with the buttons above it rather than
