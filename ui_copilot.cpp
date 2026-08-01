@@ -871,10 +871,21 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(screen), "calibration-screen");
     gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
     
-    // Title
+    // Title, with the rally clock on the same row -- this screen otherwise
+    // has no clock at all, unlike every other screen.
+    GtkWidget* titleRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(screen), titleRow, FALSE, FALSE, 0);
+
     GtkWidget* titleLabel = gtk_label_new("CALIBRATION");
     gtk_style_context_add_class(gtk_widget_get_style_context(titleLabel), "title-label");
-    gtk_box_pack_start(GTK_BOX(screen), titleLabel, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(titleLabel, TRUE);
+    gtk_box_pack_start(GTK_BOX(titleRow), titleLabel, TRUE, TRUE, 0);
+
+    data->calibrationClockLabel = GTK_LABEL(gtk_label_new("00:00:00"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->calibrationClockLabel)), "clock-label");
+    gtk_label_set_width_chars(data->calibrationClockLabel, 8);
+    gtk_label_set_xalign(data->calibrationClockLabel, 1.0);
+    gtk_box_pack_end(GTK_BOX(titleRow), GTK_WIDGET(data->calibrationClockLabel), FALSE, FALSE, 0);
     
     // Main horizontal container: left side for info, right side for keypad
     data->calibrationMainBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
@@ -971,8 +982,11 @@ GtkWidget* createCalibrationScreen(AppData* data) {
         gtk_box_pack_start(GTK_BOX(leftBox), lbl, FALSE, FALSE, 0);
     }
 
-    // Right side: numeric keypad
+    // Right side: numeric keypad. Nudged down from the top of its column so
+    // it doesn't sit flush against the title row now that the row is taller
+    // (title + clock) than a plain title alone.
     data->calibrationKeypad = createNumericKeypad(data);
+    gtk_widget_set_margin_top(data->calibrationKeypad, 12);
     gtk_box_pack_end(GTK_BOX(data->calibrationMainBox), data->calibrationKeypad, FALSE, FALSE, 10);
     
     // Bottom: navigation buttons
