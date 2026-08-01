@@ -131,15 +131,29 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
         "Confirm Stage Go",
         GTK_WINDOW(gtk_widget_get_toplevel(widget)),
         GTK_DIALOG_MODAL,
-        "Yes", GTK_RESPONSE_YES,
-        "Auto start", RESPONSE_AUTO_START,
+        // "Now" rather than "Yes": what distinguishes this from the autostart
+        // option is that the stage begins immediately.
+        "Now", GTK_RESPONSE_YES,
+        "Set Autostart", RESPONSE_AUTO_START,
         "No", GTK_RESPONSE_NO,
         nullptr);
-    
+
     GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     gtk_container_set_border_width(GTK_CONTAINER(content), 20);
-    
-    GtkWidget* label = gtk_label_new("Stage Go?\n\nThis will reset Total, Trip,\nand Segment counters.");
+
+    // Show what is actually about to start, highlighted: this dialog guards
+    // the most destructive action on the box, and an operator who recalled
+    // the wrong memory slot or mis-edited a segment had no way to notice
+    // before confirming. The summary is the segments page's own content --
+    // there is no separate stage name or number in the model to show
+    // instead.
+    std::string summary = stageSummary(data->state->segments);
+    std::string markup = "Stage Go?\n\nStage = <span foreground=\"#FFDD00\">"
+                       + summary + "</span>\n"
+                       + "Total and Trip Counters will reset";
+
+    GtkWidget* label = gtk_label_new(nullptr);
+    gtk_label_set_markup(GTK_LABEL(label), markup.c_str());
     gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
     gtk_box_pack_start(GTK_BOX(content), label, TRUE, TRUE, 10);
     gtk_widget_show(label);
