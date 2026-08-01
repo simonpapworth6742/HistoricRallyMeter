@@ -540,12 +540,12 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     GtkWidget* newLabel = gtk_label_new("New:");
     data->targetSpeedEntry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_placeholder_text(data->targetSpeedEntry, "KPH");
-    gtk_widget_set_size_request(GTK_WIDGET(data->targetSpeedEntry), 100, 40);
+    gtk_widget_set_size_request(GTK_WIDGET(data->targetSpeedEntry), 70, 40);
     g_signal_connect(data->targetSpeedEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
-    
+
     data->distanceEntry = GTK_ENTRY(gtk_entry_new());
-    gtk_entry_set_placeholder_text(data->distanceEntry, "meters (;  separated)");
-    gtk_widget_set_size_request(GTK_WIDGET(data->distanceEntry), 300, 40);
+    gtk_entry_set_placeholder_text(data->distanceEntry, "metres (;  separated)");
+    gtk_widget_set_size_request(GTK_WIDGET(data->distanceEntry), 180, 40);
     g_signal_connect(data->distanceEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     
     data->autoNextCheck = GTK_CHECK_BUTTON(gtk_check_button_new_with_label("Auto"));
