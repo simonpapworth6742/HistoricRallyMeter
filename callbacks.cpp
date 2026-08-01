@@ -141,22 +141,31 @@ void on_distance_set(GtkWidget* widget, gpointer user_data) {
         nullptr);
 
     GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    gtk_container_set_border_width(GTK_CONTAINER(content), 20);
+    gtk_container_set_border_width(GTK_CONTAINER(content), 10);
 
-    GtkWidget* prompt = gtk_label_new("Distance now (metres):");
-    gtk_box_pack_start(GTK_BOX(content), prompt, FALSE, FALSE, 5);
+    GtkWidget* promptRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_pack_start(GTK_BOX(content), promptRow, FALSE, FALSE, 3);
+
+    GtkWidget* prompt = gtk_label_new("Set Total (m)");
+    gtk_box_pack_start(GTK_BOX(promptRow), prompt, FALSE, FALSE, 0);
 
     GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_text(entry,
         std::to_string(adjustedDistanceMeters(rawDistanceCm(data, false),
                                               data->state->total_distance_adjust_cm)).c_str());
-    gtk_box_pack_start(GTK_BOX(content), GTK_WIDGET(entry), FALSE, FALSE, 5);
+    // Capped at 6 digits (999,999 m): past that the display auto-switches
+    // to km, which reads as if the entered value got truncated.
+    gtk_entry_set_max_length(entry, 6);
+    // Pre-filled with the current value; select it so the first digit typed
+    // replaces it instead of appending onto it.
+    gtk_editable_select_region(GTK_EDITABLE(entry), 0, -1);
+    gtk_box_pack_start(GTK_BOX(promptRow), GTK_WIDGET(entry), TRUE, TRUE, 0);
 
     // The main screen has no keypad of its own, and the box has no physical
     // keyboard, so the dialog brings one with it.
     GtkEntry* previous_entry = data->activeEntry;
     data->activeEntry = entry;
-    gtk_box_pack_start(GTK_BOX(content), createNumericKeypad(data), FALSE, FALSE, 5);
+    gtk_box_pack_start(GTK_BOX(content), createNumericKeypad(data), FALSE, FALSE, 3);
 
     applyDialogStyle(dialog);
     gtk_widget_show_all(dialog);
@@ -470,19 +479,19 @@ GtkWidget* createNumericKeypad(AppData* data) {
     
     for (int i = 0; i < 12; i++) {
         GtkWidget* btn = gtk_button_new_with_label(digits[i]);
-        gtk_widget_set_size_request(btn, 60, 48);
+        gtk_widget_set_size_request(btn, 60, 42);
         g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
         gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
     }
     
     // Row 5: Clear and Backspace
     GtkWidget* clearBtn = gtk_button_new_with_label("C");
-    gtk_widget_set_size_request(clearBtn, 60, 48);
+    gtk_widget_set_size_request(clearBtn, 60, 42);
     g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_keypad_clear), data);
     gtk_grid_attach(GTK_GRID(keypad), clearBtn, 0, 4, 1, 1);
-    
+
     GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
-    gtk_widget_set_size_request(bkspBtn, 130, 48);
+    gtk_widget_set_size_request(bkspBtn, 130, 42);
     g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
     gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
     
@@ -498,18 +507,18 @@ GtkWidget* createDateTimeKeypad(AppData* data) {
     
     for (int i = 0; i < 12; i++) {
         GtkWidget* btn = gtk_button_new_with_label(digits[i]);
-        gtk_widget_set_size_request(btn, 60, 48);
+        gtk_widget_set_size_request(btn, 60, 42);
         g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
         gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
     }
     
     GtkWidget* clearBtn = gtk_button_new_with_label("C");
-    gtk_widget_set_size_request(clearBtn, 60, 48);
+    gtk_widget_set_size_request(clearBtn, 60, 42);
     g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_keypad_clear), data);
     gtk_grid_attach(GTK_GRID(keypad), clearBtn, 0, 4, 1, 1);
-    
+
     GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
-    gtk_widget_set_size_request(bkspBtn, 130, 48);
+    gtk_widget_set_size_request(bkspBtn, 130, 42);
     g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
     gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
     
@@ -520,10 +529,19 @@ GtkWidget* createDateTimeKeypad(AppData* data) {
 void on_keypad_digit(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     if (!data->activeEntry) return;
-    
+
     const char* digit = gtk_button_get_label(GTK_BUTTON(widget));
+
+    // A digit typed while the entry's text is selected (e.g. the current
+    // value a dialog pre-fills on open) replaces it, matching normal
+    // text-field behaviour -- otherwise the typed digits silently append
+    // to whatever was left in the box, inflating the result.
+    gint sel_start, sel_end;
+    if (gtk_editable_get_selection_bounds(GTK_EDITABLE(data->activeEntry), &sel_start, &sel_end)) {
+        gtk_editable_delete_selection(GTK_EDITABLE(data->activeEntry));
+    }
+
     const char* current = gtk_entry_get_text(data->activeEntry);
-    
     std::string new_text = std::string(current) + digit;
     gtk_entry_set_text(data->activeEntry, new_text.c_str());
 }
