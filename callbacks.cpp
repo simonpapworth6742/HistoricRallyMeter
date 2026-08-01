@@ -208,8 +208,6 @@ void performStageGo(AppData* data) {
         data->state->segment_current_number = 0;
     }
 
-    data->gaugeScale = 0;
-    data->gaugeScaleChangeTime = 0;
     data->aheadBehindSeconds = 0.0;
     data->smoothedSpeed = -1.0;
     data->state->ahead_behind_zero_offset_ms = 0;

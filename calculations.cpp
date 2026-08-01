@@ -492,3 +492,39 @@ NeedleGeometry computeNeedleGeometry(double seconds, double max_seconds, double 
     n.halfWidth = 3.0;
     return n;
 }
+
+double gaugeEffectiveMaxSeconds(double seconds) {
+    double abs_sec = std::abs(seconds);
+    if (abs_sec < 3.0) return 3.0;
+    if (abs_sec > 30.0) return 30.0;
+    return abs_sec;
+}
+
+int gaugeZone(double seconds) {
+    double abs_sec = std::abs(seconds);
+    if (abs_sec < 10.0) return 0;
+    if (abs_sec < 30.0) return 1;
+    return 2;
+}
+
+GaugeArcColor gaugeArcColor(int zone) {
+    switch (zone) {
+    case 0:  return { 0.0, 0.7, 0.0 };    // green
+    case 2:  return { 0.8, 0.1, 0.1 };    // red
+    default: return { 0.85, 0.65, 0.0 };  // amber
+    }
+}
+
+std::string gaugeTickLabel(int index) {
+    if (index == 0) return std::string();
+    return std::to_string(index);
+}
+
+bool gaugeTickLabelsVisible(double seconds) {
+    return gaugeZone(seconds) == 0;
+}
+
+double gaugeTickAngle(int index, double max_val) {
+    double frac = static_cast<double>(index) / max_val;
+    return M_PI + M_PI / 2 + frac * (M_PI / 2);
+}
