@@ -5,6 +5,9 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
+#include <algorithm>
+#include <vector>
+#include <stdexcept>
 
 int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_t cntr2,
                                   uint64_t start1, uint64_t start2) {
@@ -269,4 +272,100 @@ std::string segmentSpeedTransition(double next_speed, bool has_next, bool is_mph
     else
         snprintf(buf, sizeof(buf), "> END");
     return std::string(buf);
+}
+
+std::vector<double> parseBeepWaypointsKm(const std::string& text) {
+    std::vector<double> waypoints;
+
+    // Commas and semicolons both separate: the numeric keypad offers ";",
+    // but a list pasted from a roadbook is usually comma-separated.
+    std::string normalised = text;
+    for (char& c : normalised)
+        if (c == ',' || c == ';' || c == '\n' || c == '\t') c = ' ';
+
+    std::istringstream stream(normalised);
+    std::string token;
+    while (stream >> token) {
+        try {
+            size_t consumed = 0;
+            double km = std::stod(token, &consumed);
+            // Reject trailing junk ("3.67m") and negative distances, but keep
+            // parsing: one bad token must not cost the operator the rest.
+            if (consumed != token.size() || km < 0.0) continue;
+            waypoints.push_back(km * 1000.0);
+        } catch (const std::exception&) {
+            continue;
+        }
+    }
+
+    // Travel order, and no duplicates -- a repeated waypoint would beep twice
+    // at the same point.
+    std::sort(waypoints.begin(), waypoints.end());
+    waypoints.erase(std::unique(waypoints.begin(), waypoints.end(),
+                                [](double a, double b) { return std::abs(a - b) < 0.5; }),
+                    waypoints.end());
+    return waypoints;
+}
+
+std::string formatBeepWaypointsKm(const std::vector<double>& waypoints_m) {
+    std::string out;
+    char buf[32];
+    for (size_t i = 0; i < waypoints_m.size(); i++) {
+        snprintf(buf, sizeof(buf), "%.2f", waypoints_m[i] / 1000.0);
+        if (i > 0) out += ", ";
+        out += buf;
+    }
+    return out;
+}
+
+size_t beepCursorFor(const std::vector<double>& waypoints_m, double travelled_m) {
+    size_t i = 0;
+    while (i < waypoints_m.size() && waypoints_m[i] <= travelled_m) i++;
+    return i;
+}
+
+double idealSecondsToReachDistance(const std::vector<Segment>& segments, double target_distance_m) {
+    double cumulative_m = 0.0;
+    double cumulative_s = 0.0;
+    for (const auto& seg : segments) {
+        if (seg.target_speed_kph <= 0.0 || seg.distance_m <= 0.0) continue;  // skip invalid segments
+        double speed_m_per_s = seg.target_speed_kph * (1000.0 / 3600.0);
+        double segment_time_s = seg.distance_m / speed_m_per_s;
+        if (cumulative_m + seg.distance_m >= target_distance_m) {
+            double remaining_m = target_distance_m - cumulative_m;
+            return cumulative_s + (remaining_m / speed_m_per_s);
+        }
+        cumulative_m += seg.distance_m;
+        cumulative_s += segment_time_s;
+    }
+    return -1.0;  // the waypoint lies beyond what the loaded segments cover
+}
+
+bool navigationBeepDue(double waypoint_m, double travelled_m, double advance_m) {
+    return travelled_m >= waypoint_m - advance_m;
+}
+
+bool timingBeepDue(double waypoint_m, double elapsed_stage_s,
+                   const std::vector<Segment>& segments, double advance_s) {
+    double ideal_s = idealSecondsToReachDistance(segments, waypoint_m);
+    if (ideal_s < 0.0) return false;
+    return elapsed_stage_s >= ideal_s - advance_s;
+}
+
+long dueBeepWaypoint(const std::vector<double>& waypoints_m, size_t from_index,
+                     double travelled_m,
+                     bool navigation_mode, double advance_m,
+                     bool timing_mode, double advance_s,
+                     bool stage_active, double elapsed_stage_s,
+                     const std::vector<Segment>& segments) {
+    // Return the EARLIEST waypoint that is due, not the newest: a long
+    // polling gap that passes several at once must report them in order
+    // rather than silently swallowing the ones behind.
+    for (size_t i = from_index; i < waypoints_m.size(); i++) {
+        bool nav_due = navigation_mode && navigationBeepDue(waypoints_m[i], travelled_m, advance_m);
+        bool timing_due = timing_mode && stage_active
+                        && timingBeepDue(waypoints_m[i], elapsed_stage_s, segments, advance_s);
+        if (nav_due || timing_due) return static_cast<long>(i);
+    }
+    return -1;
 }

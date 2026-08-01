@@ -4,6 +4,7 @@
 #include <string>
 #include <sstream>
 #include <iomanip>
+#include <stdexcept>
 
 static int64_t extractLong(const std::string& line) {
     size_t pos = line.find(':');
@@ -31,6 +32,23 @@ static double extractDouble(const std::string& line) {
 
 static bool extractBool(const std::string& line) {
     return line.find("true") != std::string::npos;
+}
+
+// Read a JSON array of plain numbers, one per line, in the same line-oriented
+// style as parseSegmentArray().
+static void parseDoubleArray(std::istringstream& stream, std::vector<double>& out) {
+    out.clear();
+    std::string line;
+    while (std::getline(stream, line)) {
+        if (line.find(']') != std::string::npos) return;
+        try {
+            size_t first = line.find_first_of("-0123456789");
+            if (first == std::string::npos) continue;
+            out.push_back(std::stod(line.substr(first)));
+        } catch (const std::exception&) {
+            continue;
+        }
+    }
 }
 
 static void parseSegmentArray(std::istringstream& stream, std::vector<Segment>& out, long calibration) {
@@ -157,6 +175,18 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.web_enabled = extractBool(line);
         } else if (line.find("\"web_port\"") != std::string::npos) {
             state.web_port = static_cast<int>(extractLong(line));
+        } else if (line.find("\"beep_assist_enabled\"") != std::string::npos) {
+            state.beep_assist_enabled = extractBool(line);
+        } else if (line.find("\"beep_advance_m\"") != std::string::npos) {
+            state.beep_advance_m = extractDouble(line);
+        } else if (line.find("\"beep_advance_s\"") != std::string::npos) {
+            state.beep_advance_s = extractDouble(line);
+        } else if (line.find("\"beep_navigation_mode\"") != std::string::npos) {
+            state.beep_navigation_mode = extractBool(line);
+        } else if (line.find("\"beep_timing_mode\"") != std::string::npos) {
+            state.beep_timing_mode = extractBool(line);
+        } else if (line.find("\"beep_waypoints_m\"") != std::string::npos) {
+            parseDoubleArray(stream, state.beep_waypoints_m);
         }
     }
 }
@@ -217,12 +247,25 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"web_enabled\": " << (state.web_enabled ? "true" : "false") << ",\n";
     file << "  \"web_port\": " << state.web_port << ",\n";
     
+    file << "  \"beep_assist_enabled\": " << (state.beep_assist_enabled ? "true" : "false") << ",\n";
+    file << "  \"beep_advance_m\": " << state.beep_advance_m << ",\n";
+    file << "  \"beep_advance_s\": " << state.beep_advance_s << ",\n";
+    file << "  \"beep_navigation_mode\": " << (state.beep_navigation_mode ? "true" : "false") << ",\n";
+    file << "  \"beep_timing_mode\": " << (state.beep_timing_mode ? "true" : "false") << ",\n";
+    file << "  \"beep_waypoints_m\": [\n";
+    for (size_t i = 0; i < state.beep_waypoints_m.size(); i++) {
+        file << "    " << state.beep_waypoints_m[i];
+        if (i + 1 < state.beep_waypoints_m.size()) file << ",";
+        file << "\n";
+    }
+    file << "  ],\n";
+
     // Check if any memory slots are populated
     bool has_memory = false;
     for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
         if (!state.memory_slots[i].empty()) { has_memory = true; break; }
     }
-    
+
     writeSegmentArray(file, "segments", state.segments, has_memory);
     
     if (has_memory) {

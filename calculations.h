@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 #include "rally_state.h"
 #include "rally_types.h"
 
@@ -93,5 +94,49 @@ std::string segmentRowHeading(double current_speed, bool has_current_segment);
 // whole figures. next_speed is already in the active display unit; is_mph
 // only selects which unit word follows it.
 std::string segmentSpeedTransition(double next_speed, bool has_next, bool is_mph);
+
+// Parse an operator-entered Beep Assist waypoint list. Values are kilometres
+// separated by commas, semicolons or whitespace, and are returned as metres
+// in ascending order with duplicates removed. A malformed token is skipped
+// rather than aborting the parse: one typo must not cost the whole list.
+std::vector<double> parseBeepWaypointsKm(const std::string& text);
+
+// Render waypoint metres back to the kilometre display form.
+std::string formatBeepWaypointsKm(const std::vector<double>& waypoints_m);
+
+// Index of the first waypoint not yet reached at the given travelled
+// distance. Used to re-derive the runtime cursor after a restart, so a power
+// blip mid-stage does not replay every waypoint already behind the car.
+size_t beepCursorFor(const std::vector<double>& waypoints_m, double travelled_m);
+
+// Ideal elapsed time, in seconds, to reach a target distance from the stage
+// start, walking segments in order at each one's own target speed. Uses each
+// segment's calibration-independent distance_m/target_speed_kph -- distance
+// actually travelled never enters this calculation, only the roadbook's own
+// numbers do. Returns -1 if the target lies beyond the distance the loaded
+// segments cover.
+double idealSecondsToReachDistance(const std::vector<Segment>& segments, double target_distance_m);
+
+// Navigation mode due-check: true once the Total distance is within
+// advance_m of the waypoint. Pure distance -- current speed plays no part.
+bool navigationBeepDue(double waypoint_m, double travelled_m, double advance_m);
+
+// Timing mode due-check: true once the scheduled time to reach the waypoint,
+// less advance_s, has elapsed. Meaningless outside a stage; callers gate on
+// that themselves (this function has no access to segment_current_number).
+bool timingBeepDue(double waypoint_m, double elapsed_stage_s,
+                   const std::vector<Segment>& segments, double advance_s);
+
+// Index of the first waypoint due under either active mode, or -1 if none is
+// due. Navigation and timing are independent triggers on the same waypoint
+// list -- either firing is enough. With both on, whichever condition is met
+// first in real time is naturally the one that fires, since this is polled
+// continuously and the caller advances from_index past whatever fires.
+long dueBeepWaypoint(const std::vector<double>& waypoints_m, size_t from_index,
+                     double travelled_m,
+                     bool navigation_mode, double advance_m,
+                     bool timing_mode, double advance_s,
+                     bool stage_active, double elapsed_stage_s,
+                     const std::vector<Segment>& segments);
 
 #endif // CALCULATIONS_H

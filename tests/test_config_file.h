@@ -231,6 +231,47 @@ public:
                 && fresh.trip_distance_adjust_cm == 0;
         });
 
+        suite->addTest("beep assist settings survive a save/load round trip", []() {
+            const std::string path = "/tmp/rallybox_test_beep.json";
+            RallyState out;
+            out.beep_assist_enabled = true;
+            out.beep_navigation_mode = true;
+            out.beep_timing_mode = false;
+            out.beep_advance_m = 250.0;
+            out.beep_advance_s = 8.0;
+            out.beep_waypoints_m = { 3670.0, 4980.0, 17300.0 };
+            ConfigFile::save(out, path);
+
+            RallyState in;
+            ConfigFile::load(in, path);
+            std::remove(path.c_str());
+            return in.beep_assist_enabled
+                && in.beep_navigation_mode
+                && !in.beep_timing_mode
+                && std::abs(in.beep_advance_m - 250.0) < 0.001
+                && std::abs(in.beep_advance_s - 8.0) < 0.001
+                && in.beep_waypoints_m.size() == 3
+                && std::abs(in.beep_waypoints_m[2] - 17300.0) < 0.001;
+        });
+
+        suite->addTest("beep waypoints coexist with the segment array", []() {
+            // Both are parsed by consuming the stream to a closing bracket,
+            // so one must not swallow the other.
+            const std::string path = "/tmp/rallybox_test_beep_segs.json";
+            RallyState out;
+            out.beep_waypoints_m = { 1000.0, 2000.0 };
+            Segment s{};
+            s.target_speed_kph = 50.0;
+            s.distance_m = 1200.0;
+            out.segments.push_back(s);
+            ConfigFile::save(out, path);
+
+            RallyState in;
+            ConfigFile::load(in, path);
+            std::remove(path.c_str());
+            return in.beep_waypoints_m.size() == 2 && in.segments.size() == 1;
+        });
+
         return suite;
     }
 };

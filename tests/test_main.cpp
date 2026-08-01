@@ -17,6 +17,7 @@
 #include "test_elapsed.h"
 #include "test_distance_adjust.h"
 #include "test_segment_row.h"
+#include "test_beep_assist.h"
 
 int main() {
     TestRunner runner;
@@ -37,6 +38,7 @@ int main() {
     TestElapsed elapsedTests;
     TestDistanceAdjust distanceAdjustTests;
     TestSegmentRow segmentRowTests;
+    TestBeepAssist beepAssistTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -54,8 +56,10 @@ int main() {
     runner.addSuite(elapsedTests.createSuite());
     runner.addSuite(distanceAdjustTests.createSuite());
     runner.addSuite(segmentRowTests.createSuite());
+    runner.addSuite(beepAssistTests.createSuite());
+
     // Run all tests
     int failures = runner.runAll();
-    
+
     return (failures > 0) ? 1 : 0;
 }
