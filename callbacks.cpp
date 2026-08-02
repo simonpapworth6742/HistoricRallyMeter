@@ -86,6 +86,7 @@ static void applyDialogStyle(GtkWidget* dialog) {
     G_GNUC_END_IGNORE_DEPRECATIONS
     if (action_area && GTK_IS_BUTTON_BOX(action_area)) {
         gtk_box_set_spacing(GTK_BOX(action_area), 20);
+        gtk_button_box_set_layout(GTK_BUTTON_BOX(action_area), GTK_BUTTONBOX_CENTER);
     }
 }
 
@@ -123,25 +124,88 @@ void performStageGo(AppData* data) {
 }
 
 static const int RESPONSE_AUTO_START = 99;
+static const int RESPONSE_AUTO_START_NEXT_MINUTE = 98;
+
+// Defined further down (used by on_show_autostart/on_autostart_set); forward
+// declared here so the quick-set button below can share the same epoch.
+static int64_t getAutoStartEpochMs();
+
+// Always the *next* minute boundary, even if rally_ms already sits exactly on
+// one -- the quick-set button's printed time must still be ahead when pressed.
+static int64_t nextRoundMinute_ms(int64_t rally_ms) {
+    return ((rally_ms / 60000) + 1) * 60000;
+}
+
+static std::string formatHms(int64_t epoch_ms) {
+    time_t s = epoch_ms / 1000;
+    struct tm* t = localtime(&s);
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);
+    return std::string(buf);
+}
+
+// Commits the autostart time directly (no manual entry needed), reusing the
+// same state field and epoch as the "Set Autostart" screen.
+static void setAutoStartToNextRoundMinute(AppData* data) {
+    int64_t target_ms = nextRoundMinute_ms(getRallyTime_ms(*data->state));
+    int64_t epoch_ms = getAutoStartEpochMs();
+    data->state->auto_start_rally_time_minutes =
+        static_cast<uint64_t>((target_ms - epoch_ms) / 60000);
+    data->autoStartTriggered = false;
+    ConfigFile::save(*data->state);
+}
 
 void on_stage_go(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    
+
+    std::string nextMinuteLabel = "Autostart "
+        + formatHms(nextRoundMinute_ms(getRallyTime_ms(*data->state)));
+
     GtkWidget* dialog = gtk_dialog_new_with_buttons(
         "Confirm Stage Go",
         GTK_WINDOW(gtk_widget_get_toplevel(widget)),
         GTK_DIALOG_MODAL,
-        "Yes", GTK_RESPONSE_YES,
-        "Auto start", RESPONSE_AUTO_START,
+        // "Now" rather than "Yes": what distinguishes this from the autostart
+        // option is that the stage begins immediately.
+        "Now", GTK_RESPONSE_YES,
+        "Set Autostart", RESPONSE_AUTO_START,
+        nextMinuteLabel.c_str(), RESPONSE_AUTO_START_NEXT_MINUTE,
         "No", GTK_RESPONSE_NO,
         nullptr);
-    
+
     GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    gtk_container_set_border_width(GTK_CONTAINER(content), 20);
-    
-    GtkWidget* label = gtk_label_new("Stage Go?\n\nThis will reset Total, Trip,\nand Segment counters.");
+    gtk_container_set_border_width(GTK_CONTAINER(content), 8);
+
+    // Show what is actually about to start, highlighted: this dialog guards
+    // the most destructive action on the box, and an operator who recalled
+    // the wrong memory slot or mis-edited a segment had no way to notice
+    // before confirming. The summary is the segments page's own content --
+    // there is no separate stage name or number in the model to show
+    // instead.
+    std::string summary = stageSummary(data->state->segments);
+    std::string markup = "Stage Go?\n\nStage = <span foreground=\"#FFDD00\">"
+                       + summary + "</span>\n"
+                       + "Total and Trip Counters will reset";
+
+    GtkWidget* label = gtk_label_new(nullptr);
+    gtk_label_set_markup(GTK_LABEL(label), markup.c_str());
     gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
-    gtk_box_pack_start(GTK_BOX(content), label, TRUE, TRUE, 10);
+    // A stage with many segments would otherwise force the dialog as wide
+    // as the whole comma-separated list on one line; wrap it instead.
+    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+    // width_chars, not just max_width_chars: fixing the measurement width
+    // up front gives GTK a single, stable wrap pass. max_width_chars alone
+    // only caps the natural width, so the dialog's first size-negotiation
+    // pass (before the final width is settled) can wrap taller than the
+    // final render needs, leaving reserved-but-unused height below the text.
+    gtk_label_set_width_chars(GTK_LABEL(label), 44);
+    gtk_label_set_max_width_chars(GTK_LABEL(label), 44);
+    // expand=FALSE: with TRUE the label was stretched to fill whatever
+    // extra height the button row's width forced onto the dialog, and its
+    // 0.5 yalign centred the text in that slack -- an equal gap above
+    // "Stage Go?" and below the last line, both growing every time
+    // wrapping added another line. Natural size only, no slack to centre in.
+    gtk_box_pack_start(GTK_BOX(content), label, FALSE, FALSE, 0);
     gtk_widget_show(label);
     
     applyDialogStyle(dialog);
@@ -153,6 +217,11 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
         performStageGo(data);
     } else if (response == RESPONSE_AUTO_START) {
         on_show_autostart(widget, user_data);
+    } else if (response == RESPONSE_AUTO_START_NEXT_MINUTE) {
+        // Already fully committed by setAutoStartToNextRoundMinute -- no
+        // Set/Save step needed, so just return to whatever screen was
+        // showing rather than detouring through the autostart setup screen.
+        setAutoStartToNextRoundMinute(data);
     }
 }
 

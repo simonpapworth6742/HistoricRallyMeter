@@ -195,6 +195,18 @@ double calculateAheadBehindFromStageStart(const RallyState& state, int64_t curre
     
     double counts_per_second = current_seg.target_speed_counts_per_hour / 3600.0;
     double seconds = diff / counts_per_second;
-    
+
     return seconds;
+}
+
+std::string stageSummary(const std::vector<Segment>& segments) {
+    if (segments.empty()) return std::string("No stage");
+
+    std::stringstream ss;
+    for (size_t i = 0; i < segments.size(); i++) {
+        if (i > 0) ss << ", ";
+        ss << static_cast<long>(segments[i].distance_m) << "m@"
+           << std::fixed << std::setprecision(2) << segments[i].target_speed_kph << "kph";
+    }
+    return ss.str();
 }
