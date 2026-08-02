@@ -88,6 +88,7 @@ static void applyCopilotCSS() {
         ".segment-label { font-size: 18px; }"
         ".segment-row entry, .segment-row button, .segment-row checkbutton { font-size: 18px; }"
         ".new-segment-row label, .new-segment-row entry, .new-segment-row button, .new-segment-row checkbutton { font-size: 18px; }"
+        ".segment-list-frame { border: 1px solid #444444; background-color: #111111; }"
         "scrollbar slider { min-width: 20px; min-height: 20px; }"
         "scrollbar.vertical slider { min-width: 20px; }"
         "scrollbar trough { min-width: 24px; }"
@@ -487,41 +488,49 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     data->stageSetupMainBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(screen), data->stageSetupMainBox, TRUE, TRUE, 0);
     
-    // Left side: segments list
+    // Left side: the segment table. Cropped to its content width rather than
+    // expanding to fill the panel -- the New: row below is the widest thing
+    // in it, so this column ends right after "add". The space that frees up
+    // goes to Beep Assist (RB-SEG-02), not to this list.
     GtkWidget* leftBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
-    gtk_widget_set_size_request(leftBox, 500, -1);
     gtk_box_pack_start(GTK_BOX(data->stageSetupMainBox), leftBox, FALSE, FALSE, 0);
-    
-    // Header row
-    GtkWidget* headerBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    gtk_box_pack_start(GTK_BOX(leftBox), headerBox, FALSE, FALSE, 0);
-    
-    GtkWidget* header1 = gtk_label_new("Speed (KPH)");
-    GtkWidget* header2 = gtk_label_new("Distance (m)");
-    GtkWidget* header3 = gtk_label_new("Auto");
-    GtkWidget* header4 = gtk_label_new("Time");
-    
-    gtk_style_context_add_class(gtk_widget_get_style_context(header1), "segment-label");
-    gtk_style_context_add_class(gtk_widget_get_style_context(header2), "segment-label");
-    gtk_style_context_add_class(gtk_widget_get_style_context(header3), "segment-label");
-    gtk_style_context_add_class(gtk_widget_get_style_context(header4), "segment-label");
-    
-    gtk_box_pack_start(GTK_BOX(headerBox), header1, FALSE, FALSE, 5);
-    gtk_box_pack_start(GTK_BOX(headerBox), header2, FALSE, FALSE, 80);
-    gtk_box_pack_start(GTK_BOX(headerBox), header3, FALSE, FALSE, 5);
-    gtk_box_pack_start(GTK_BOX(headerBox), header4, FALSE, FALSE, 5);
-    
-    // Scrollable list for segments
+
+    // Header row, on the same fixed column widths as the data rows below.
+    GtkWidget* headerGrid = gtk_grid_new();
+    gtk_grid_set_column_spacing(GTK_GRID(headerGrid), SEGMENT_COL_SPACING);
+    gtk_box_pack_start(GTK_BOX(leftBox), headerGrid, FALSE, FALSE, 0);
+
+    struct { const char* text; int width; } headers[] = {
+        { "Speed (KPH)",  SEGMENT_COL_SPEED },
+        { "Distance (m)", SEGMENT_COL_DISTANCE },
+        { "Auto",         SEGMENT_COL_AUTO },
+        { "Time",         SEGMENT_COL_TIME },
+        { "",             SEGMENT_COL_DELETE },
+    };
+    for (int i = 0; i < 5; i++) {
+        GtkWidget* lbl = gtk_label_new(headers[i].text);
+        gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "segment-label");
+        gtk_label_set_xalign(GTK_LABEL(lbl), 0.0);
+        gtk_widget_set_size_request(lbl, headers[i].width, -1);
+        gtk_grid_attach(GTK_GRID(headerGrid), lbl, i, 0, 1, 1);
+    }
+
+    // Scrollable list, framed so its extent is visible against the black
+    // background -- an unframed list reads as loose text on the panel.
+    GtkWidget* listFrame = gtk_frame_new(NULL);
+    gtk_style_context_add_class(gtk_widget_get_style_context(listFrame), "segment-list-frame");
+    gtk_box_pack_start(GTK_BOX(leftBox), listFrame, TRUE, TRUE, 0);
+
     GtkWidget* scrolled = gtk_scrolled_window_new(NULL, NULL);
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled), 
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled),
                                    GTK_POLICY_NEVER, GTK_POLICY_ALWAYS);
     gtk_scrolled_window_set_min_content_height(GTK_SCROLLED_WINDOW(scrolled), 150);
-    gtk_box_pack_start(GTK_BOX(leftBox), scrolled, TRUE, TRUE, 0);
-    
+    gtk_container_add(GTK_CONTAINER(listFrame), scrolled);
+
     data->segmentListBox = GTK_LIST_BOX(gtk_list_box_new());
     gtk_list_box_set_selection_mode(data->segmentListBox, GTK_SELECTION_NONE);
     gtk_container_add(GTK_CONTAINER(scrolled), GTK_WIDGET(data->segmentListBox));
-    
+
     // Memory columns (Set and Recall) - vertical layout between segments and keypad
     GtkWidget* memBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_box_pack_start(GTK_BOX(data->stageSetupMainBox), memBox, FALSE, FALSE, 10);
@@ -575,12 +584,12 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     GtkWidget* newLabel = gtk_label_new("New:");
     data->targetSpeedEntry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_placeholder_text(data->targetSpeedEntry, "KPH");
-    gtk_widget_set_size_request(GTK_WIDGET(data->targetSpeedEntry), 100, 40);
+    gtk_widget_set_size_request(GTK_WIDGET(data->targetSpeedEntry), 70, 40);
     g_signal_connect(data->targetSpeedEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
-    
+
     data->distanceEntry = GTK_ENTRY(gtk_entry_new());
-    gtk_entry_set_placeholder_text(data->distanceEntry, "meters (;  separated)");
-    gtk_widget_set_size_request(GTK_WIDGET(data->distanceEntry), 300, 40);
+    gtk_entry_set_placeholder_text(data->distanceEntry, "metres (;  separated)");
+    gtk_widget_set_size_request(GTK_WIDGET(data->distanceEntry), 180, 40);
     g_signal_connect(data->distanceEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     
     data->autoNextCheck = GTK_CHECK_BUTTON(gtk_check_button_new_with_label("Auto"));
@@ -590,21 +599,29 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_widget_set_size_request(addBtn, 60, 40);
     g_signal_connect(addBtn, "clicked", G_CALLBACK(on_add_segment), data);
     
-    GtkWidget* backBtn = gtk_button_new_with_label("back");
-    gtk_widget_set_size_request(backBtn, 60, 40);
-    g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
-    
     gtk_box_pack_start(GTK_BOX(addBox), newLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(addBox), GTK_WIDGET(data->targetSpeedEntry), FALSE, FALSE, 3);
     gtk_box_pack_start(GTK_BOX(addBox), GTK_WIDGET(data->distanceEntry), FALSE, FALSE, 3);
     gtk_box_pack_start(GTK_BOX(addBox), GTK_WIDGET(data->autoNextCheck), FALSE, FALSE, 3);
     gtk_box_pack_start(GTK_BOX(addBox), addBtn, FALSE, FALSE, 3);
-    gtk_box_pack_start(GTK_BOX(addBox), backBtn, FALSE, FALSE, 20);
-    
-    // Right side: numeric keypad (initially hidden, shown when entry focused)
+
+    // Right side: keypad, with "back" on its own row beneath it, in the same
+    // column. It used to sit in the New: row next to "add", where a mis-tap
+    // during data entry dropped the operator out of the screen mid-edit. (A
+    // fully separate column for "back" was tried and dropped -- it only
+    // squeezed Beep Assist for no real benefit.)
+    GtkWidget* rightCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    gtk_box_pack_end(GTK_BOX(data->stageSetupMainBox), rightCol, FALSE, FALSE, 10);
+
     data->numericKeypad = createNumericKeypad(data);
-    gtk_box_pack_end(GTK_BOX(data->stageSetupMainBox), data->numericKeypad, FALSE, FALSE, 10);
-    
+    gtk_box_pack_start(GTK_BOX(rightCol), data->numericKeypad, FALSE, FALSE, 0);
+
+    GtkWidget* backBtn = gtk_button_new_with_label("back");
+    gtk_widget_set_size_request(backBtn, -1, 40);
+    gtk_widget_set_valign(backBtn, GTK_ALIGN_END);
+    g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
+    gtk_box_pack_end(GTK_BOX(rightCol), backBtn, FALSE, FALSE, 0);
+
     data->activeEntry = NULL;
     
     return screen;
