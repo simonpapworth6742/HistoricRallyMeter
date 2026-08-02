@@ -4,6 +4,18 @@
 #include <gtk/gtk.h>
 #include "rally_types.h"
 
+// Column widths for the stage-setup segment table, in pixels. Declared once
+// and used by both the header row in createStageSetupScreen() and the data
+// rows in refreshSegmentList(): the two were previously laid out by different
+// mechanisms with separately hand-tuned paddings, so they lined up only by
+// coincidence and drifted apart whenever a value's width changed.
+constexpr int SEGMENT_COL_SPEED    = 140;
+constexpr int SEGMENT_COL_DISTANCE = 170;
+constexpr int SEGMENT_COL_AUTO     = 60;
+constexpr int SEGMENT_COL_TIME     = 70;
+constexpr int SEGMENT_COL_DELETE   = 70;
+constexpr int SEGMENT_COL_SPACING  = 15;
+
 gboolean on_window_delete(GtkWidget* widget, GdkEvent* event, gpointer user_data);
 void on_unit_toggle(GtkWidget* widget, gpointer user_data);
 void on_total_reset(GtkWidget* widget, gpointer user_data);
@@ -30,11 +42,19 @@ void on_keypad_digit(GtkWidget* widget, gpointer user_data);
 void on_keypad_clear(GtkWidget* widget, gpointer user_data);
 void on_keypad_backspace(GtkWidget* widget, gpointer user_data);
 gboolean on_entry_focus(GtkWidget* widget, GdkEvent* event, gpointer user_data);
+// Focus handler for the Beep Assist waypoint view, mirroring on_entry_focus.
+gboolean on_textview_focus(GtkWidget* widget, GdkEvent* event, gpointer user_data);
 void on_segment_entry_changed(GtkWidget* widget, gpointer user_data);
 void on_segment_auto_toggled(GtkWidget* widget, gpointer user_data);
 void on_memory_set(GtkWidget* widget, gpointer user_data);
 void on_memory_recall(GtkWidget* widget, gpointer user_data);
 void on_memory_clear(GtkWidget* widget, gpointer user_data);
+
+// Beep Assist controls on the stage-setup screen.
+void on_beep_waypoints_changed(GtkTextBuffer* buffer, gpointer user_data);
+gboolean on_beep_enable_toggled(GtkWidget* widget, gboolean state, gpointer user_data);
+void on_beep_mode_toggled(GtkWidget* widget, gpointer user_data);
+void on_beep_advance_changed(GtkWidget* widget, gpointer user_data);
 void on_alarm_set(GtkWidget* widget, gpointer user_data);
 void on_alarm_clear(GtkWidget* widget, gpointer user_data);
 void on_adj_driver_zero(GtkWidget* widget, gpointer user_data);

@@ -44,6 +44,10 @@ void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->total_start_cntr1 = current_poll.cntr1;
     data->state->total_start_cntr2 = current_poll.cntr2;
     data->state->total_start_time_ms = getRallyTime_ms(*data->state);
+    // Waypoints are measured from the Total counter's zero, so re-zeroing it
+    // puts every waypoint back in front of the car.
+    data->beepNextNavIndex = 0;
+    data->beepNextTimingIndex = 0;
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -115,7 +119,11 @@ void performStageGo(AppData* data) {
     data->smoothedSpeed = -1.0;
     data->state->ahead_behind_zero_offset_ms = 0;
     data->autoStartTriggered = false;
-    
+    // Waypoints are measured from the Total counter's zero, so re-zeroing it
+    // puts every waypoint back in front of the car.
+    data->beepNextNavIndex = 0;
+    data->beepNextTimingIndex = 0;
+
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
     
     ConfigFile::save(*data->state);
@@ -420,25 +428,41 @@ GtkWidget* createDateTimeKeypad(AppData* data) {
 // Keypad callbacks
 void on_keypad_digit(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    if (data->activeBuffer) {
+        gtk_text_buffer_insert_at_cursor(data->activeBuffer,
+                                         gtk_button_get_label(GTK_BUTTON(widget)), -1);
+        return;
+    }
     if (!data->activeEntry) return;
-    
+
     const char* digit = gtk_button_get_label(GTK_BUTTON(widget));
     const char* current = gtk_entry_get_text(data->activeEntry);
-    
+
     std::string new_text = std::string(current) + digit;
     gtk_entry_set_text(data->activeEntry, new_text.c_str());
 }
 
 void on_keypad_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    if (data->activeBuffer) {
+        gtk_text_buffer_set_text(data->activeBuffer, "", -1);
+        return;
+    }
     if (!data->activeEntry) return;
     gtk_entry_set_text(data->activeEntry, "");
 }
 
 void on_keypad_backspace(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    if (data->activeBuffer) {
+        GtkTextIter cursor;
+        gtk_text_buffer_get_iter_at_mark(data->activeBuffer, &cursor,
+                                         gtk_text_buffer_get_insert(data->activeBuffer));
+        gtk_text_buffer_backspace(data->activeBuffer, &cursor, TRUE, TRUE);
+        return;
+    }
     if (!data->activeEntry) return;
-    
+
     const char* current = gtk_entry_get_text(data->activeEntry);
     std::string text(current);
     if (!text.empty()) {
@@ -450,7 +474,15 @@ void on_keypad_backspace(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 gboolean on_entry_focus(GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     data->activeEntry = GTK_ENTRY(widget);
+    data->activeBuffer = nullptr;
     gtk_widget_show(data->numericKeypad);
+    return FALSE;
+}
+
+gboolean on_textview_focus(GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->activeEntry = nullptr;   // exactly one keypad target at a time
+    data->activeBuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(widget));
     return FALSE;
 }
 
@@ -505,16 +537,16 @@ void refreshSegmentList(AppData* data) {
         long distance_m = static_cast<long>(seg.distance_m);
         
         GtkWidget* row = gtk_list_box_row_new();
-        GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-        gtk_style_context_add_class(gtk_widget_get_style_context(box), "segment-row");
-        gtk_container_add(GTK_CONTAINER(row), box);
-        
+        GtkWidget* grid = gtk_grid_new();
+        gtk_grid_set_column_spacing(GTK_GRID(grid), SEGMENT_COL_SPACING);
+        gtk_style_context_add_class(gtk_widget_get_style_context(grid), "segment-row");
+        gtk_container_add(GTK_CONTAINER(row), grid);
+
         // Speed entry (editable)
         std::stringstream ss;
         ss << std::fixed << std::setprecision(2) << target_kph;
         GtkWidget* speedEntry = gtk_entry_new();
         gtk_entry_set_text(GTK_ENTRY(speedEntry), ss.str().c_str());
-        gtk_widget_set_size_request(speedEntry, 100, 36);
         g_object_set_data(G_OBJECT(speedEntry), "app_data", data);
         g_object_set_data(G_OBJECT(speedEntry), "entry_type", (gpointer)"speed");
         g_signal_connect(speedEntry, "changed", G_CALLBACK(on_segment_entry_changed), GINT_TO_POINTER(i));
@@ -525,7 +557,6 @@ void refreshSegmentList(AppData* data) {
         ss << distance_m;
         GtkWidget* distEntry = gtk_entry_new();
         gtk_entry_set_text(GTK_ENTRY(distEntry), ss.str().c_str());
-        gtk_widget_set_size_request(distEntry, 100, 36);
         g_object_set_data(G_OBJECT(distEntry), "app_data", data);
         g_object_set_data(G_OBJECT(distEntry), "entry_type", (gpointer)"distance");
         g_signal_connect(distEntry, "changed", G_CALLBACK(on_segment_entry_changed), GINT_TO_POINTER(i));
@@ -549,16 +580,25 @@ void refreshSegmentList(AppData* data) {
         
         // Delete button
         GtkWidget* deleteBtn = gtk_button_new_with_label("del");
-        gtk_widget_set_size_request(deleteBtn, -1, 36);
         g_object_set_data(G_OBJECT(deleteBtn), "app_data", data);
         g_signal_connect(deleteBtn, "clicked", G_CALLBACK(on_delete_segment), GINT_TO_POINTER(i));
-        
-        gtk_box_pack_start(GTK_BOX(box), speedEntry, FALSE, FALSE, 5);
-        gtk_box_pack_start(GTK_BOX(box), distEntry, FALSE, FALSE, 5);
-        gtk_box_pack_start(GTK_BOX(box), autoCheck, FALSE, FALSE, 15);
-        gtk_box_pack_start(GTK_BOX(box), timeLabel, FALSE, FALSE, 5);
-        gtk_box_pack_start(GTK_BOX(box), deleteBtn, FALSE, FALSE, 5);
-        
+
+        gtk_widget_set_size_request(speedEntry, SEGMENT_COL_SPEED, 36);
+        gtk_grid_attach(GTK_GRID(grid), speedEntry, 0, 0, 1, 1);
+
+        gtk_widget_set_size_request(distEntry, SEGMENT_COL_DISTANCE, 36);
+        gtk_grid_attach(GTK_GRID(grid), distEntry, 1, 0, 1, 1);
+
+        gtk_widget_set_size_request(autoCheck, SEGMENT_COL_AUTO, -1);
+        gtk_grid_attach(GTK_GRID(grid), autoCheck, 2, 0, 1, 1);
+
+        gtk_label_set_xalign(GTK_LABEL(timeLabel), 0.0);
+        gtk_widget_set_size_request(timeLabel, SEGMENT_COL_TIME, -1);
+        gtk_grid_attach(GTK_GRID(grid), timeLabel, 3, 0, 1, 1);
+
+        gtk_widget_set_size_request(deleteBtn, SEGMENT_COL_DELETE, 36);
+        gtk_grid_attach(GTK_GRID(grid), deleteBtn, 4, 0, 1, 1);
+
         gtk_list_box_insert(data->segmentListBox, row, -1);
         gtk_widget_show_all(row);
     }
@@ -1122,4 +1162,63 @@ void on_autostart_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     ConfigFile::save(*data->state);
     gtk_entry_set_text(data->autoStartTimeEntry, "");
     updateAutoStartDisplay(data);
+}
+
+// Re-parse the waypoint list on every edit. Parsing is cheap and forgiving
+// (a malformed token is skipped, not fatal), so there is no need to make the
+// operator confirm -- and no half-entered state to get stuck in.
+void on_beep_waypoints_changed(GtkTextBuffer* buffer, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    GtkTextIter start, end;
+    gtk_text_buffer_get_bounds(buffer, &start, &end);
+    gchar* text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+    data->state->beep_waypoints_m = parseBeepWaypointsKm(text ? text : "");
+    g_free(text);
+
+    // The list changed under the cursor, so the cursor is meaningless; rebuild
+    // it from where the car actually is.
+    auto poll = data->poller->getMostRecent();
+    int64_t counts = calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
+                                             data->state->total_start_cntr1,
+                                             data->state->total_start_cntr2);
+    double travelled_m = countsToMeters(counts, data->state->calibration);
+    data->beepNextNavIndex = beepCursorFor(data->state->beep_waypoints_m, travelled_m);
+    data->beepNextTimingIndex = beepCursorFor(data->state->beep_waypoints_m, travelled_m);
+
+    ConfigFile::save(*data->state);
+}
+
+gboolean on_beep_enable_toggled(G_GNUC_UNUSED GtkWidget* widget, gboolean state, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->state->beep_assist_enabled = state;
+    ConfigFile::save(*data->state);
+    return FALSE;  // let the switch draw the new state
+}
+
+void on_beep_mode_toggled(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    bool active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+    if (GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "mode")) == 1)
+        data->state->beep_timing_mode = active;
+    else
+        data->state->beep_navigation_mode = active;
+    ConfigFile::save(*data->state);
+}
+
+void on_beep_advance_changed(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    const char* text = gtk_entry_get_text(GTK_ENTRY(widget));
+    bool is_seconds = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "mode")) == 1;
+    double value = 0.0;
+    try {
+        if (text && *text) value = std::stod(text);
+    } catch (const std::exception&) {
+        // Mid-typing the field is briefly unparseable ("." on its own); treat
+        // that as no lead-in rather than rejecting the keystroke.
+        value = 0.0;
+    }
+    if (value < 0.0) value = 0.0;
+    if (is_seconds) data->state->beep_advance_s = value;
+    else            data->state->beep_advance_m = value;
+    ConfigFile::save(*data->state);
 }

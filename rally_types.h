@@ -109,8 +109,28 @@ struct AppData {
     GtkCheckButton* autoNextCheck;
     GtkWidget* numericKeypad;      // Numeric keypad container
     GtkEntry* activeEntry;         // Currently focused entry for keypad input
+    // Keypad target when the focused widget is a multi-line view rather than
+    // a single-line entry (the Beep Assist waypoint list). At most one of
+    // activeEntry / activeBuffer is ever non-null, so a keypress cannot land
+    // in two places.
+    GtkTextBuffer* activeBuffer = nullptr;
     GtkWidget* memoryRecallBtns[5] = {};  // Recall buttons for memory slots
-    
+
+    // Beep Assist runtime cursors: index of the next waypoint not yet beeped,
+    // one per mode. Separate cursors so navigation and timing can each fire
+    // independently for the same waypoint -- a shared cursor meant whichever
+    // condition tripped first silently consumed the OTHER mode's beep for
+    // that waypoint too (e.g. a navigation lead-in tripping before the
+    // scheduled time meant the timing beep never fired at all).
+    // Deliberately not persisted -- on restart they are re-derived from the
+    // distance already travelled, so a power blip mid-stage does not replay
+    // every waypoint the car has already passed.
+    size_t beepNextNavIndex = 0;
+    size_t beepNextTimingIndex = 0;
+    GtkTextBuffer* beepWaypointBuffer = nullptr;
+    GtkEntry* beepAdvanceMetresEntry = nullptr;
+    GtkEntry* beepAdvanceSecondsEntry = nullptr;
+
     // Calibration screen
     GtkWidget* calibrationScreen;
     GtkWidget* calibrationMainBox;  // Main horizontal container for keypad
