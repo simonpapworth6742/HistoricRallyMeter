@@ -99,6 +99,7 @@ static void applyDialogStyle(GtkWidget* dialog) {
     G_GNUC_END_IGNORE_DEPRECATIONS
     if (action_area && GTK_IS_BUTTON_BOX(action_area)) {
         gtk_box_set_spacing(GTK_BOX(action_area), 20);
+        gtk_button_box_set_layout(GTK_BUTTON_BOX(action_area), GTK_BUTTONBOX_CENTER);
     }
 }
 
@@ -238,10 +239,43 @@ void performStageGo(AppData* data) {
 }
 
 static const int RESPONSE_AUTO_START = 99;
+static const int RESPONSE_AUTO_START_NEXT_MINUTE = 98;
+
+// Defined further down (used by on_show_autostart/on_autostart_set); forward
+// declared here so the quick-set button below can share the same epoch.
+static int64_t getAutoStartEpochMs();
+
+// Always the *next* minute boundary, even if rally_ms already sits exactly on
+// one -- the quick-set button's printed time must still be ahead when pressed.
+static int64_t nextRoundMinute_ms(int64_t rally_ms) {
+    return ((rally_ms / 60000) + 1) * 60000;
+}
+
+static std::string formatHms(int64_t epoch_ms) {
+    time_t s = epoch_ms / 1000;
+    struct tm* t = localtime(&s);
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);
+    return std::string(buf);
+}
+
+// Commits the autostart time directly (no manual entry needed), reusing the
+// same state field and epoch as the "Set Autostart" screen.
+static void setAutoStartToNextRoundMinute(AppData* data) {
+    int64_t target_ms = nextRoundMinute_ms(getRallyTime_ms(*data->state));
+    int64_t epoch_ms = getAutoStartEpochMs();
+    data->state->auto_start_rally_time_minutes =
+        static_cast<uint64_t>((target_ms - epoch_ms) / 60000);
+    data->autoStartTriggered = false;
+    ConfigFile::save(*data->state);
+}
 
 void on_stage_go(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    
+
+    std::string nextMinuteLabel = "Autostart "
+        + formatHms(nextRoundMinute_ms(getRallyTime_ms(*data->state)));
+
     GtkWidget* dialog = gtk_dialog_new_with_buttons(
         "Confirm Stage Go",
         GTK_WINDOW(gtk_widget_get_toplevel(widget)),
@@ -250,6 +284,7 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
         // option is that the stage begins immediately.
         "Now", GTK_RESPONSE_YES,
         "Set Autostart", RESPONSE_AUTO_START,
+        nextMinuteLabel.c_str(), RESPONSE_AUTO_START_NEXT_MINUTE,
         "No", GTK_RESPONSE_NO,
         nullptr);
 
@@ -297,6 +332,11 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
         performStageGo(data);
     } else if (response == RESPONSE_AUTO_START) {
         on_show_autostart(widget, user_data);
+    } else if (response == RESPONSE_AUTO_START_NEXT_MINUTE) {
+        // Already fully committed by setAutoStartToNextRoundMinute -- no
+        // Set/Save step needed, so just return to whatever screen was
+        // showing rather than detouring through the autostart setup screen.
+        setAutoStartToNextRoundMinute(data);
     }
 }
 
