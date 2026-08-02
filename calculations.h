@@ -51,4 +51,105 @@ double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elaps
 double calculateAheadBehindFromStageStart(const RallyState& state, int64_t current_time_ms,
                                           int64_t actual_counts_from_stage_start);
 
+// Geometry of the compact (800x480-style) driver gauge layout. Pure
+// arithmetic with no GTK or Cairo dependency, so the numbers can be
+// unit-tested with no display. The same computation is mirrored in
+// tools/layout-preview/DriverWindowTextLayout.html -- edit both together.
+struct CompactGaugeLayout {
+    double radius;          // arc radius
+    double centerX;         // hub x
+    double centerY;         // hub y
+    double fscale;          // font scale, 1.0 at the reference radius
+    double valSize;         // Current/Target/Total/Trip value font size
+    double labelSize;       // row caption font size
+    double labelGap;        // gap between a value's anchor and its caption
+    double rowGap;          // vertical spacing between value rows
+    double rightAnchor;     // right edge every speed value aligns to
+    double distanceAnchor;  // right edge every distance value AND the
+                             // "Distance (metres)" caption (RB-DRV-02) align
+                             // to -- both right-aligned to the same X, so a
+                             // value's last digit and the caption's closing
+                             // ")" always share one vertical edge
+    double curBaseline;     // Current speed, top of the panel
+    double targetBaseline;  // Target speed
+    double totalBaseline;   // Total average speed / Total distance
+    double tripBaseline;    // Trip average speed / Trip distance
+    double captionBaseline; // column captions, under the value rows
+    double boxY;            // ahead/behind readout box, top edge
+    double boxHeight;       // ahead/behind readout box height
+    double footBaseline;    // fps/cpu footer baseline
+    double footSize;        // fps/cpu footer font size
+};
+
+CompactGaugeLayout computeCompactGaugeLayout(double width, double height);
+
+// Caption for the driver gauge's distance column. The caption carries the
+// unit rather than each value repeating it, so it has to follow the
+// automatic m/km switch that formatDistanceAutoUnit() applies to the values.
+std::string distanceColumnCaption(const char* unit);
+
+// Caption for the driver gauge's average-speed column, following the
+// KPH/MPH setting from the date/time screen.
+std::string speedColumnCaption(bool units_mph);
+
+// Geometry of the gauge needle for a given ahead/behind reading. Pure
+// arithmetic so the clamping and angle mapping can be unit-tested without a
+// display. The needle is a constant-width bar the same width as the major
+// ticks, so it reads as "which tick am I on" rather than "roughly this
+// direction".
+struct NeedleGeometry {
+    double angle;      // radians, Cairo convention (3*PI/2 is straight up)
+    double length;     // hub to tip
+    double halfWidth;  // half the bar's width
+};
+
+NeedleGeometry computeNeedleGeometry(double seconds, double max_seconds, double radius);
+
+// The gauge's effective sweep, in seconds: fixed at 3 while the reading is
+// within it (the needle deflects normally, exactly like pristine's green
+// scale), then tracks |seconds| exactly -- not a preset -- up to a cap of
+// 30. Feeding this into computeNeedleGeometry() as max_seconds is what pins
+// the needle horizontal for any reading past 3s: seconds/max_seconds is
+// then always exactly +-1, with no separate clamp needed anywhere else. The
+// tick count (one per second of this value) grows around the pinned needle
+// instead of the needle continuing to sweep a fixed dial.
+double gaugeEffectiveMaxSeconds(double seconds);
+
+// Which zone the reading is in: 0 = green (|seconds| < 10, still deflecting
+// or just pinned), 1 = amber (10 to 30), 2 = red (30 and beyond, capped).
+// Drives the arc colour, the scale-end chevron count, and the digital box's
+// mm:ss/decimal format -- pristine read a single persisted, debounced
+// data->gaugeScale (0/1/2) for all three; this supplies the same numbering,
+// computed fresh from the reading every frame instead.
+int gaugeZone(double seconds);
+
+// Arc colour for a zone (see gaugeZone), matching pristine's exact
+// per-scale RGB triples.
+struct GaugeArcColor { double r, g, b; };
+GaugeArcColor gaugeArcColor(int zone);
+
+// Numeral for a tick on the gauge, one tick per second of the current
+// effective sweep. Empty for the zero tick, which the centre triangle marks
+// instead.
+std::string gaugeTickLabel(int index);
+
+// True while tick numerals should be drawn at all: only in the green zone.
+// Past that, the dial has grown past the point where labelling individual
+// second-ticks is useful -- the arc colour is the at-a-glance signal
+// instead, and a numeral next to a pinned needle would claim a precision
+// the needle position no longer carries.
+bool gaugeTickLabelsVisible(double seconds);
+
+// Angle (Cairo convention, same as NeedleGeometry::angle) for the major tick
+// labelled `index` seconds, given the gauge's current effective sweep
+// max_val (see gaugeEffectiveMaxSeconds). Uses the same seconds/max_val
+// mapping as computeNeedleGeometry() so a tick numeral "i" always sits at
+// the angle a reading of exactly i seconds would put the needle at -- even
+// when max_val itself is fractional (e.g. max_val = 3.9 while still
+// deflecting within the inner zone). Do not divide by a truncated tick
+// count instead of max_val here: that would place tick "i" at
+// i/tick_count of the sweep, i.e. i * (max_val / tick_count) seconds, not
+// i seconds, whenever max_val has a fractional remainder.
+double gaugeTickAngle(int index, double max_val);
+
 #endif // CALCULATIONS_H

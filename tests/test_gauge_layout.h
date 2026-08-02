@@ -1,0 +1,235 @@
+#ifndef TEST_GAUGE_LAYOUT_H
+#define TEST_GAUGE_LAYOUT_H
+
+#include "test_framework.h"
+#include "../calculations.h"
+#include <cmath>
+#include <string>
+
+// Geometry tests for the compact (800x480) driver gauge layout. The same
+// arithmetic is mirrored in tools/layout-preview/DriverWindowTextLayout.html;
+// if that mockup is edited, these expectations move with it.
+class TestGaugeLayout {
+public:
+    TestSuite* createSuite() {
+        auto* suite = new TestSuite("Compact Gauge Layout");
+
+        suite->addTest("radius and centre match the 800x480 box", []() {
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            // radius = min(width/2 - 25, height - 95) = min(375, 385) = 375
+            return std::abs(L.radius - 375.0) < 0.001
+                && std::abs(L.centerX - 400.0) < 0.001
+                && std::abs(L.centerY - 405.0) < 0.001;
+        });
+
+        suite->addTest("fscale never exceeds 1.0", []() {
+            // A gauge larger than the reference must not scale fonts UP, or
+            // the values overflow the panel on a wide display.
+            CompactGaugeLayout big = computeCompactGaugeLayout(1600, 900);
+            CompactGaugeLayout small = computeCompactGaugeLayout(400, 240);
+            return std::abs(big.fscale - 1.0) < 0.001 && small.fscale < 1.0;
+        });
+
+        suite->addTest("distance anchor sits left of centre, scaled by radius", []() {
+            // Not mirrored off centerX like rightAnchor -- distanceAnchor is
+            // where the "Distance (metres)" caption's own text ends up
+            // right-aligning to, an absolute offset from the arc's own
+            // radius, not a centre-relative gap.
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            // radius = 375, so distanceAnchor = 375 * 0.72 = 270.
+            return std::abs(L.distanceAnchor - 270.0) < 0.001
+                && L.distanceAnchor < L.centerX;
+        });
+
+        suite->addTest("Target sits above Total sits above Trip", []() {
+            // Smaller baseline = higher on screen. Rows must be one rowGap
+            // apart so a distance on the left lines up with its speed.
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return L.targetBaseline < L.totalBaseline
+                && L.totalBaseline < L.tripBaseline
+                && std::abs((L.totalBaseline - L.targetBaseline) - L.rowGap) < 0.001
+                && std::abs((L.tripBaseline - L.totalBaseline) - L.rowGap) < 0.001;
+        });
+
+        suite->addTest("row gap is 48 at full scale", []() {
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return std::abs(L.rowGap - 48.0) < 0.001;
+        });
+
+        suite->addTest("Current sits above every other row", []() {
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return L.curBaseline < L.targetBaseline;
+        });
+
+        suite->addTest("Trip row clears the needle hub", []() {
+            // The bottom row must not collide with the hub at centerY.
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return L.tripBaseline < L.centerY;
+        });
+
+        suite->addTest("caption clears the Trip row above it", []() {
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return L.captionBaseline > L.tripBaseline;
+        });
+
+        suite->addTest("distance caption follows the metre/kilometre switch", []() {
+            // The caption carries the unit, so it must track the automatic
+            // switch formatDistanceAutoUnit() makes above 999,999 m -- a
+            // hard-coded "metres" would misread a km value by 1000x.
+            return distanceColumnCaption("m") == "Distance (metres)"
+                && distanceColumnCaption("km") == "Distance (kilometres)";
+        });
+
+        suite->addTest("distance caption defaults to metres on a null unit", []() {
+            return distanceColumnCaption(nullptr) == "Distance (metres)";
+        });
+
+        suite->addTest("speed caption follows the KPH/MPH setting", []() {
+            return speedColumnCaption(false) == "Average Speed (Kmh)"
+                && speedColumnCaption(true) == "Average Speed (Mph)";
+        });
+
+        suite->addTest("error box covers the needle hub", []() {
+            // The box is lifted so its top edge is above the hub; drawn after
+            // the needle it then paints the hub out, which is the point.
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return L.boxY < L.centerY
+                && (L.boxY + L.boxHeight) > L.centerY;
+        });
+
+        suite->addTest("error box is 50px tall", []() {
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return std::abs(L.boxHeight - 50.0) < 0.001;
+        });
+
+        suite->addTest("footer sits on the bottom edge of the error box", []() {
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return std::abs(L.footBaseline - (L.boxY + L.boxHeight)) < 0.001;
+        });
+
+        suite->addTest("footer text never shrinks below 11px", []() {
+            // Below ~11px the fps/cpu readout is unreadable on the box's
+            // 800x480 panel at arm's length.
+            CompactGaugeLayout tiny = computeCompactGaugeLayout(320, 200);
+            return tiny.footSize >= 11.0;
+        });
+
+        suite->addTest("captions clear the error box", []() {
+            // The captions were previously top-aligned with the box. Now
+            // the box has moved up over the hub, they must not follow it
+            // there.
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return L.captionBaseline > L.boxY;
+        });
+
+        suite->addTest("needle points straight up at zero error", []() {
+            NeedleGeometry n = computeNeedleGeometry(0.0, 10.0, 375.0);
+            // Cairo's y grows downward, so straight up is 3*PI/2.
+            return std::abs(n.angle - (3.0 * M_PI / 2.0)) < 1e-9;
+        });
+
+        suite->addTest("needle reaches the scale ends at full deflection", []() {
+            NeedleGeometry pos = computeNeedleGeometry(10.0, 10.0, 375.0);
+            NeedleGeometry neg = computeNeedleGeometry(-10.0, 10.0, 375.0);
+            return std::abs(pos.angle - 2.0 * M_PI) < 1e-9
+                && std::abs(neg.angle - M_PI) < 1e-9;
+        });
+
+        suite->addTest("needle pegs rather than sweeping past the scale", []() {
+            // Beyond full deflection the needle stops; the digital readout
+            // carries the real magnitude.
+            NeedleGeometry way_over = computeNeedleGeometry(600.0, 10.0, 375.0);
+            NeedleGeometry at_max = computeNeedleGeometry(10.0, 10.0, 375.0);
+            return std::abs(way_over.angle - at_max.angle) < 1e-9;
+        });
+
+        suite->addTest("needle tip stops short of the tick ring", []() {
+            NeedleGeometry n = computeNeedleGeometry(0.0, 10.0, 375.0);
+            return n.length < 375.0 - 10.0 && n.length > 0.0;
+        });
+
+        suite->addTest("needle is a constant-width bar matching the ticks", []() {
+            NeedleGeometry a = computeNeedleGeometry(0.0, 10.0, 375.0);
+            NeedleGeometry b = computeNeedleGeometry(7.5, 10.0, 375.0);
+            return std::abs(a.halfWidth - 3.0) < 1e-9
+                && std::abs(a.halfWidth - b.halfWidth) < 1e-9;
+        });
+
+        suite->addTest("effective max stays at 3 within the inner zone", []() {
+            // Matches pristine's green ±3s scale exactly while deflecting.
+            return std::abs(gaugeEffectiveMaxSeconds(1.5) - 3.0) < 1e-9
+                && std::abs(gaugeEffectiveMaxSeconds(-2.9) - 3.0) < 1e-9;
+        });
+
+        suite->addTest("effective max tracks the reading beyond 3, capped at 30", []() {
+            // This is what makes the needle sit pinned at the edge past 3s
+            // with no separate clamp: seconds/effectiveMax is always exactly
+            // +-1 here, by construction.
+            return std::abs(gaugeEffectiveMaxSeconds(15.0) - 15.0) < 1e-9
+                && std::abs(gaugeEffectiveMaxSeconds(-15.0) - 15.0) < 1e-9
+                && std::abs(gaugeEffectiveMaxSeconds(45.0) - 30.0) < 1e-9
+                && std::abs(gaugeEffectiveMaxSeconds(-100.0) - 30.0) < 1e-9;
+        });
+
+        suite->addTest("zone follows the 10s and 30s boundaries, sign-independent", []() {
+            return gaugeZone(5.0) == 0 && gaugeZone(9.9) == 0
+                && gaugeZone(10.0) == 1 && gaugeZone(29.9) == 1
+                && gaugeZone(30.0) == 2 && gaugeZone(-30.0) == 2;
+        });
+
+        suite->addTest("arc colour matches pristine's per-scale values", []() {
+            GaugeArcColor green = gaugeArcColor(0);
+            GaugeArcColor amber = gaugeArcColor(1);
+            GaugeArcColor red   = gaugeArcColor(2);
+            return std::abs(green.g - 0.7) < 1e-9 && green.r < 1e-9
+                && std::abs(amber.r - 0.85) < 1e-9 && std::abs(amber.g - 0.65) < 1e-9
+                && std::abs(red.r - 0.8) < 1e-9 && std::abs(red.g - 0.1) < 1e-9;
+        });
+
+        suite->addTest("tick label is signed, blank at zero", []() {
+            // The centre is marked by the triangle above the arc; a "0"
+            // there would sit under the needle at rest.
+            return gaugeTickLabel(0).empty()
+                && gaugeTickLabel(-7) == "-7"
+                && gaugeTickLabel(12) == "12";
+        });
+
+        suite->addTest("tick labels are visible only in the green zone", []() {
+            return gaugeTickLabelsVisible(5.0)
+                && !gaugeTickLabelsVisible(10.0)
+                && !gaugeTickLabelsVisible(30.0)
+                && !gaugeTickLabelsVisible(-15.0);
+        });
+
+        suite->addTest("tick angle matches the needle angle for the same seconds value", []() {
+            // A tick labelled i seconds must sit at the same angle the
+            // needle would be at for a reading of exactly i seconds -- the
+            // whole point of numbering the ticks at all.
+            double max_val = 10.0;
+            for (int i = -10; i <= 10; i++) {
+                NeedleGeometry n = computeNeedleGeometry(static_cast<double>(i), max_val, 375.0);
+                double tick_angle = gaugeTickAngle(i, max_val);
+                if (std::abs(n.angle - tick_angle) > 1e-9) return false;
+            }
+            return true;
+        });
+
+        suite->addTest("tick angle is exact even when max_val is fractional", []() {
+            // Reviewer's worked example: reading = 3.9s -> max_val = 3.9,
+            // tick_count (truncated) = 3. Before the fix, tick "3" was
+            // placed at angle = i/tick_count of the sweep, i.e. 3.9
+            // seconds' worth of deflection instead of 3 -- a 0.9s error.
+            // gaugeTickAngle() must divide by max_val (3.9), not
+            // tick_count (3), so tick "3" lands exactly where a genuine
+            // 3-second reading would put the needle.
+            double max_val = 3.9;
+            NeedleGeometry three_sec_needle = computeNeedleGeometry(3.0, max_val, 375.0);
+            double tick_three_angle = gaugeTickAngle(3, max_val);
+            return std::abs(three_sec_needle.angle - tick_three_angle) < 1e-9;
+        });
+
+        return suite;
+    }
+};
+
+#endif // TEST_GAUGE_LAYOUT_H

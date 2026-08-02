@@ -9,9 +9,9 @@
 #include <sstream>
 #include <cmath>
 #include <cstdio>
-#include <chrono>
 #include <ctime>
 #include <fstream>
+#include <string>
 
 static std::string readCpuTemp() {
     std::ifstream f("/sys/class/thermal/thermal_zone0/temp");
@@ -23,50 +23,9 @@ static std::string readCpuTemp() {
     return buf;
 }
 
-// Auto-scaling gauge with 2-second debounce.
-// Scale 0: ±3 seconds   (green arc)
-// Scale 1: ±10 seconds  (yellow arc)
-// Scale 2: ±5 minutes   (red arc)
-static int64_t gauge_now_ms() {
-    auto now = std::chrono::system_clock::now();
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        now.time_since_epoch()).count();
-}
-
-static void updateGaugeScale(AppData* data) {
-    double abs_sec = std::abs(data->aheadBehindSeconds);
-    int desired;
-
-    if (abs_sec <= 3.0) desired = 0;
-    else if (abs_sec <= 10.0) desired = 1;
-    else desired = 2;
-
-    if (desired == data->gaugeScale) return;
-
-    // Cooldown: don't change again within 2 seconds of the last change
-    int64_t now = gauge_now_ms();
-    if (now - data->gaugeScaleChangeTime < 2000) return;
-
-    data->gaugeScale = desired;
-    data->gaugeScaleChangeTime = now;
-}
-
-struct GaugeScaleInfo {
-    double max_seconds;
-    int major_count;       // number of major divisions on each side
-    int minor_per_major;   // minor ticks between each major
-    double arc_r, arc_g, arc_b;  // arc colour
-};
-
-static GaugeScaleInfo getGaugeScaleInfo(int scale) {
-    switch (scale) {
-    case 0:  return { 3.0,    3,  5, 0.0, 0.7, 0.0 };   // green
-    case 2:  return { 300.0,  5,  6, 0.8, 0.1, 0.1 };   // red
-    default: return { 10.0,   5,  5, 0.85, 0.65, 0.0 };  // yellow
-    }
-}
-
-// Format the digital readout based on scale
+// Format the digital readout based on scale. `scale` here is the caller's
+// zone number (see gaugeZone()) -- not a persisted scale field -- but the
+// formatting itself is intentionally unchanged from pristine:
 // Red (±5min): ±hhh:mm:ss   Yellow/Green (±10s/±3s): ±ss.s
 static void formatGaugeDigital(char* buf, size_t bufsize, double seconds, int scale) {
     double abs_sec = std::abs(seconds);
@@ -105,9 +64,21 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     double centerX = data->driverCompactMode ? width / 2 : width - radius - 20;
     double centerY = data->driverCompactMode ? height - 75 : (height + radius) / 2;
 
-    updateGaugeScale(data);
-    GaugeScaleInfo si = getGaugeScaleInfo(data->gaugeScale);
-    double max_val = si.max_seconds;
+    // Every quantity below is a pure function of this one reading,
+    // recomputed fresh every frame -- there is no discrete "scale" to
+    // debounce or switch between any more.
+    double seconds = data->aheadBehindSeconds;
+    double max_val = gaugeEffectiveMaxSeconds(seconds);
+    int zone = gaugeZone(seconds);
+    GaugeArcColor arc = gaugeArcColor(zone);
+
+    // Needle bar half-width, declared here so the ticks can match it.
+    constexpr double NEEDLE_HALF_WIDTH = 3.0;
+
+    // Font scale, 1.0 at the reference gauge radius. Used by the tick
+    // numerals here and by the value rows in the compact branch below.
+    constexpr double REF_RADIUS = 256.0;
+    double fscale = std::min(1.0, radius / REF_RADIUS);
 
     // Background
     cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
@@ -125,102 +96,75 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     cairo_arc(cr, centerX, centerY, radius, M_PI, 2 * M_PI);
     cairo_stroke(cr);
 
-    // Coloured graduated arc (green/yellow/red depending on scale)
+    // Coloured graduated arc (green/amber/red depending on the continuous
+    // zone the reading currently falls in -- see gaugeZone()).
     int arc_segments = 40;
-    for (int i = 0; i <= arc_segments; i++) {
+    for (int i = 0; i < arc_segments; i++) {
         double frac = -1.0 + (2.0 * i) / arc_segments;
         double angle = M_PI + M_PI/2 + frac * (M_PI / 2);
         double next_frac = -1.0 + (2.0 * (i + 1)) / arc_segments;
         double next_angle = M_PI + M_PI/2 + next_frac * (M_PI / 2);
 
-        double intensity = 0.3 + 0.7 * std::abs(frac);
-        cairo_set_source_rgb(cr, si.arc_r * intensity, si.arc_g * intensity, si.arc_b * intensity);
+        cairo_set_source_rgb(cr, arc.r, arc.g, arc.b);
         cairo_set_line_width(cr, 12);
         cairo_arc(cr, centerX, centerY, radius, angle, next_angle);
         cairo_stroke(cr);
     }
 
-    // Determine label values based on scale
-    // Scale 0 (±3s):   majors at 1,2,3 -- labels "1","2","3" (sec)
-    // Scale 1 (±10s):  majors at 2,4,6,8,10 -- labels "2","4","6","8","10" (sec)
-    // Scale 2 (±5min): majors at 1,2,3,4,5 -- labels "1","2","3","4","5" (min)
-    bool show_minutes = (data->gaugeScale == 2);
-    double label_divisor = show_minutes ? 60.0 : 1.0;
-
-    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
-    cairo_select_font_face(cr, "Sans", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 13);
-
-    // Major ticks
-    double major_step_sec = max_val / si.major_count;
-    for (int i = -si.major_count; i <= si.major_count; i++) {
-        double val_sec = i * major_step_sec;
-        double frac = val_sec / max_val;
-        double angle = M_PI + M_PI/2 + frac * (M_PI / 2);
+    // One tick per second of the effective sweep -- 3 per side while
+    // deflecting, growing 1:1 with the reading beyond that, capped at 30.
+    // Every tick is the same width (matching the needle bar RB-DRV-04
+    // defines); pristine's separate, thinner "minor tick" category is gone.
+    // Numerals are drawn only in the green zone -- past that the arc
+    // colour is the at-a-glance signal instead.
+    bool labels_visible = gaugeTickLabelsVisible(seconds);
+    int tick_count = static_cast<int>(max_val);
+    for (int i = -tick_count; i <= tick_count; i++) {
+        // gaugeTickAngle() uses max_val (the true sweep end), matching
+        // computeNeedleGeometry()'s seconds/max_seconds mapping -- not
+        // tick_count, which is max_val truncated to a whole number of
+        // ticks. See its header comment for why dividing by tick_count
+        // instead would misplace ticks whenever max_val is fractional.
+        double angle = gaugeTickAngle(i, max_val);
 
         double x1 = centerX + (radius - 20) * cos(angle);
         double y1 = centerY + (radius - 20) * sin(angle);
         double x2 = centerX + (radius + 8) * cos(angle);
         double y2 = centerY + (radius + 8) * sin(angle);
 
-        cairo_set_line_width(cr, 2.5);
+        cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+        cairo_set_line_width(cr, NEEDLE_HALF_WIDTH * 2);
         cairo_move_to(cr, x1, y1);
         cairo_line_to(cr, x2, y2);
         cairo_stroke(cr);
 
-        if (i == 0) continue;
+        if (!labels_visible) continue;
+        std::string label = gaugeTickLabel(i);
+        if (label.empty()) continue;
 
-        double label_val = std::abs(val_sec) / label_divisor;
-        char label[16];
-        if (label_val == static_cast<int>(label_val))
-            snprintf(label, sizeof(label), "%d", static_cast<int>(label_val));
-        else
-            snprintf(label, sizeof(label), "%.1f", label_val);
+        // Rotated to follow the dial like clock-face numerals -- upright at
+        // the top, tilting further out toward the sides. Horizontal
+        // numerals read as increasingly skewed the further round the arc
+        // they sit.
+        cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+        cairo_set_font_size(cr, 24 * fscale);
 
         cairo_text_extents_t extents;
-        cairo_text_extents(cr, label, &extents);
-        double label_r = radius - 32;
-        double lx = centerX + label_r * cos(angle) - extents.width / 2;
-        double ly = centerY + label_r * sin(angle) + extents.height / 2;
-        cairo_move_to(cr, lx, ly);
-        cairo_show_text(cr, label);
+        cairo_text_extents(cr, label.c_str(), &extents);
+        double label_r = radius - 38;
+        double lx = centerX + label_r * cos(angle);
+        double ly = centerY + label_r * sin(angle);
+
+        cairo_save(cr);
+        cairo_translate(cr, lx, ly);
+        cairo_rotate(cr, angle + M_PI / 2);
+        // Centre the glyph ink on the origin, not its advance box, so a
+        // one-digit and a two-digit numeral sit on the same radius.
+        cairo_move_to(cr, -extents.width / 2 - extents.x_bearing,
+                          -extents.height / 2 - extents.y_bearing);
+        cairo_show_text(cr, label.c_str());
+        cairo_restore(cr);
     }
-
-    // Minor ticks
-    cairo_set_line_width(cr, 1);
-    int total_minor = si.major_count * si.minor_per_major;
-    for (int i = -total_minor; i <= total_minor; i++) {
-        if (i % si.minor_per_major == 0) continue;
-        double frac = (double)i / total_minor;
-        double angle = M_PI + M_PI/2 + frac * (M_PI / 2);
-
-        double x1 = centerX + (radius - 10) * cos(angle);
-        double y1 = centerY + (radius - 10) * sin(angle);
-        double x2 = centerX + (radius + 4) * cos(angle);
-        double y2 = centerY + (radius + 4) * sin(angle);
-
-        cairo_move_to(cr, x1, y1);
-        cairo_line_to(cr, x2, y2);
-        cairo_stroke(cr);
-    }
-
-    // Unit labels
-    const char* unit = show_minutes ? "min" : "sec";
-    cairo_set_font_size(cr, 11);
-    cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
-
-    char left_label[16], right_label[16];
-    snprintf(left_label, sizeof(left_label), "- %s", unit);
-    snprintf(right_label, sizeof(right_label), "%s +", unit);
-
-    cairo_text_extents_t ext;
-    cairo_text_extents(cr, left_label, &ext);
-    cairo_move_to(cr, centerX - radius + 5, centerY - 5);
-    cairo_show_text(cr, left_label);
-
-    cairo_text_extents(cr, right_label, &ext);
-    cairo_move_to(cr, centerX + radius - ext.width - 5, centerY - 5);
-    cairo_show_text(cr, right_label);
 
     // Center triangle marker at 0
     cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
@@ -231,81 +175,86 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     cairo_close_path(cr);
     cairo_fill(cr);
 
-    // Digital readout text - measured first so the box can size to fit it
-    // (font size is fixed at 22 for sunlight legibility; only the box grows)
-    double seconds = data->aheadBehindSeconds;
     char digital[24];
-    formatGaugeDigital(digital, sizeof(digital), seconds, data->gaugeScale);
+    formatGaugeDigital(digital, sizeof(digital), seconds, zone);
 
-    cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
-    cairo_set_font_size(cr, 22);
+    // Needle: a constant-width bar rather than a tapered triangle, so its
+    // edges stay parallel to the major ticks all the way out and the driver
+    // reads a tick number instead of estimating a direction.
+    NeedleGeometry needle = computeNeedleGeometry(seconds, max_val, radius);
+    double needle_angle = needle.angle;
+    double needle_length = needle.length;
 
-    cairo_text_extents_t dext;
-    cairo_text_extents(cr, digital, &dext);
-
-    // Digital display box - white outlined, sized to the text
-    double box_width = std::max(130.0, dext.x_advance + 16);
-    double box_height = 36;
-    double box_x = centerX - box_width / 2;
-    double box_y = centerY + 18;
-
-    cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
-    cairo_rectangle(cr, box_x, box_y, box_width, box_height);
-    cairo_fill(cr);
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    cairo_set_line_width(cr, 2.0);
-    cairo_rectangle(cr, box_x, box_y, box_width, box_height);
-    cairo_stroke(cr);
-
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    cairo_move_to(cr, centerX - dext.width / 2, box_y + box_height / 2 + dext.height / 2 - 2);
-    cairo_show_text(cr, digital);
-
-    // Needle (narrow white triangle)
-    double needle_seconds = seconds;
-    if (needle_seconds > max_val) needle_seconds = max_val;
-    if (needle_seconds < -max_val) needle_seconds = -max_val;
-
-    double needle_angle = M_PI + M_PI/2 + (needle_seconds / max_val) * (M_PI / 2);
-    double needle_length = radius - 25;
-    double half_width = 12.0;
-
-    double tip_x = centerX + needle_length * cos(needle_angle);
-    double tip_y = centerY + needle_length * sin(needle_angle);
+    double dir_x = cos(needle_angle);
+    double dir_y = sin(needle_angle);
     double perp_x = -sin(needle_angle);
     double perp_y = cos(needle_angle);
+    double tip_x = centerX + needle_length * dir_x;
+    double tip_y = centerY + needle_length * dir_y;
 
-    // White filled triangle
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    cairo_move_to(cr, tip_x, tip_y);
-    cairo_line_to(cr, centerX + half_width * perp_x, centerY + half_width * perp_y);
-    cairo_line_to(cr, centerX - half_width * perp_x, centerY - half_width * perp_y);
+    cairo_set_source_rgb(cr, 0.9, 0.9, 0.9);
+    cairo_move_to(cr, tip_x + needle.halfWidth * perp_x, tip_y + needle.halfWidth * perp_y);
+    cairo_line_to(cr, tip_x - needle.halfWidth * perp_x, tip_y - needle.halfWidth * perp_y);
+    cairo_line_to(cr, centerX - needle.halfWidth * perp_x, centerY - needle.halfWidth * perp_y);
+    cairo_line_to(cr, centerX + needle.halfWidth * perp_x, centerY + needle.halfWidth * perp_y);
     cairo_close_path(cr);
     cairo_fill(cr);
 
-    // Needle hub - white ring to match the needle for contrast
-    cairo_set_source_rgb(cr, 0.3, 0.3, 0.3);
-    cairo_arc(cr, centerX, centerY, 10, 0, 2 * M_PI);
+    // Hub: a plain filled disc in the needle's own colour. The old ring and
+    // inner dot were decoration on the one part of the dial that carries no
+    // reading -- and in compact mode the readout box covers it anyway.
+    cairo_arc(cr, centerX, centerY, 8, 0, 2 * M_PI);
     cairo_fill(cr);
-    cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-    cairo_set_line_width(cr, 2);
-    cairo_arc(cr, centerX, centerY, 10, 0, 2 * M_PI);
-    cairo_stroke(cr);
 
-    cairo_set_source_rgb(cr, 0.2, 0.2, 0.2);
-    cairo_arc(cr, centerX, centerY, 4, 0, 2 * M_PI);
-    cairo_fill(cr);
+    // Digital ahead/behind readout. Drawn after the needle and hub so that in
+    // compact mode it paints the hub out: the hub carries no information, and
+    // this readout is the one thing the driver looks at, so it takes the
+    // centre of the dial. The wide layout keeps the original smaller box
+    // below the hub, where there is nothing to cover.
+    {
+        double digital_size = data->driverCompactMode ? 32.0 : 22.0;
+        cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
+        cairo_set_font_size(cr, digital_size);
+
+        cairo_text_extents_t dext;
+        cairo_text_extents(cr, digital, &dext);
+
+        double box_width, box_height, box_y, border;
+        if (data->driverCompactMode) {
+            CompactGaugeLayout L = computeCompactGaugeLayout(width, height);
+            box_width  = std::max(180.0, dext.x_advance + 24);
+            box_height = L.boxHeight;
+            box_y      = L.boxY;
+            border     = 3.0;
+        } else {
+            box_width  = std::max(130.0, dext.x_advance + 16);
+            box_height = 36.0;
+            box_y      = centerY + 18;
+            border     = 2.0;
+        }
+        double box_x = centerX - box_width / 2;
+
+        cairo_set_source_rgb(cr, 0.0, 0.0, 0.0);
+        cairo_rectangle(cr, box_x, box_y, box_width, box_height);
+        cairo_fill(cr);
+        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        cairo_set_line_width(cr, border);
+        cairo_rectangle(cr, box_x, box_y, box_width, box_height);
+        cairo_stroke(cr);
+
+        cairo_move_to(cr, centerX - dext.width / 2,
+                          box_y + box_height / 2 + dext.height / 2 - 2);
+        cairo_show_text(cr, digital);
+    }
 
     // Scale chevrons + segment-end tick along the needle.
-    // The number of chevrons encodes the active scale (green=1, yellow=2, red=3).
+    // The number of chevrons encodes the current zone (green=1, amber=2, red=3).
     // The topmost chevron starts 20% out from the hub; while within a segment the
     // whole group slides toward the segment-end tick (20% from the tip) in
     // proportion to how much of the segment has been driven. Outside a segment the
     // chevrons stay at the start position and the tick is hidden.
     {
-        double dir_x = cos(needle_angle);
-        double dir_y = sin(needle_angle);
-        int num_chevrons = data->gaugeScale + 1;  // 0->1 (green), 1->2 (yellow), 2->3 (red)
+        int num_chevrons = zone + 1;  // 0->1 (green), 1->2 (amber), 2->3 (red)
         if (num_chevrons < 1) num_chevrons = 1;
         if (num_chevrons > 3) num_chevrons = 3;
 
@@ -368,61 +317,94 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // Compact layout: draw the speed values inside the gauge area.
     // Fonts match the wide layout at full size and shrink with the gauge.
     if (data->driverCompactMode) {
-        constexpr double REF_RADIUS = 256.0;  // gauge radius in the 1280x400 layout
-        double fscale = std::min(1.0, radius / REF_RADIUS);
+        CompactGaugeLayout L = computeCompactGaugeLayout(width, height);
 
         cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
         cairo_text_extents_t te;
 
-        // Right-aligned value: fixed right anchor keeps the decimal point in place.
-        // Returns the left edge of the drawn text so labels can align to it.
-        auto drawValue = [&](const char* text, double right_x, double baseline, double size) {
-            cairo_set_font_size(cr, size);
+        // Right-aligned value: a fixed right anchor keeps the decimal point
+        // in place as the digits change.
+        auto drawValue = [&](const char* text, double baseline) {
+            cairo_set_font_size(cr, L.valSize);
             cairo_text_extents(cr, text, &te);
-            double x = right_x - te.x_advance;
-            cairo_move_to(cr, x, baseline);
+            cairo_move_to(cr, L.rightAnchor - te.x_advance, baseline);
             cairo_show_text(cr, text);
-            return x;
         };
-        // Very small label just above the value, left-aligned with it
-        auto drawLabelAbove = [&](const char* text, double left_x, double value_baseline, double value_size) {
-            cairo_set_font_size(cr, 16 * fscale);
-            cairo_move_to(cr, left_x, value_baseline - value_size * 0.78 - 5 * fscale);
+        // Row caption, written just to the right of the value column so the
+        // values themselves stay in one unbroken vertical line.
+        auto drawCaption = [&](const char* text, double baseline) {
+            cairo_set_font_size(cr, L.labelSize);
+            cairo_move_to(cr, L.rightAnchor + L.labelGap, baseline);
+            cairo_show_text(cr, text);
+        };
+        // Right-aligned distance, on the same baseline as its speed, to
+        // distanceAnchor -- the same X the "Distance (metres)" caption
+        // right-aligns to (RB-DRV-02), so the value's last digit and the
+        // caption's closing ")" share one vertical edge.
+        auto drawDistance = [&](const char* text, double baseline) {
+            cairo_set_font_size(cr, L.valSize);
+            cairo_text_extents(cr, text, &te);
+            cairo_move_to(cr, L.distanceAnchor - te.x_advance, baseline);
             cairo_show_text(cr, text);
         };
 
+        // {current}: top of the panel, on the same anchor and at the same
+        // size as the average speeds, so every digit lines up.
         cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        drawValue(gtk_label_get_text(data->currentSpeedLabel), L.curBaseline);
+        drawCaption("Current", L.curBaseline);
 
-        // {current}: top-left, no label; right-aligned to a fixed anchor wide
-        // enough for "###.#" so the digits never shift as the value changes
-        double cur_top_size = 50 * fscale;
-        double cur_baseline_top = 4 * fscale + cur_top_size * 0.78;
-        cairo_set_font_size(cr, cur_top_size);
-        cairo_text_extents(cr, "888.8", &te);
-        double cur_right = 15 + te.x_advance;
-        drawValue(gtk_label_get_text(data->currentSpeedLabel),
-                  cur_right, cur_baseline_top, cur_top_size);
+        // Target is the value being driven toward -- the one number the
+        // driver is actively trying to match, so it is the only row pulled
+        // out of white. Current already reads as "closest to Target" by
+        // sitting directly beneath it (RB-DRV-01's row order).
+        cairo_set_source_rgb(cr, 1.0, 0.867, 0.0);  // #FFDD00
+        drawValue(gtk_label_get_text(data->targetSpeedLabel), L.targetBaseline);
+        drawCaption("Target", L.targetBaseline);
 
-        // {target}: left of the hub, slightly smaller than before so it stays
-        // clear of the scale numbers; small label above, aligned to the value
-        double val_size = 56 * fscale;
-        double cur_baseline = centerY - 10;
-        double tgt_right = centerX - 36 * fscale;
-        double tgt_left = drawValue(gtk_label_get_text(data->targetSpeedLabel),
-                                    tgt_right, cur_baseline, val_size);
-        drawLabelAbove("Target", tgt_left, cur_baseline, val_size);
+        // {tot}: white, mirrored by the Total distance on the left.
+        cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+        drawValue(gtk_label_get_text(data->totalSpeedLabel), L.totalBaseline);
+        drawCaption("Total", L.totalBaseline);
+        drawDistance(gtk_label_get_text(data->driverTotalDistLabel), L.totalBaseline);
 
-        // {tot} above {trip}: right side, no labels
-        double right_anchor = centerX + radius * 0.72;
-        drawValue(gtk_label_get_text(data->totalSpeedLabel),
-                  right_anchor, cur_baseline - 68 * fscale, val_size);
-        drawValue(gtk_label_get_text(data->tripSpeedLabel),
-                  right_anchor, cur_baseline, val_size);
+        // Trip speed and Trip distance share a colour so the eye groups them
+        // as one reading, instead of scanning four undifferentiated white
+        // numbers and working out which distance belongs to which speed.
+        cairo_set_source_rgb(cr, 0.0, 1.0, 1.0);  // #00FFFF
+        drawValue(gtk_label_get_text(data->tripSpeedLabel), L.tripBaseline);
+        drawCaption("Trip", L.tripBaseline);
+        drawDistance(gtk_label_get_text(data->driverTripDistLabel), L.tripBaseline);
+
+        // Column captions below each half of the panel. They carry the
+        // units so the values above them do not have to repeat them on
+        // every row -- and they follow the live unit, not a fixed string.
+        {
+            std::string dist_caption =
+                distanceColumnCaption(gtk_label_get_text(data->driverTotalUnitLabel));
+            std::string speed_caption = speedColumnCaption(data->state->units);
+
+            cairo_set_font_size(cr, L.labelSize);
+            cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
+
+            // Right-aligned to the same X the distance values themselves
+            // right-align to (RB-DRV-01's L.distanceAnchor), so the
+            // caption's closing ")" sits directly under the values' last
+            // digit rather than centred under a right-aligned column.
+            cairo_text_extents(cr, dist_caption.c_str(), &te);
+            cairo_move_to(cr, L.distanceAnchor - te.x_advance, L.captionBaseline);
+            cairo_show_text(cr, dist_caption.c_str());
+
+            // Centred: there is no value column edge on this side to match.
+            cairo_text_extents(cr, speed_caption.c_str(), &te);
+            cairo_move_to(cr, (L.centerX + width) / 2 - te.x_advance / 2, L.captionBaseline);
+            cairo_show_text(cr, speed_caption.c_str());
+        }
 
         // fps left, cpu right, baseline in line with the bottom of the
-        // ahead/behind digital readout box (box top = centerY+18, height 36)
-        double foot_baseline = centerY + 18 + 36;
-        double foot_size = std::max(11.0, 14 * fscale);
+        // ahead/behind digital readout box.
+        double foot_baseline = L.footBaseline;
+        double foot_size = L.footSize;
         cairo_set_font_size(cr, foot_size);
         cairo_set_source_rgb(cr, 0.7, 0.7, 0.7);
         cairo_move_to(cr, 15, foot_baseline);
@@ -435,7 +417,7 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         // Single-display mode: rally clock hard top-right, bright white
         // (replaces the alarm panel's clock)
         if (data->singleDisplayMode && data->copilotRallyClockLabel) {
-            double clock_size = std::max(20.0, 28 * fscale);
+            double clock_size = std::max(20.0, 28 * L.fscale);
             cairo_set_font_size(cr, clock_size);
             cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
             const char* clock_text = gtk_label_get_text(data->copilotRallyClockLabel);
