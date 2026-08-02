@@ -13,6 +13,7 @@
 #include "test_edge_cases.h"
 #include "test_calibration_independent.h"
 #include "test_elapsed.h"
+#include "test_segment_row.h"
 
 int main() {
     TestRunner runner;
@@ -29,6 +30,7 @@ int main() {
     TestEdgeCases edgeCaseTests;
     TestCalibrationIndependent calIndepTests;
     TestElapsed elapsedTests;
+    TestSegmentRow segmentRowTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -42,7 +44,8 @@ int main() {
     runner.addSuite(edgeCaseTests.createSuite());
     runner.addSuite(calIndepTests.createSuite());
     runner.addSuite(elapsedTests.createSuite());
-    
+    runner.addSuite(segmentRowTests.createSuite());
+
     // Run all tests
     int failures = runner.runAll();
     

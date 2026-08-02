@@ -29,7 +29,7 @@ static void applyCopilotCSS() {
         ".dist-value { font-size: 64px; font-weight: bold; font-family: monospace; }"
         ".dist-unit { font-size: 20px; font-weight: bold; font-family: monospace; }"
         ".time-label { font-size: 22px; font-family: monospace; color: #CCCCCC; }"
-        ".alarm-label { font-size: 20px; }"
+        ".alarm-label { font-size: 20px; min-width: 90px; }"
         ".alarm-button { font-size: 22px; }"
         ".reset-button { font-size: 36px; }"
         ".alarm-countdown { font-size: 28px; color: #FFFFFF; font-family: monospace; }"
@@ -184,15 +184,23 @@ void updateCopilotDisplay(AppData* data) {
         gtk_label_set_text(data->nextUnitLabel, next_unit);
         
         long next_seg_idx = data->state->segment_current_number + 1;
-        if (next_seg_idx < static_cast<long>(data->state->segments.size())) {
-            const Segment& next_seg = data->state->segments[next_seg_idx];
-            ss.str("");
-            ss << std::fixed << std::setprecision(0) << next_seg.target_speed_kph << " kph";
-            gtk_label_set_text(data->nextSpeedLabel, ss.str().c_str());
-        } else {
-            gtk_label_set_text(data->nextSpeedLabel, "END");
+        bool has_next = next_seg_idx < static_cast<long>(data->state->segments.size());
+        double next_kph = has_next ? data->state->segments[next_seg_idx].target_speed_kph : 0.0;
+        double current_display_speed = cur_seg.target_speed_kph;
+        double next_display_speed = next_kph;
+        // Same conversion updateDriverDisplay() already applies to
+        // targetSpeedLabel -- showing "40 mph" for a 40 km/h segment would be
+        // wrong by a safety-relevant margin, not just a labelling nicety.
+        if (data->state->units) {
+            current_display_speed *= 0.621371;
+            next_display_speed *= 0.621371;
         }
-        
+        gtk_label_set_text(data->nextSpeedLabel,
+            segmentSpeedTransition(next_display_speed, has_next, data->state->units).c_str());
+
+        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn),
+            segmentRowHeading(current_display_speed, true).c_str());
+
         // next/prev button: active within 500m of segment end or start
         bool near_end = (remaining_m >= 0 && remaining_m <= 500) &&
                         (next_seg_idx < static_cast<long>(data->state->segments.size()));
@@ -205,20 +213,19 @@ void updateCopilotDisplay(AppData* data) {
             gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "prev");
             gtk_widget_set_sensitive(data->nextPrevBtn, TRUE);
         } else {
-            gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "--->");
             gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
         }
     } else if (data->state->segments.empty()) {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextUnitLabel, "m");
         gtk_label_set_text(data->nextSpeedLabel, "---");
-        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "--->");
+        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), segmentRowHeading(0.0, false).c_str());
         gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
     } else {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextUnitLabel, "m");
-        gtk_label_set_text(data->nextSpeedLabel, "END");
-        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "--->");
+        gtk_label_set_text(data->nextSpeedLabel, segmentSpeedTransition(0.0, false, false).c_str());
+        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), segmentRowHeading(0.0, false).c_str());
         gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
     }
 }
@@ -373,49 +380,53 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_label_set_xalign(data->copilotRallyClockLabel, 1.0);
     gtk_box_pack_end(GTK_BOX(topRightRow), GTK_WIDGET(data->copilotRallyClockLabel), FALSE, FALSE, 0);
     
-    // Alarm buttons: 3 rows of 4
+    // Alarm buttons: label on its own row, then a flush-left 4x3 grid --
+    // no per-row indent, so every column lines up squarely under the label
+    // rather than being pushed right by a label-width spacer.
     GtkWidget* alarmBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     gtk_widget_set_margin_top(alarmBox, 10);
+    gtk_widget_set_halign(alarmBox, GTK_ALIGN_END);
     gtk_box_pack_start(GTK_BOX(rightPanel), alarmBox, FALSE, FALSE, 0);
-    
+
+    // "KM", not "in": the buttons are kilometre distances, and
+    // "Alarm in 2" reads as two minutes.
+    GtkWidget* alarmLabel = gtk_label_new("Alarm KM");
+    gtk_style_context_add_class(gtk_widget_get_style_context(alarmLabel), "alarm-label");
+    gtk_label_set_xalign(GTK_LABEL(alarmLabel), 0.0);
+    gtk_box_pack_start(GTK_BOX(alarmBox), alarmLabel, FALSE, FALSE, 0);
+
     // Alarm buttons: 4 rows of 3, 30% larger (62x47)
-    auto addAlarmRow = [&](GtkWidget* parent, int from, int to, bool hasLabel) {
+    auto addAlarmRow = [&](GtkWidget* parent, int from, int to) {
         GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
         gtk_box_pack_start(GTK_BOX(parent), row, FALSE, FALSE, 0);
-        if (hasLabel) {
-            GtkWidget* lbl = gtk_label_new("Alarm in");
-            gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "alarm-label");
-            gtk_box_pack_start(GTK_BOX(row), lbl, FALSE, FALSE, 3);
-        } else {
-            GtkWidget* spacer = gtk_label_new("");
-            gtk_style_context_add_class(gtk_widget_get_style_context(spacer), "alarm-label");
-            gtk_widget_set_size_request(spacer, 70, -1);
-            gtk_box_pack_start(GTK_BOX(row), spacer, FALSE, FALSE, 3);
-        }
         for (int km = from; km <= to; km++) {
             GtkWidget* btn = gtk_button_new_with_label(std::to_string(km).c_str());
             gtk_style_context_add_class(gtk_widget_get_style_context(btn), "alarm-button");
-            gtk_widget_set_size_request(btn, 62, 47);
+            gtk_widget_set_size_request(btn, 68, 47);
             g_object_set_data(G_OBJECT(btn), "km", GINT_TO_POINTER(km));
             g_signal_connect(btn, "clicked", G_CALLBACK(on_alarm_set), data);
             gtk_box_pack_start(GTK_BOX(row), btn, FALSE, FALSE, 2);
         }
     };
+
+    addAlarmRow(alarmBox, 2, 4);
+    addAlarmRow(alarmBox, 5, 7);
+    addAlarmRow(alarmBox, 8, 10);
+    addAlarmRow(alarmBox, 11, 13);
     
-    addAlarmRow(alarmBox, 2, 4, true);
-    addAlarmRow(alarmBox, 5, 7, false);
-    addAlarmRow(alarmBox, 8, 10, false);
-    addAlarmRow(alarmBox, 11, 13, false);
-    
-    // Alarm countdown + clear button
+    // Alarm countdown + clear button, right-aligned under the alarm grid so
+    // the countdown ends level with the buttons above it rather than
+    // floating at the panel's left edge.
     GtkWidget* countdownRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_widget_set_margin_top(countdownRow, 8);
+    gtk_widget_set_halign(countdownRow, GTK_ALIGN_END);
     gtk_box_pack_start(GTK_BOX(rightPanel), countdownRow, FALSE, FALSE, 0);
-    
+
     data->alarmCountdownLabel = GTK_LABEL(gtk_label_new(""));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->alarmCountdownLabel)), "alarm-countdown");
+    gtk_label_set_xalign(data->alarmCountdownLabel, 1.0);
     gtk_box_pack_start(GTK_BOX(countdownRow), GTK_WIDGET(data->alarmCountdownLabel), FALSE, FALSE, 0);
-    
+
     data->alarmClearBtn = gtk_button_new_with_label("clear");
     gtk_style_context_add_class(gtk_widget_get_style_context(data->alarmClearBtn), "alarm-button");
     g_signal_connect(data->alarmClearBtn, "clicked", G_CALLBACK(on_alarm_clear), data);
