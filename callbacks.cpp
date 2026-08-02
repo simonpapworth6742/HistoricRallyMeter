@@ -581,7 +581,10 @@ void on_calibration_start(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 // Helper function to update calibration display
 void updateCalibrationDisplay(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
-    
+
+    gtk_label_set_text(data->calibrationClockLabel,
+        formatTime(getRallyTime_ms(*data->state)).c_str());
+
     // Calculate counts from calibration start (or total start if not started)
     uint64_t start_cntr1 = data->cal_started ? data->cal_start_cntr1 : data->state->total_start_cntr1;
     uint64_t start_cntr2 = data->cal_started ? data->cal_start_cntr2 : data->state->total_start_cntr2;
@@ -600,14 +603,15 @@ void updateCalibrationDisplay(AppData* data) {
         cntr_a = cntr1_diff;
     }
     
-    // Distance in meters
     long total_m = countsToCentimeters(cntr_a, data->state->calibration) / 100;
-    
-    // Format: "Total distance: xxx,xxx m  (counts calculated: CNTR_A  1: CNTR_1  2: CNTR_2)"
-    std::stringstream ss;
-    ss << "Total distance: " << total_m << " m  (counts calculated: " << cntr_a 
-       << "   1: " << cntr1_diff << "   2: " << cntr2_diff << ")";
-    gtk_label_set_text(data->totalDistCalLabel, ss.str().c_str());
+    gtk_label_set_text(data->totalDistCalLabel,
+        calibrationReadoutLine(total_m, cntr_a, cntr1_diff, cntr2_diff).c_str());
+
+    char current[96];
+    snprintf(current, sizeof(current),
+             "Current <span foreground=\"#FFDD00\">Calibration %ld pulses/KM</span>. Reset to",
+             static_cast<long>(pulsesPerKm(data->state->calibration) + 0.5));
+    gtk_label_set_markup(data->calibrationCurrentLabel, current);
 }
 
 // Helper function to update date/time display
@@ -848,12 +852,25 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     }
 }
 
-void on_reset_calibration_1m(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+void on_reset_calibration_pulses(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    const char* text = gtk_entry_get_text(data->resetPulsesEntry);
+    if (!text || !*text) return;
 
-    // 1m per pulse: 1 count = 1000mm, so 1000 counts = 1,000,000mm
-    data->state->calibration = 1000000;
+    double pulses_per_km = 0.0;
+    try {
+        pulses_per_km = std::stod(text);
+    } catch (const std::exception&) {
+        return;  // unparseable entry -- leave calibration untouched
+    }
 
+    long new_calibration = calibrationFromPulsesPerKm(pulses_per_km);
+    if (new_calibration <= 0) return;  // zero/negative entry -- no-op, not a crash
+
+    data->state->calibration = new_calibration;
+
+    // Recalculate count-based values in all segments from stable human
+    // values, same as every other calibration change.
     for (auto& seg : data->state->segments) {
         seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
         seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
@@ -866,17 +883,19 @@ void on_reset_calibration_1m(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data
     }
 
     ConfigFile::save(*data->state);
-    data->cal_started = false;
-    gtk_entry_set_text(data->rallyDistEntry, "");
     updateCalibrationDisplay(data);
 }
 
-static void updateSensorModeLabel(AppData* data) {
-    if (data->state->counters) {
-        gtk_label_set_text(data->sensorModeLabel, "Currently set to both sensors");
-    } else {
-        gtk_label_set_text(data->sensorModeLabel, "Currently set to sensor 1");
-    }
+void updateSensorModeLabel(AppData* data) {
+    // The sensor selection silently changes what every other number on this
+    // screen means, so the phrase itself is highlighted in the same yellow
+    // the driver panel uses for the live speed.
+    const char* phrase = data->state->counters
+        ? "using Sensors 1+2 (avg)"
+        : "using Sensor 1";
+    std::string markup = std::string("Currently <span foreground=\"#FFDD00\">")
+                       + phrase + "</span>";
+    gtk_label_set_markup(data->sensorModeLabel, markup.c_str());
 }
 
 void on_set_sensor_1(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {

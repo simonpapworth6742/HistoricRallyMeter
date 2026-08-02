@@ -19,11 +19,15 @@ void on_add_segment(GtkWidget* widget, gpointer user_data);
 void on_delete_segment(GtkWidget* widget, gpointer user_data);
 void on_calibration_start(GtkWidget* widget, gpointer user_data);
 void on_save_calibration(GtkWidget* widget, gpointer user_data);
-void on_reset_calibration_1m(GtkWidget* widget, gpointer user_data);
+// Reset calibration to an operator-entered pulses/km value, replacing the
+// stock "reset to 1m per pulse" with one that works for any device.
+void on_reset_calibration_pulses(GtkWidget* widget, gpointer user_data);
 void on_save_datetime(GtkWidget* widget, gpointer user_data);
 gboolean on_force_single_display_toggle(GtkSwitch* sw, gboolean state, gpointer user_data);
 void refreshSegmentList(AppData* data);
 void updateCalibrationDisplay(AppData* data);
+// Refresh the calibration screen's sensor-selection label.
+void updateSensorModeLabel(AppData* data);
 void updateDateTimeDisplay(AppData* data);
 gboolean update_display(gpointer user_data);
 void on_keypad_digit(GtkWidget* widget, gpointer user_data);

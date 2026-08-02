@@ -91,7 +91,8 @@ static void applyCopilotCSS() {
         "scrollbar slider { min-width: 20px; min-height: 20px; }"
         "scrollbar.vertical slider { min-width: 20px; }"
         "scrollbar trough { min-width: 24px; }"
-        "button.memory-populated { background-image: none; background-color: #FFFFFF; color: #000000; }",
+        "button.memory-populated { background-image: none; background-color: #FFFFFF; color: #000000; }"
+        ".instruction-label { font-size: 16px; color: #CCCCCC; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -616,10 +617,21 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(screen), "calibration-screen");
     gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
     
-    // Title
+    // Title, with the rally clock on the same row -- this screen otherwise
+    // has no clock at all, unlike every other screen.
+    GtkWidget* titleRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(screen), titleRow, FALSE, FALSE, 0);
+
     GtkWidget* titleLabel = gtk_label_new("CALIBRATION");
     gtk_style_context_add_class(gtk_widget_get_style_context(titleLabel), "title-label");
-    gtk_box_pack_start(GTK_BOX(screen), titleLabel, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(titleLabel, TRUE);
+    gtk_box_pack_start(GTK_BOX(titleRow), titleLabel, TRUE, TRUE, 0);
+
+    data->calibrationClockLabel = GTK_LABEL(gtk_label_new("00:00:00"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->calibrationClockLabel)), "clock-label");
+    gtk_label_set_width_chars(data->calibrationClockLabel, 8);
+    gtk_label_set_xalign(data->calibrationClockLabel, 1.0);
+    gtk_box_pack_end(GTK_BOX(titleRow), GTK_WIDGET(data->calibrationClockLabel), FALSE, FALSE, 0);
     
     // Main horizontal container: left side for info, right side for keypad
     data->calibrationMainBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
@@ -632,40 +644,37 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     // Row 1: Distance with counter breakdown
     // Format: "Total distance: xxx,xxx m  (counts calculated: CNTR_A  1: CNTR_1  2: CNTR_2)"
     data->totalDistCalLabel = GTK_LABEL(gtk_label_new("Total distance: 0 m  (counts calculated: 0   1: 0   2: 0)"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistCalLabel)), "clock-label");
     gtk_widget_set_halign(GTK_WIDGET(data->totalDistCalLabel), GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(leftBox), GTK_WIDGET(data->totalDistCalLabel), FALSE, FALSE, 0);
-    
-    gtk_box_pack_start(GTK_BOX(leftBox), gtk_label_new(""), FALSE, FALSE, 0);
-    
+
     // Row 2: Input field
     GtkWidget* inputRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(leftBox), inputRow, FALSE, FALSE, 0);
-    
+
     GtkWidget* inputLabel = gtk_label_new("Actual distance covered:");
+    gtk_style_context_add_class(gtk_widget_get_style_context(inputLabel), "clock-label");
     data->rallyDistEntry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_placeholder_text(data->rallyDistEntry, "500-100000");
     gtk_widget_set_size_request(GTK_WIDGET(data->rallyDistEntry), 150, -1);
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->rallyDistEntry)), "clock-label");
     g_signal_connect(data->rallyDistEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
-    GtkWidget* unitLabel = gtk_label_new("meters");
-    
-    GtkWidget* resetBtn = gtk_button_new_with_label("reset to 1m per pulse");
-    g_signal_connect(resetBtn, "clicked", G_CALLBACK(on_reset_calibration_1m), data);
+    GtkWidget* unitLabel = gtk_label_new("metres");
+    gtk_style_context_add_class(gtk_widget_get_style_context(unitLabel), "clock-label");
 
     gtk_box_pack_start(GTK_BOX(inputRow), inputLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(inputRow), GTK_WIDGET(data->rallyDistEntry), FALSE, FALSE, 10);
     gtk_box_pack_start(GTK_BOX(inputRow), unitLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(inputRow), resetBtn, FALSE, FALSE, 20);
-    
-    gtk_box_pack_start(GTK_BOX(leftBox), gtk_label_new(""), FALSE, FALSE, 0);
-    
+
     // Row 3: Sensor mode selection
     GtkWidget* sensorRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(leftBox), sensorRow, FALSE, FALSE, 0);
-    
-    data->sensorModeLabel = GTK_LABEL(gtk_label_new(
-        data->state->counters ? "Currently set to both sensors" : "Currently set to sensor 1"));
+
+    data->sensorModeLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->sensorModeLabel)), "clock-label");
     gtk_widget_set_halign(GTK_WIDGET(data->sensorModeLabel), GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(sensorRow), GTK_WIDGET(data->sensorModeLabel), FALSE, FALSE, 0);
+    updateSensorModeLabel(data);
     
     GtkWidget* sensor1Btn = gtk_button_new_with_label("Set sensor 1");
     g_signal_connect(sensor1Btn, "clicked", G_CALLBACK(on_set_sensor_1), data);
@@ -674,18 +683,67 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     GtkWidget* sensorBothBtn = gtk_button_new_with_label("Set both sensors and avg.");
     g_signal_connect(sensorBothBtn, "clicked", G_CALLBACK(on_set_sensor_both), data);
     gtk_box_pack_start(GTK_BOX(sensorRow), sensorBothBtn, FALSE, FALSE, 5);
-    
-    // Right side: numeric keypad
+
+    // The saved value and the reset control share one line: both describe
+    // the same figure, so a separate row for each would repeat "pulses/KM"
+    // for no reason. The live figure is highlighted the same yellow the
+    // sensor line uses -- like sensor selection, it is a number every other
+    // reading on the screen is derived from.
+    GtkWidget* currentCalRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_widget_set_margin_top(currentCalRow, 6);
+    gtk_box_pack_start(GTK_BOX(leftBox), currentCalRow, FALSE, FALSE, 0);
+
+    data->calibrationCurrentLabel = GTK_LABEL(gtk_label_new(NULL));
+    gtk_label_set_markup(GTK_LABEL(data->calibrationCurrentLabel),
+        "Current <span foreground=\"#FFDD00\">Calibration 0 pulses/KM</span>. Reset to");
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->calibrationCurrentLabel)), "clock-label");
+    gtk_widget_set_halign(GTK_WIDGET(data->calibrationCurrentLabel), GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(currentCalRow), GTK_WIDGET(data->calibrationCurrentLabel), FALSE, FALSE, 0);
+
+    data->resetPulsesEntry = GTK_ENTRY(gtk_entry_new());
+    gtk_entry_set_width_chars(data->resetPulsesEntry, 6);
+    gtk_entry_set_max_width_chars(data->resetPulsesEntry, 6);
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->resetPulsesEntry)), "clock-label");
+    g_signal_connect(data->resetPulsesEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
+    gtk_box_pack_start(GTK_BOX(currentCalRow), GTK_WIDGET(data->resetPulsesEntry), FALSE, FALSE, 0);
+
+    GtkWidget* resetPulsesBtn = gtk_button_new_with_label("Reset");
+    g_signal_connect(resetPulsesBtn, "clicked", G_CALLBACK(on_reset_calibration_pulses), data);
+    gtk_box_pack_start(GTK_BOX(currentCalRow), resetPulsesBtn, FALSE, FALSE, 0);
+
+    // Calibration is a rare, four-step procedure done at the roadside under
+    // time pressure. Spelling the steps out costs six rows and saves a manual.
+    const char* instructions[] = {
+        "INSTRUCTIONS:",
+        "1. Press Start/Zero to reset counter to zero or skip to step 2 to use existing counters.",
+        "2. Enter actual distance covered.",
+        "3. Press Sensor button to select counter.",
+        "4. Save Calibration",
+    };
+    for (int i = 0; i < 5; i++) {
+        GtkWidget* lbl = gtk_label_new(instructions[i]);
+        gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "instruction-label");
+        gtk_widget_set_halign(lbl, GTK_ALIGN_START);
+        if (i == 0) gtk_widget_set_margin_top(lbl, 22);
+        gtk_box_pack_start(GTK_BOX(leftBox), lbl, FALSE, FALSE, 0);
+    }
+
+    // Right side: numeric keypad. Nudged down from the top of its column so
+    // it doesn't sit flush against the title row now that the row is taller
+    // (title + clock) than a plain title alone.
     data->calibrationKeypad = createNumericKeypad(data);
+    gtk_widget_set_margin_top(data->calibrationKeypad, 12);
     gtk_box_pack_end(GTK_BOX(data->calibrationMainBox), data->calibrationKeypad, FALSE, FALSE, 10);
     
     // Bottom: navigation buttons
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
     gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 5);
     
-    GtkWidget* startBtn = gtk_button_new_with_label("start");
-    GtkWidget* saveBtn = gtk_button_new_with_label("save");
-    GtkWidget* backBtn = gtk_button_new_with_label("back");
+    // "start" did not say that it zeroes the counters, which is the one
+    // irreversible thing on this screen.
+    GtkWidget* startBtn = gtk_button_new_with_label("Start/Zero");
+    GtkWidget* saveBtn = gtk_button_new_with_label("Save Calibration");
+    GtkWidget* backBtn = gtk_button_new_with_label("Back");
     
     g_signal_connect(startBtn, "clicked", G_CALLBACK(on_calibration_start), data);
     g_signal_connect(saveBtn, "clicked", G_CALLBACK(on_save_calibration), data);
