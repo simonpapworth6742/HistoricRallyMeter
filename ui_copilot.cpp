@@ -14,57 +14,6 @@
 #include <ctime>
 #include <string>
 
-static std::string formatDistance(long meters, int width = 7) {
-    bool negative = meters < 0;
-    std::string num = std::to_string(negative ? -meters : meters);
-    std::string result;
-    int count = 0;
-    for (int i = static_cast<int>(num.size()) - 1; i >= 0; i--) {
-        if (count > 0 && count % 3 == 0) result = ',' + result;
-        result = num[i] + result;
-        count++;
-    }
-    if (negative) result = '-' + result;
-    while (static_cast<int>(result.size()) < width)
-        result = ' ' + result;
-    return result;
-}
-
-// Format elapsed time as space-padded minutes (3+ chars) + ":" + zero-padded
-// seconds. When minutes need more than 4 chars, switch to hours:minutes;
-// when hours need more than 4 chars, display "toolong".
-static std::string formatElapsed(int64_t total_secs) {
-    if (total_secs < 0) total_secs = 0;
-    int64_t minutes = total_secs / 60;
-    char buf[24];
-    if (minutes <= 9999) {
-        snprintf(buf, sizeof(buf), " %3lld:%02lld",
-                 static_cast<long long>(minutes),
-                 static_cast<long long>(total_secs % 60));
-    } else {
-        int64_t hours = minutes / 60;
-        if (hours <= 9999) {
-            snprintf(buf, sizeof(buf), " %3lld:%02lld",
-                     static_cast<long long>(hours),
-                     static_cast<long long>(minutes % 60));
-        } else {
-            snprintf(buf, sizeof(buf), "toolong");
-        }
-    }
-    return buf;
-}
-
-// Format a distance, switching to km above 999,999 m so the value stays
-// within the fixed display width. Sets *unit_out to "m" or "km".
-static std::string formatDistanceAuto(long meters, const char** unit_out, int width = 7) {
-    if (meters > 999999 || meters < -999999) {
-        *unit_out = "km";
-        return formatDistance(meters / 1000, width);
-    }
-    *unit_out = "m";
-    return formatDistance(meters, width);
-}
-
 // Apply CSS styling
 static void applyCopilotCSS() {
     GtkCssProvider* provider = gtk_css_provider_new();
@@ -76,11 +25,11 @@ static void applyCopilotCSS() {
         ".title-label { font-size: 22px; }"
         ".info-label { font-size: 20px; }"
         ".clock-label { font-size: 30px; font-family: monospace; }"
-        ".dist-heading { font-size: 48px; font-weight: bold; font-family: monospace; }"
-        ".dist-value { font-size: 88px; font-weight: bold; font-family: monospace; }"
-        ".dist-unit { font-size: 48px; font-weight: bold; font-family: monospace; }"
-        ".time-label { font-size: 36px; font-family: monospace; color: #CCCCCC; }"
-        ".alarm-label { font-size: 20px; }"
+        ".dist-heading { font-size: 28px; font-weight: bold; font-family: monospace; }"
+        ".dist-value { font-size: 64px; font-weight: bold; font-family: monospace; }"
+        ".dist-unit { font-size: 20px; font-weight: bold; font-family: monospace; }"
+        ".time-label { font-size: 22px; font-family: monospace; color: #CCCCCC; }"
+        ".alarm-label { font-size: 20px; min-width: 90px; }"
         ".alarm-button { font-size: 22px; }"
         ".reset-button { font-size: 36px; }"
         ".alarm-countdown { font-size: 28px; color: #FFFFFF; font-family: monospace; }"
@@ -107,7 +56,17 @@ void updateCopilotDisplay(AppData* data) {
     // Rally clock
     std::string rally_time = formatTime(current_time_ms);
     gtk_label_set_text(data->copilotRallyClockLabel, rally_time.c_str());
-    
+
+    // Re-assert the window's fixed size every tick: GTK grows a window to
+    // fit its widest-ever content but never shrinks it back down, so a
+    // single transient spike in a distance value (e.g. a big Next-segment
+    // reading, however briefly shown) would otherwise leave the co-pilot
+    // window oversized -- overlapping the driver panel -- for the rest of
+    // the session, even once the values shrink back to normal.
+    if (!data->singleDisplayMode) {
+        gtk_window_resize(GTK_WINDOW(data->copilotWindow), 1280, 400);
+    }
+
     // Alarm check runs regardless of which screen is visible
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
@@ -137,7 +96,7 @@ void updateCopilotDisplay(AppData* data) {
             }
         } else if (data->alarmCountdownLabel) {
             std::stringstream alarmSs;
-            alarmSs << formatDistance(remaining_m, 6) << " to alarm";
+            alarmSs << formatDistanceGrouped(remaining_m) << " to alarm";
             gtk_label_set_text(data->alarmCountdownLabel, alarmSs.str().c_str());
         }
     } else {
@@ -175,7 +134,7 @@ void updateCopilotDisplay(AppData* data) {
     {
         double offset_s = data->state->ahead_behind_zero_offset_ms / 1000.0;
         char lbl[64];
-        snprintf(lbl, sizeof(lbl), "Adj. driver Zero (%.2fs)", offset_s);
+        snprintf(lbl, sizeof(lbl), "driver Zero (%.2f)", offset_s);
         gtk_button_set_label(GTK_BUTTON(data->adjZeroBtn), lbl);
     }
     
@@ -186,11 +145,11 @@ void updateCopilotDisplay(AppData* data) {
     
     std::stringstream ss;
     const char* total_unit = "m";
-    std::string total_str = formatDistanceAuto(total_m, &total_unit);
+    std::string total_str = formatDistanceAutoUnit(total_m, &total_unit);
     gtk_label_set_text(data->totalDistLabel, total_str.c_str());
     gtk_label_set_text(data->totalUnitLabel, total_unit);
-    
-    gtk_label_set_text(data->totalTimeLabel, formatElapsed(total_secs).c_str());
+
+    gtk_label_set_text(data->totalTimeLabel, formatElapsedInterval(total_secs).c_str());
     
     // Trip distance
     int64_t trip_count_diff = calculateDistanceCounts(*data->state,
@@ -201,11 +160,11 @@ void updateCopilotDisplay(AppData* data) {
     int64_t trip_secs = trip_duration_ms / 1000;
     
     const char* trip_unit = "m";
-    std::string trip_str = formatDistanceAuto(trip_m, &trip_unit);
+    std::string trip_str = formatDistanceAutoUnit(trip_m, &trip_unit);
     gtk_label_set_text(data->tripDistLabel, trip_str.c_str());
     gtk_label_set_text(data->tripUnitLabel, trip_unit);
-    
-    gtk_label_set_text(data->tripTimeLabel, formatElapsed(trip_secs).c_str());
+
+    gtk_label_set_text(data->tripTimeLabel, formatElapsedInterval(trip_secs).c_str());
     
     // Next segment info: distance remaining in current segment + speed of next segment
     if (data->state->segment_current_number >= 0 &&
@@ -220,20 +179,28 @@ void updateCopilotDisplay(AppData* data) {
         long travelled_m = countsToCentimeters(seg_count_diff, data->state->calibration) / 100;
         
         const char* next_unit = "m";
-        std::string next_str = formatDistanceAuto(remaining_m, &next_unit);
+        std::string next_str = formatDistanceAutoUnit(remaining_m, &next_unit);
         gtk_label_set_text(data->nextDistLabel, next_str.c_str());
         gtk_label_set_text(data->nextUnitLabel, next_unit);
         
         long next_seg_idx = data->state->segment_current_number + 1;
-        if (next_seg_idx < static_cast<long>(data->state->segments.size())) {
-            const Segment& next_seg = data->state->segments[next_seg_idx];
-            ss.str("");
-            ss << std::fixed << std::setprecision(0) << next_seg.target_speed_kph << " kph";
-            gtk_label_set_text(data->nextSpeedLabel, ss.str().c_str());
-        } else {
-            gtk_label_set_text(data->nextSpeedLabel, "END");
+        bool has_next = next_seg_idx < static_cast<long>(data->state->segments.size());
+        double next_kph = has_next ? data->state->segments[next_seg_idx].target_speed_kph : 0.0;
+        double current_display_speed = cur_seg.target_speed_kph;
+        double next_display_speed = next_kph;
+        // Same conversion updateDriverDisplay() already applies to
+        // targetSpeedLabel -- showing "40 mph" for a 40 km/h segment would be
+        // wrong by a safety-relevant margin, not just a labelling nicety.
+        if (data->state->units) {
+            current_display_speed *= 0.621371;
+            next_display_speed *= 0.621371;
         }
-        
+        gtk_label_set_text(data->nextSpeedLabel,
+            segmentSpeedTransition(next_display_speed, has_next, data->state->units).c_str());
+
+        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn),
+            segmentRowHeading(current_display_speed, true).c_str());
+
         // next/prev button: active within 500m of segment end or start
         bool near_end = (remaining_m >= 0 && remaining_m <= 500) &&
                         (next_seg_idx < static_cast<long>(data->state->segments.size()));
@@ -246,20 +213,19 @@ void updateCopilotDisplay(AppData* data) {
             gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "prev");
             gtk_widget_set_sensitive(data->nextPrevBtn, TRUE);
         } else {
-            gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "--->");
             gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
         }
     } else if (data->state->segments.empty()) {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextUnitLabel, "m");
         gtk_label_set_text(data->nextSpeedLabel, "---");
-        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "--->");
+        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), segmentRowHeading(0.0, false).c_str());
         gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
     } else {
         gtk_label_set_text(data->nextDistLabel, "---.---");
         gtk_label_set_text(data->nextUnitLabel, "m");
-        gtk_label_set_text(data->nextSpeedLabel, "END");
-        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), "--->");
+        gtk_label_set_text(data->nextSpeedLabel, segmentSpeedTransition(0.0, false, false).c_str());
+        gtk_button_set_label(GTK_BUTTON(data->nextPrevBtn), segmentRowHeading(0.0, false).c_str());
         gtk_widget_set_sensitive(data->nextPrevBtn, FALSE);
     }
 }
@@ -295,7 +261,13 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     data->totalDistLabel = GTK_LABEL(gtk_label_new("0"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistLabel)), "dist-value");
     gtk_label_set_xalign(data->totalDistLabel, 1.0);
+    // Fixed at exactly 7 chars ("999,999", the widest 6-digit value) so the
+    // rest of the row can never shift right, no matter how large the
+    // underlying distance grows -- min and max both pinned, with ellipsis
+    // at the front as the last resort if a value ever exceeds 6 digits.
     gtk_label_set_width_chars(data->totalDistLabel, 7);
+    gtk_label_set_max_width_chars(data->totalDistLabel, 7);
+    gtk_label_set_ellipsize(data->totalDistLabel, PANGO_ELLIPSIZE_START);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalDistLabel), 1, 0, 1, 1);
     
     data->totalUnitLabel = GTK_LABEL(gtk_label_new("m"));
@@ -303,10 +275,13 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_valign(GTK_WIDGET(data->totalUnitLabel), GTK_ALIGN_END);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalUnitLabel), 2, 0, 1, 1);
     
-    // Col 3: Total time
-    data->totalTimeLabel = GTK_LABEL(gtk_label_new("   0:00"));
+    // Col 3: Total time. Right-aligned in a fixed-width column rather than
+    // space-padded, so the column holds whichever monospace font the platform
+    // resolves -- Noto Sans Mono on the box, DejaVu in the sandbox.
+    data->totalTimeLabel = GTK_LABEL(gtk_label_new("0:00"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalTimeLabel)), "time-label");
-    gtk_label_set_xalign(data->totalTimeLabel, 0.0);
+    gtk_label_set_xalign(data->totalTimeLabel, 1.0);
+    gtk_widget_set_size_request(GTK_WIDGET(data->totalTimeLabel), 90, -1);
     gtk_widget_set_valign(GTK_WIDGET(data->totalTimeLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_margin_start(GTK_WIDGET(data->totalTimeLabel), 10);
     if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
@@ -323,6 +298,8 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripDistLabel)), "dist-value");
     gtk_label_set_xalign(data->tripDistLabel, 1.0);
     gtk_label_set_width_chars(data->tripDistLabel, 7);
+    gtk_label_set_max_width_chars(data->tripDistLabel, 7);
+    gtk_label_set_ellipsize(data->tripDistLabel, PANGO_ELLIPSIZE_START);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripDistLabel), 1, 1, 1, 1);
     
     data->tripUnitLabel = GTK_LABEL(gtk_label_new("m"));
@@ -330,10 +307,13 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_valign(GTK_WIDGET(data->tripUnitLabel), GTK_ALIGN_END);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripUnitLabel), 2, 1, 1, 1);
     
-    // Col 3: Trip time
-    data->tripTimeLabel = GTK_LABEL(gtk_label_new("   0:00"));
+    // Col 3: Trip time. Right-aligned in a fixed-width column rather than
+    // space-padded, so the column holds whichever monospace font the platform
+    // resolves -- Noto Sans Mono on the box, DejaVu in the sandbox.
+    data->tripTimeLabel = GTK_LABEL(gtk_label_new("0:00"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripTimeLabel)), "time-label");
-    gtk_label_set_xalign(data->tripTimeLabel, 0.0);
+    gtk_label_set_xalign(data->tripTimeLabel, 1.0);
+    gtk_widget_set_size_request(GTK_WIDGET(data->tripTimeLabel), 90, -1);
     gtk_widget_set_valign(GTK_WIDGET(data->tripTimeLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_margin_start(GTK_WIDGET(data->tripTimeLabel), 10);
     if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
@@ -351,6 +331,8 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextDistLabel)), "dist-value");
     gtk_label_set_xalign(data->nextDistLabel, 1.0);
     gtk_label_set_width_chars(data->nextDistLabel, 7);
+    gtk_label_set_max_width_chars(data->nextDistLabel, 7);
+    gtk_label_set_ellipsize(data->nextDistLabel, PANGO_ELLIPSIZE_START);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->nextDistLabel), 1, 2, 1, 1);
     
     data->nextUnitLabel = GTK_LABEL(gtk_label_new("m"));
@@ -362,6 +344,7 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     data->nextSpeedLabel = GTK_LABEL(gtk_label_new("---"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextSpeedLabel)), "time-label");
     gtk_label_set_xalign(data->nextSpeedLabel, 0.0);
+    gtk_widget_set_size_request(GTK_WIDGET(data->nextSpeedLabel), 90, -1);
     gtk_widget_set_valign(GTK_WIDGET(data->nextSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_margin_start(GTK_WIDGET(data->nextSpeedLabel), 10);
     if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
@@ -397,49 +380,53 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_label_set_xalign(data->copilotRallyClockLabel, 1.0);
     gtk_box_pack_end(GTK_BOX(topRightRow), GTK_WIDGET(data->copilotRallyClockLabel), FALSE, FALSE, 0);
     
-    // Alarm buttons: 3 rows of 4
+    // Alarm buttons: label on its own row, then a flush-left 4x3 grid --
+    // no per-row indent, so every column lines up squarely under the label
+    // rather than being pushed right by a label-width spacer.
     GtkWidget* alarmBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     gtk_widget_set_margin_top(alarmBox, 10);
+    gtk_widget_set_halign(alarmBox, GTK_ALIGN_END);
     gtk_box_pack_start(GTK_BOX(rightPanel), alarmBox, FALSE, FALSE, 0);
-    
+
+    // "KM", not "in": the buttons are kilometre distances, and
+    // "Alarm in 2" reads as two minutes.
+    GtkWidget* alarmLabel = gtk_label_new("Alarm KM");
+    gtk_style_context_add_class(gtk_widget_get_style_context(alarmLabel), "alarm-label");
+    gtk_label_set_xalign(GTK_LABEL(alarmLabel), 0.0);
+    gtk_box_pack_start(GTK_BOX(alarmBox), alarmLabel, FALSE, FALSE, 0);
+
     // Alarm buttons: 4 rows of 3, 30% larger (62x47)
-    auto addAlarmRow = [&](GtkWidget* parent, int from, int to, bool hasLabel) {
+    auto addAlarmRow = [&](GtkWidget* parent, int from, int to) {
         GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
         gtk_box_pack_start(GTK_BOX(parent), row, FALSE, FALSE, 0);
-        if (hasLabel) {
-            GtkWidget* lbl = gtk_label_new("Alarm in");
-            gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "alarm-label");
-            gtk_box_pack_start(GTK_BOX(row), lbl, FALSE, FALSE, 3);
-        } else {
-            GtkWidget* spacer = gtk_label_new("");
-            gtk_style_context_add_class(gtk_widget_get_style_context(spacer), "alarm-label");
-            gtk_widget_set_size_request(spacer, 70, -1);
-            gtk_box_pack_start(GTK_BOX(row), spacer, FALSE, FALSE, 3);
-        }
         for (int km = from; km <= to; km++) {
             GtkWidget* btn = gtk_button_new_with_label(std::to_string(km).c_str());
             gtk_style_context_add_class(gtk_widget_get_style_context(btn), "alarm-button");
-            gtk_widget_set_size_request(btn, 62, 47);
+            gtk_widget_set_size_request(btn, 68, 47);
             g_object_set_data(G_OBJECT(btn), "km", GINT_TO_POINTER(km));
             g_signal_connect(btn, "clicked", G_CALLBACK(on_alarm_set), data);
             gtk_box_pack_start(GTK_BOX(row), btn, FALSE, FALSE, 2);
         }
     };
+
+    addAlarmRow(alarmBox, 2, 4);
+    addAlarmRow(alarmBox, 5, 7);
+    addAlarmRow(alarmBox, 8, 10);
+    addAlarmRow(alarmBox, 11, 13);
     
-    addAlarmRow(alarmBox, 2, 4, true);
-    addAlarmRow(alarmBox, 5, 7, false);
-    addAlarmRow(alarmBox, 8, 10, false);
-    addAlarmRow(alarmBox, 11, 13, false);
-    
-    // Alarm countdown + clear button
+    // Alarm countdown + clear button, right-aligned under the alarm grid so
+    // the countdown ends level with the buttons above it rather than
+    // floating at the panel's left edge.
     GtkWidget* countdownRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
     gtk_widget_set_margin_top(countdownRow, 8);
+    gtk_widget_set_halign(countdownRow, GTK_ALIGN_END);
     gtk_box_pack_start(GTK_BOX(rightPanel), countdownRow, FALSE, FALSE, 0);
-    
+
     data->alarmCountdownLabel = GTK_LABEL(gtk_label_new(""));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->alarmCountdownLabel)), "alarm-countdown");
+    gtk_label_set_xalign(data->alarmCountdownLabel, 1.0);
     gtk_box_pack_start(GTK_BOX(countdownRow), GTK_WIDGET(data->alarmCountdownLabel), FALSE, FALSE, 0);
-    
+
     data->alarmClearBtn = gtk_button_new_with_label("clear");
     gtk_style_context_add_class(gtk_widget_get_style_context(data->alarmClearBtn), "alarm-button");
     g_signal_connect(data->alarmClearBtn, "clicked", G_CALLBACK(on_alarm_clear), data);
@@ -449,11 +436,13 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     
     // ── BOTTOM ROW: Navigation buttons (20% taller) ──
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+    gtk_widget_set_margin_start(buttonBox, 5);
+    gtk_widget_set_margin_end(buttonBox, 5);
     gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 0);
     
     GtkWidget* stageGoBtn = gtk_button_new_with_label("stage go");
     GtkWidget* segmentsBtn = gtk_button_new_with_label("segments");
-    data->adjZeroBtn = gtk_button_new_with_label("Adj. driver Zero (0.00s)");
+    data->adjZeroBtn = gtk_button_new_with_label("driver Zero (0.00)");
     GtkWidget* calBtn = gtk_button_new_with_label("calibration");
     GtkWidget* datetimeBtn = gtk_button_new_with_label("date/time");
 
