@@ -1,5 +1,6 @@
 #include "calculations.h"
 #include <cmath>
+#include <cstdio>
 #include <ctime>
 #include <chrono>
 #include <iomanip>
@@ -195,6 +196,50 @@ double calculateAheadBehindFromStageStart(const RallyState& state, int64_t curre
     
     double counts_per_second = current_seg.target_speed_counts_per_hour / 3600.0;
     double seconds = diff / counts_per_second;
-    
+
     return seconds;
+}
+
+std::string formatDistanceGrouped(long meters) {
+    bool negative = meters < 0;
+    std::string num = std::to_string(negative ? -meters : meters);
+    std::string result;
+    int count = 0;
+    for (int i = static_cast<int>(num.size()) - 1; i >= 0; i--) {
+        if (count > 0 && count % 3 == 0) result = ',' + result;
+        result = num[i] + result;
+        count++;
+    }
+    if (negative) result = '-' + result;
+    return result;
+}
+
+std::string formatDistanceAutoUnit(long meters, const char** unit_out) {
+    if (meters > 999999 || meters < -999999) {
+        *unit_out = "km";
+        return formatDistanceGrouped(meters / 1000);
+    }
+    *unit_out = "m";
+    return formatDistanceGrouped(meters);
+}
+
+std::string formatElapsedInterval(int64_t total_secs) {
+    if (total_secs < 0) total_secs = 0;
+    int64_t minutes = total_secs / 60;
+    char buf[24];
+    if (minutes <= 9999) {
+        snprintf(buf, sizeof(buf), "%lld:%02lld",
+                 static_cast<long long>(minutes),
+                 static_cast<long long>(total_secs % 60));
+    } else {
+        int64_t hours = minutes / 60;
+        if (hours <= 9999) {
+            snprintf(buf, sizeof(buf), "%lld:%02lld",
+                     static_cast<long long>(hours),
+                     static_cast<long long>(minutes % 60));
+        } else {
+            snprintf(buf, sizeof(buf), "toolong");
+        }
+    }
+    return std::string(buf);
 }
