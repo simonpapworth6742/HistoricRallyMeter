@@ -607,10 +607,11 @@ void updateCalibrationDisplay(AppData* data) {
     gtk_label_set_text(data->totalDistCalLabel,
         calibrationReadoutLine(total_m, cntr_a, cntr1_diff, cntr2_diff).c_str());
 
-    char current[64];
-    snprintf(current, sizeof(current), "Current Calibration: %ld pulses/KM",
+    char current[96];
+    snprintf(current, sizeof(current),
+             "Current <span foreground=\"#FFDD00\">Calibration %ld pulses/KM</span>. Reset to",
              static_cast<long>(pulsesPerKm(data->state->calibration) + 0.5));
-    gtk_label_set_text(data->calibrationCurrentLabel, current);
+    gtk_label_set_markup(data->calibrationCurrentLabel, current);
 }
 
 // Helper function to update date/time display
@@ -851,12 +852,25 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     }
 }
 
-void on_reset_calibration_1m(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+void on_reset_calibration_pulses(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    const char* text = gtk_entry_get_text(data->resetPulsesEntry);
+    if (!text || !*text) return;
 
-    // 1m per pulse: 1 count = 1000mm, so 1000 counts = 1,000,000mm
-    data->state->calibration = 1000000;
+    double pulses_per_km = 0.0;
+    try {
+        pulses_per_km = std::stod(text);
+    } catch (const std::exception&) {
+        return;  // unparseable entry -- leave calibration untouched
+    }
 
+    long new_calibration = calibrationFromPulsesPerKm(pulses_per_km);
+    if (new_calibration <= 0) return;  // zero/negative entry -- no-op, not a crash
+
+    data->state->calibration = new_calibration;
+
+    // Recalculate count-based values in all segments from stable human
+    // values, same as every other calibration change.
     for (auto& seg : data->state->segments) {
         seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
         seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
@@ -869,8 +883,6 @@ void on_reset_calibration_1m(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data
     }
 
     ConfigFile::save(*data->state);
-    data->cal_started = false;
-    gtk_entry_set_text(data->rallyDistEntry, "");
     updateCalibrationDisplay(data);
 }
 
