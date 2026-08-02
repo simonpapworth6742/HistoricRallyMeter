@@ -131,17 +131,46 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
         "Confirm Stage Go",
         GTK_WINDOW(gtk_widget_get_toplevel(widget)),
         GTK_DIALOG_MODAL,
-        "Yes", GTK_RESPONSE_YES,
-        "Auto start", RESPONSE_AUTO_START,
+        // "Now" rather than "Yes": what distinguishes this from the autostart
+        // option is that the stage begins immediately.
+        "Now", GTK_RESPONSE_YES,
+        "Set Autostart", RESPONSE_AUTO_START,
         "No", GTK_RESPONSE_NO,
         nullptr);
-    
+
     GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    gtk_container_set_border_width(GTK_CONTAINER(content), 20);
-    
-    GtkWidget* label = gtk_label_new("Stage Go?\n\nThis will reset Total, Trip,\nand Segment counters.");
+    gtk_container_set_border_width(GTK_CONTAINER(content), 8);
+
+    // Show what is actually about to start, highlighted: this dialog guards
+    // the most destructive action on the box, and an operator who recalled
+    // the wrong memory slot or mis-edited a segment had no way to notice
+    // before confirming. The summary is the segments page's own content --
+    // there is no separate stage name or number in the model to show
+    // instead.
+    std::string summary = stageSummary(data->state->segments);
+    std::string markup = "Stage Go?\n\nStage = <span foreground=\"#FFDD00\">"
+                       + summary + "</span>\n"
+                       + "Total and Trip Counters will reset";
+
+    GtkWidget* label = gtk_label_new(nullptr);
+    gtk_label_set_markup(GTK_LABEL(label), markup.c_str());
     gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
-    gtk_box_pack_start(GTK_BOX(content), label, TRUE, TRUE, 10);
+    // A stage with many segments would otherwise force the dialog as wide
+    // as the whole comma-separated list on one line; wrap it instead.
+    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+    // width_chars, not just max_width_chars: fixing the measurement width
+    // up front gives GTK a single, stable wrap pass. max_width_chars alone
+    // only caps the natural width, so the dialog's first size-negotiation
+    // pass (before the final width is settled) can wrap taller than the
+    // final render needs, leaving reserved-but-unused height below the text.
+    gtk_label_set_width_chars(GTK_LABEL(label), 44);
+    gtk_label_set_max_width_chars(GTK_LABEL(label), 44);
+    // expand=FALSE: with TRUE the label was stretched to fill whatever
+    // extra height the button row's width forced onto the dialog, and its
+    // 0.5 yalign centred the text in that slack -- an equal gap above
+    // "Stage Go?" and below the last line, both growing every time
+    // wrapping added another line. Natural size only, no slack to centre in.
+    gtk_box_pack_start(GTK_BOX(content), label, FALSE, FALSE, 0);
     gtk_widget_show(label);
     
     applyDialogStyle(dialog);
