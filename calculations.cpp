@@ -1,4 +1,5 @@
 #include "calculations.h"
+#include <algorithm>
 #include <cmath>
 #include <ctime>
 #include <chrono>
@@ -195,6 +196,128 @@ double calculateAheadBehindFromStageStart(const RallyState& state, int64_t curre
     
     double counts_per_second = current_seg.target_speed_counts_per_hour / 3600.0;
     double seconds = diff / counts_per_second;
-    
+
     return seconds;
+}
+
+CompactGaugeLayout computeCompactGaugeLayout(double width, double height) {
+    constexpr double REF_RADIUS = 256.0;  // gauge radius in the 1280x400 layout
+
+    CompactGaugeLayout L{};
+    // The gauge fills the panel width (bezel ~18px + a small margin); the hub
+    // sits low, leaving room for the readout box and the footer beneath it.
+    L.radius  = std::min(width / 2 - 25, height - 95);
+    L.centerX = width / 2;
+    L.centerY = height - 75;
+    // Clamped at 1.0: a larger gauge must not scale the fonts UP, or the
+    // values run off the panel.
+    L.fscale  = std::min(1.0, L.radius / REF_RADIUS);
+
+    L.valSize   = 44 * L.fscale;
+    L.labelSize = 16 * L.fscale;
+    L.labelGap  = 8 * L.fscale;
+    L.rowGap    = 48 * L.fscale;
+
+    // rightAnchor: symmetric about the hub, far enough out to clear the arc.
+    // Every speed value right-aligns to it.
+    L.rightAnchor = L.centerX + L.radius * 0.72;
+    // distanceAnchor: where every distance value AND the "Distance (metres)"
+    // caption below it (RB-DRV-02) both right-align to, so a value's last
+    // digit and the caption's closing ")" always share one vertical edge --
+    // no text measurement needed, both anchor to the identical X.
+    L.distanceAnchor = L.radius * 0.72;
+
+    // Current sits alone at the top of the panel. Its baseline is derived
+    // from the old 50px heading size so the block does not shift when the
+    // value font drops to valSize to match the rows below.
+    const double cur_top_size = 50 * L.fscale;
+    L.curBaseline = 4 * L.fscale + cur_top_size * 0.78;
+
+    // Target on top, Total beneath it, Trip on the bottom row just above the
+    // hub -- so the eye travels target -> what you are actually averaging.
+    const double bottom_baseline = L.centerY - 10;
+    L.targetBaseline = bottom_baseline - 2 * L.rowGap;
+    L.totalBaseline  = bottom_baseline - L.rowGap;
+    L.tripBaseline   = bottom_baseline;
+
+    // Captions sit below the bottom value row, clear of it and of the footer.
+    // They are deliberately not tied to the ahead/behind box, which moves.
+    L.captionBaseline = L.centerY + 20 + L.labelSize * 0.78;
+
+    // The ahead/behind readout is lifted so its top edge sits above the hub.
+    // Drawn after the needle, it paints the hub out -- the hub carries no
+    // information the driver needs, and the readout is what they actually
+    // look at, so it gets the centre of the dial.
+    L.boxHeight = 50.0;
+    L.boxY      = L.centerY - 10;
+
+    // Footer rides on the bottom edge of the box, so the two never overlap
+    // however the box is sized.
+    L.footSize     = std::max(11.0, 14 * L.fscale);
+    L.footBaseline = L.boxY + L.boxHeight;
+
+    return L;
+}
+
+std::string distanceColumnCaption(const char* unit) {
+    const bool kilometres = (unit != nullptr) && (std::string(unit) == "km");
+    return std::string("Distance (") + (kilometres ? "kilometres" : "metres") + ")";
+}
+
+std::string speedColumnCaption(bool units_mph) {
+    return units_mph ? "Average Speed (Mph)" : "Average Speed (Kmh)";
+}
+
+NeedleGeometry computeNeedleGeometry(double seconds, double max_seconds, double radius) {
+    NeedleGeometry n{};
+
+    // Peg at the scale ends. Past full deflection the needle stops moving and
+    // the digital readout carries the real magnitude -- a needle that wrapped
+    // round would read as the opposite error.
+    double clamped = seconds;
+    if (clamped > max_seconds)  clamped = max_seconds;
+    if (clamped < -max_seconds) clamped = -max_seconds;
+
+    n.angle = M_PI + M_PI / 2 + (clamped / max_seconds) * (M_PI / 2);
+    // 5% short of the tick ring so the bar's flat tip does not foul the ticks
+    // it is being read against.
+    n.length = (radius - 10) * 0.95;
+    n.halfWidth = 3.0;
+    return n;
+}
+
+double gaugeEffectiveMaxSeconds(double seconds) {
+    double abs_sec = std::abs(seconds);
+    if (abs_sec < 3.0) return 3.0;
+    if (abs_sec > 30.0) return 30.0;
+    return abs_sec;
+}
+
+int gaugeZone(double seconds) {
+    double abs_sec = std::abs(seconds);
+    if (abs_sec < 10.0) return 0;
+    if (abs_sec < 30.0) return 1;
+    return 2;
+}
+
+GaugeArcColor gaugeArcColor(int zone) {
+    switch (zone) {
+    case 0:  return { 0.0, 0.7, 0.0 };    // green
+    case 2:  return { 0.8, 0.1, 0.1 };    // red
+    default: return { 0.85, 0.65, 0.0 };  // amber
+    }
+}
+
+std::string gaugeTickLabel(int index) {
+    if (index == 0) return std::string();
+    return std::to_string(index);
+}
+
+bool gaugeTickLabelsVisible(double seconds) {
+    return gaugeZone(seconds) == 0;
+}
+
+double gaugeTickAngle(int index, double max_val) {
+    double frac = static_cast<double>(index) / max_val;
+    return M_PI + M_PI / 2 + frac * (M_PI / 2);
 }

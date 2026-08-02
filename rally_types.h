@@ -53,14 +53,16 @@ struct AppData {
     GtkLabel* updatesPerSecLabel;
     GtkLabel* cpuTempLabel;
     GtkLabel* unitsLabel;  // Shows KPH or MPH in header
+    GtkLabel* driverTotalDistLabel;
+    GtkLabel* driverTotalUnitLabel;
+    GtkLabel* driverTripDistLabel;
+    GtkLabel* driverTripUnitLabel;
     GtkButton* unitToggleBtn;
     
     // Rally gauge
     GtkWidget* rallyGaugeDrawingArea;
     double aheadBehindSeconds = 0.0;
     double smoothedSpeed = -1.0;      // EMA-filtered current speed for display
-    int gaugeScale = 1;               // 0=±3s(green), 1=±10s(yellow), 2=±5min(red)
-    int64_t gaugeScaleChangeTime = 0; // Timestamp of last scale change (2s cooldown)
     double segmentProgress = 0.0;     // fraction (0..1) of the current segment driven
     bool inSegment = false;           // true while within the current segment's distance
     
