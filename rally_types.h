@@ -119,7 +119,9 @@ struct AppData {
     GtkEntry* rallyDistEntry;
     GtkWidget* calibrationKeypad;   // Numeric keypad for calibration
     GtkLabel* sensorModeLabel;      // "Currently set to sensor 1 / both sensors"
-    
+    GtkLabel* calibrationCurrentLabel;  // "Current Calibration: N pulses/KM"
+    GtkLabel* calibrationClockLabel;  // rally clock, shares the title row
+
     // Calibration baseline values (set when "start" is pressed)
     uint64_t cal_start_cntr1 = 0;
     uint64_t cal_start_cntr2 = 0;
