@@ -33,6 +33,18 @@ public:
     int alarm_distance_km = 0;          // 0 = no alarm active
     int64_t alarm_target_counts = 0;    // absolute count target from total_start
 
+    // Beep Assist: operator-entered waypoints that sound a short beep as they
+    // are reached, so the co-pilot's eyes can stay on the roadbook instead of
+    // the odometer. Waypoints are absolute distances from the Total counter's
+    // zero -- the way a roadbook lists them -- so a mis-entered value corrupts
+    // one waypoint rather than every one after it.
+    bool beep_assist_enabled = false;
+    std::vector<double> beep_waypoints_m;
+    double beep_advance_m = 0.0;      // navigation mode: beep this far before
+    double beep_advance_s = 0.0;      // timing mode: beep this long before
+    bool beep_navigation_mode = false;
+    bool beep_timing_mode = false;
+
     // Force single-display mode even when multiple screens exist
     bool force_single_display = false;
 

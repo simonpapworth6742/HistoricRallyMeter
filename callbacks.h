@@ -42,11 +42,19 @@ void on_keypad_digit(GtkWidget* widget, gpointer user_data);
 void on_keypad_clear(GtkWidget* widget, gpointer user_data);
 void on_keypad_backspace(GtkWidget* widget, gpointer user_data);
 gboolean on_entry_focus(GtkWidget* widget, GdkEvent* event, gpointer user_data);
+// Focus handler for the Beep Assist waypoint view, mirroring on_entry_focus.
+gboolean on_textview_focus(GtkWidget* widget, GdkEvent* event, gpointer user_data);
 void on_segment_entry_changed(GtkWidget* widget, gpointer user_data);
 void on_segment_auto_toggled(GtkWidget* widget, gpointer user_data);
 void on_memory_set(GtkWidget* widget, gpointer user_data);
 void on_memory_recall(GtkWidget* widget, gpointer user_data);
 void on_memory_clear(GtkWidget* widget, gpointer user_data);
+
+// Beep Assist controls on the stage-setup screen.
+void on_beep_waypoints_changed(GtkTextBuffer* buffer, gpointer user_data);
+gboolean on_beep_enable_toggled(GtkWidget* widget, gboolean state, gpointer user_data);
+void on_beep_mode_toggled(GtkWidget* widget, gpointer user_data);
+void on_beep_advance_changed(GtkWidget* widget, gpointer user_data);
 void on_alarm_set(GtkWidget* widget, gpointer user_data);
 void on_alarm_clear(GtkWidget* widget, gpointer user_data);
 void on_adj_driver_zero(GtkWidget* widget, gpointer user_data);
