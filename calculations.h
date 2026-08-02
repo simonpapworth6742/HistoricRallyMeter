@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 #include "rally_state.h"
 #include "rally_types.h"
 
@@ -50,5 +51,13 @@ double calculateIdealCountsFromStageStart(const RallyState& state, int64_t elaps
 // Calculate seconds ahead/behind from stage start (accounts for all segments)
 double calculateAheadBehindFromStageStart(const RallyState& state, int64_t current_time_ms,
                                           int64_t actual_counts_from_stage_start);
+
+// Summary of the loaded stage for the Stage Go confirmation, built directly
+// from the segments the operator has entered or recalled -- the app tracks
+// no separate stage name or number, so this is the only truthful thing to
+// show. Formatting matches refreshSegmentList()'s own display exactly
+// (whole metres, speed to two decimal places), so the dialog can never show
+// a number the operator does not already recognise from the segments page.
+std::string stageSummary(const std::vector<Segment>& segments);
 
 #endif // CALCULATIONS_H
