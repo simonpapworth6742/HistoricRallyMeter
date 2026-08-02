@@ -91,7 +91,8 @@ static void applyCopilotCSS() {
         "scrollbar slider { min-width: 20px; min-height: 20px; }"
         "scrollbar.vertical slider { min-width: 20px; }"
         "scrollbar trough { min-width: 24px; }"
-        "button.memory-populated { background-image: none; background-color: #FFFFFF; color: #000000; }",
+        "button.memory-populated { background-image: none; background-color: #FFFFFF; color: #000000; }"
+        ".instruction-label { font-size: 16px; color: #CCCCCC; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -616,10 +617,21 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(screen), "calibration-screen");
     gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
     
-    // Title
+    // Title, with the rally clock on the same row -- this screen otherwise
+    // has no clock at all, unlike every other screen.
+    GtkWidget* titleRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(screen), titleRow, FALSE, FALSE, 0);
+
     GtkWidget* titleLabel = gtk_label_new("CALIBRATION");
     gtk_style_context_add_class(gtk_widget_get_style_context(titleLabel), "title-label");
-    gtk_box_pack_start(GTK_BOX(screen), titleLabel, FALSE, FALSE, 0);
+    gtk_widget_set_hexpand(titleLabel, TRUE);
+    gtk_box_pack_start(GTK_BOX(titleRow), titleLabel, TRUE, TRUE, 0);
+
+    data->calibrationClockLabel = GTK_LABEL(gtk_label_new("00:00:00"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->calibrationClockLabel)), "clock-label");
+    gtk_label_set_width_chars(data->calibrationClockLabel, 8);
+    gtk_label_set_xalign(data->calibrationClockLabel, 1.0);
+    gtk_box_pack_end(GTK_BOX(titleRow), GTK_WIDGET(data->calibrationClockLabel), FALSE, FALSE, 0);
     
     // Main horizontal container: left side for info, right side for keypad
     data->calibrationMainBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
@@ -674,9 +686,36 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     GtkWidget* sensorBothBtn = gtk_button_new_with_label("Set both sensors and avg.");
     g_signal_connect(sensorBothBtn, "clicked", G_CALLBACK(on_set_sensor_both), data);
     gtk_box_pack_start(GTK_BOX(sensorRow), sensorBothBtn, FALSE, FALSE, 5);
-    
-    // Right side: numeric keypad
+
+    // The saved value, so the operator can compare before and after instead
+    // of having to remember what it was.
+    data->calibrationCurrentLabel = GTK_LABEL(gtk_label_new("Current Calibration: 0 pulses/KM"));
+    gtk_widget_set_halign(GTK_WIDGET(data->calibrationCurrentLabel), GTK_ALIGN_START);
+    gtk_widget_set_margin_top(GTK_WIDGET(data->calibrationCurrentLabel), 6);
+    gtk_box_pack_start(GTK_BOX(leftBox), GTK_WIDGET(data->calibrationCurrentLabel), FALSE, FALSE, 0);
+
+    // Calibration is a rare, four-step procedure done at the roadside under
+    // time pressure. Spelling the steps out costs six rows and saves a manual.
+    const char* instructions[] = {
+        "INSTRUCTIONS:",
+        "1. Press Start/Zero to reset counter to zero or skip to step 2 to use existing counters.",
+        "2. Enter actual distance covered.",
+        "3. Press Sensor button to select counter.",
+        "4. Save Calibration",
+    };
+    for (int i = 0; i < 5; i++) {
+        GtkWidget* lbl = gtk_label_new(instructions[i]);
+        gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "instruction-label");
+        gtk_widget_set_halign(lbl, GTK_ALIGN_START);
+        if (i == 0) gtk_widget_set_margin_top(lbl, 22);
+        gtk_box_pack_start(GTK_BOX(leftBox), lbl, FALSE, FALSE, 0);
+    }
+
+    // Right side: numeric keypad. Nudged down from the top of its column so
+    // it doesn't sit flush against the title row now that the row is taller
+    // (title + clock) than a plain title alone.
     data->calibrationKeypad = createNumericKeypad(data);
+    gtk_widget_set_margin_top(data->calibrationKeypad, 12);
     gtk_box_pack_end(GTK_BOX(data->calibrationMainBox), data->calibrationKeypad, FALSE, FALSE, 10);
     
     // Bottom: navigation buttons

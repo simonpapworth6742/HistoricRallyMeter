@@ -581,7 +581,10 @@ void on_calibration_start(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 // Helper function to update calibration display
 void updateCalibrationDisplay(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
-    
+
+    gtk_label_set_text(data->calibrationClockLabel,
+        formatTime(getRallyTime_ms(*data->state)).c_str());
+
     // Calculate counts from calibration start (or total start if not started)
     uint64_t start_cntr1 = data->cal_started ? data->cal_start_cntr1 : data->state->total_start_cntr1;
     uint64_t start_cntr2 = data->cal_started ? data->cal_start_cntr2 : data->state->total_start_cntr2;
@@ -603,6 +606,11 @@ void updateCalibrationDisplay(AppData* data) {
     long total_m = countsToCentimeters(cntr_a, data->state->calibration) / 100;
     gtk_label_set_text(data->totalDistCalLabel,
         calibrationReadoutLine(total_m, cntr_a, cntr1_diff, cntr2_diff).c_str());
+
+    char current[64];
+    snprintf(current, sizeof(current), "Current Calibration: %ld pulses/KM",
+             static_cast<long>(pulsesPerKm(data->state->calibration) + 0.5));
+    gtk_label_set_text(data->calibrationCurrentLabel, current);
 }
 
 // Helper function to update date/time display
