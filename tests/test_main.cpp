@@ -21,6 +21,7 @@
 #include "test_calibration_display.h"
 #include "test_stage_summary.h"
 #include "test_gauge_layout.h"
+#include "test_simple_tone.h"
 
 int main() {
     TestRunner runner;
@@ -45,6 +46,7 @@ int main() {
     TestCalibrationDisplay calDisplayTests;
     TestStageSummary stageSummaryTests;
     TestGaugeLayout gaugeLayoutTests;
+    TestSimpleTone simpleToneTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -66,6 +68,7 @@ int main() {
     runner.addSuite(calDisplayTests.createSuite());
     runner.addSuite(stageSummaryTests.createSuite());
     runner.addSuite(gaugeLayoutTests.createSuite());
+    runner.addSuite(simpleToneTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();
