@@ -22,6 +22,7 @@
 #include "test_stage_summary.h"
 #include "test_gauge_layout.h"
 #include "test_simple_tone.h"
+#include "test_arrow_tone.h"
 
 int main() {
     TestRunner runner;
@@ -47,6 +48,7 @@ int main() {
     TestStageSummary stageSummaryTests;
     TestGaugeLayout gaugeLayoutTests;
     TestSimpleTone simpleToneTests;
+    TestArrowTone arrowToneTests;
 
     // Add all test suites
     runner.addSuite(configTests.createSuite());
@@ -69,6 +71,7 @@ int main() {
     runner.addSuite(stageSummaryTests.createSuite());
     runner.addSuite(gaugeLayoutTests.createSuite());
     runner.addSuite(simpleToneTests.createSuite());
+    runner.addSuite(arrowToneTests.createSuite());
 
     // Run all tests
     int failures = runner.runAll();
