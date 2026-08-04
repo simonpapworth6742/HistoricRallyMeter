@@ -8,6 +8,8 @@
 #include <gtk/gtk.h>
 #endif
 
+#include "simple_tone.h"
+
 // Forward declarations
 class ICounter;
 class SimCounter;
@@ -66,7 +68,12 @@ struct AppData {
     double smoothedSpeed = -1.0;      // EMA-filtered current speed for display
     double segmentProgress = 0.0;     // fraction (0..1) of the current segment driven
     bool inSegment = false;           // true while within the current segment's distance
-    
+
+    // Runtime latch for the alternative time-error-only tone
+    // (simple_tone.h). Deliberately not persisted -- restarting the app
+    // with a fresh latch is correct, matching aheadBehindSeconds above.
+    SimpleToneState simpleToneState;
+
     // Compact (800x480-style) driver layout: values drawn inside the gauge
     GtkWidget* driverSpeedsBox = nullptr;  // left pane, hidden in compact mode
     bool driverCompactMode = false;
