@@ -36,6 +36,8 @@ void on_save_calibration(GtkWidget* widget, gpointer user_data);
 void on_reset_calibration_pulses(GtkWidget* widget, gpointer user_data);
 void on_save_datetime(GtkWidget* widget, gpointer user_data);
 gboolean on_force_single_display_toggle(GtkSwitch* sw, gboolean state, gpointer user_data);
+gboolean on_tone_enabled_toggle(GtkSwitch* sw, gboolean state, gpointer user_data);
+void on_tone_type_toggled(GtkWidget* widget, gpointer user_data);
 void refreshSegmentList(AppData* data);
 void updateCalibrationDisplay(AppData* data);
 // Refresh the calibration screen's sensor-selection label.
