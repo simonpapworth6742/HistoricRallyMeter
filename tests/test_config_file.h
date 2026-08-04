@@ -272,6 +272,30 @@ public:
             return in.beep_waypoints_m.size() == 2 && in.segments.size() == 1;
         });
 
+        suite->addTest("tone_enabled survives a save/load round trip", []() {
+            const std::string path = "/tmp/rallybox_test_tone_enabled.json";
+            RallyState out;
+            out.tone_enabled = false;
+            ConfigFile::save(out, path);
+
+            RallyState in;
+            ConfigFile::load(in, path);
+            std::remove(path.c_str());
+            return !in.tone_enabled;
+        });
+
+        suite->addTest("simple_tone_mode survives a save/load round trip", []() {
+            const std::string path = "/tmp/rallybox_test_simple_tone_mode.json";
+            RallyState out;
+            out.simple_tone_mode = true;
+            ConfigFile::save(out, path);
+
+            RallyState in;
+            ConfigFile::load(in, path);
+            std::remove(path.c_str());
+            return in.simple_tone_mode;
+        });
+
         return suite;
     }
 };

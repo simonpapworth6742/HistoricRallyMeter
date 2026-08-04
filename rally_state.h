@@ -60,6 +60,15 @@ public:
     // Force single-display mode even when multiple screens exist
     bool force_single_display = false;
 
+    // Ahead/behind tone. tone_enabled is a master on/off (default true,
+    // matching today's always-on tone). simple_tone_mode picks which
+    // algorithm plays when enabled: false = Type 1, the existing
+    // speed/arrow-based tone (default); true = Type 2, the alternative
+    // time-error-only tone (constant, +/-0.2s quiet band, 0.2s update
+    // hysteresis, ignores speed/recovery distance).
+    bool tone_enabled = true;
+    bool simple_tone_mode = false;
+
     // Embedded web server for phone browsers
     bool web_enabled = true;
     int web_port = 8080;
