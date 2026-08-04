@@ -47,7 +47,8 @@ static void applyCopilotCSS() {
         "scrollbar trough { min-width: 24px; }"
         "button.memory-populated { background-image: none; background-color: #FFFFFF; color: #000000; }"
         ".adjust-button { font-size: 28px; font-weight: bold; font-family: monospace; }"
-        ".instruction-label { font-size: 16px; color: #CCCCCC; }",
+        ".instruction-label { font-size: 16px; color: #CCCCCC; }"
+        ".tone-mode-row label, .tone-mode-row checkbutton { font-size: 20px; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -867,7 +868,8 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     // time-error-only tone). Placed under the keypad -- an option chosen
     // once before driving, not something adjusted mid-stage.
     GtkWidget* toneModeRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    GtkWidget* toneModeLabel = gtk_label_new("tone mode off/on");
+    gtk_style_context_add_class(gtk_widget_get_style_context(toneModeRow), "tone-mode-row");
+    GtkWidget* toneModeLabel = gtk_label_new("tone off/on");
     GtkWidget* toneModeSwitch = gtk_switch_new();
     gtk_switch_set_active(GTK_SWITCH(toneModeSwitch), data->state->tone_enabled);
     gtk_widget_set_valign(toneModeSwitch, GTK_ALIGN_CENTER);
@@ -877,6 +879,7 @@ GtkWidget* createStageSetupScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(rightCol), toneModeRow, FALSE, FALSE, 0);
 
     GtkWidget* toneTypeRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_style_context_add_class(gtk_widget_get_style_context(toneTypeRow), "tone-mode-row");
     GtkWidget* toneTypeLabel = gtk_label_new("Type");
     GtkWidget* toneType1Check = gtk_check_button_new_with_label("1");
     GtkWidget* toneType2Check = gtk_check_button_new_with_label("2");
