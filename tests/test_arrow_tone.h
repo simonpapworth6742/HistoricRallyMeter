@@ -44,8 +44,12 @@ public:
         });
 
         suite->addTest("ahead of schedule gives the slow-down direction", [CAL, TARGET_100KPH]() {
-            // seconds=+2.0: adjusted=20.0s, needed=90.0kph, diff=-10.0 -> 3 arrows, slow down
-            ArrowToneResult r = computeArrowBasedTone(2.0, TARGET_100KPH, CAL, false, 1000.0, false);
+            // seconds=+3.0: adjusted=21.0s, needed=85.714kph, diff=-14.286 -> 3 arrows, slow down.
+            // (Previously used +2.0, which lands the mathematically-exact diff exactly on the
+            // 10.0 arrow-tier boundary; under real -O2 cross-TU compilation 100.0/3.6 isn't
+            // exactly representable, so the computed diff falls a hair under 10.0 and resolves
+            // to 2 arrows instead of 3. 3.0s gives diff~=14.286, well clear of the boundary.)
+            ArrowToneResult r = computeArrowBasedTone(3.0, TARGET_100KPH, CAL, false, 1000.0, false);
             return r.num_arrows == 3 && r.increase_speed == false;
         });
 
