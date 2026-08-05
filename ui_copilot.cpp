@@ -107,21 +107,30 @@ static void applyCopilotCSS() {
 // timing checks in updateCopilotDisplay() so a tick where both are due
 // fires both, back to back, rather than one silently eating the other's
 // beep for the same waypoint.
+// Navigation and Timing modes previously both played the same hardcoded
+// 1200 Hz 50ms blip, differentiated only by repeat count (double vs.
+// single beep). Both now sound a louder, longer, more audible 3200 Hz
+// tone, differentiated by duration too (Navigation: 100ms x2, "bing bong";
+// Timing: one 250ms beep).
+static constexpr double BEEP_ASSIST_FREQ_HZ = 3200.0;
+static constexpr int BEEP_ASSIST_NAV_DURATION_MS = 100;
+static constexpr int BEEP_ASSIST_TIMING_DURATION_MS = 250;
+
 static void fireBeepAssist(AppData* data, double waypoint_m, double travelled_m, bool navigation) {
-    // Navigation mode plays the existing one-shot beep twice in quick
-    // succession ("bing bong"), Timing mode plays it once. Both reuse
-    // ToneGenerator::playBeep() unchanged -- no new tone code.
+    // Navigation mode plays its tone twice in quick succession ("bing
+    // bong"), Timing mode plays it once.
     std::cerr << "Beep Assist fired: waypoint " << waypoint_m
               << "m, travelled " << travelled_m << "m"
               << (navigation ? " (navigation, double beep)" : " (timing, single beep)")
               << std::endl;
     if (data->toneGen) {
-        data->toneGen->playBeep();
+        int duration_ms = navigation ? BEEP_ASSIST_NAV_DURATION_MS : BEEP_ASSIST_TIMING_DURATION_MS;
+        data->toneGen->playBeep(BEEP_ASSIST_FREQ_HZ, duration_ms);
         if (navigation) {
             // g_timeout_add, not a blocking sleep -- this runs on the GTK
             // main thread and must not stall the UI for 150ms.
             g_timeout_add(150, [](gpointer d) -> gboolean {
-                static_cast<AppData*>(d)->toneGen->playBeep();
+                static_cast<AppData*>(d)->toneGen->playBeep(BEEP_ASSIST_FREQ_HZ, BEEP_ASSIST_NAV_DURATION_MS);
                 return G_SOURCE_REMOVE;
             }, data);
         }
