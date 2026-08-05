@@ -46,33 +46,20 @@ public:
             return true;
         });
         
-        // Test maximum input distance (1,000,000m -- raised from 100,000m
-        // per RB-CAL-05, since calibration is sometimes done over a long
-        // positioning run ahead of a stage rather than a short dedicated
-        // run, and those can exceed the old 100,000m/100km cap).
-        suite->addTest("Maximum input distance is 1000000 meters", []() {
-            long max_distance = 1000000;
+        // Test maximum input distance (100,000m)
+        suite->addTest("Maximum input distance is 100000 meters", []() {
+            long max_distance = 100000;
             long count_diff = 100000;
-
+            
             // Should be valid
             long new_cal = (max_distance * 1000 * 1000) / count_diff;
             ASSERT_GT(new_cal, 0);
-
-            // Values above 1000000 should be rejected by UI validation
-            long invalid_distance = 1000001;
-            bool is_valid = invalid_distance <= 1000000;
+            
+            // Values above 100000 should be rejected by UI validation
+            long invalid_distance = 100001;
+            bool is_valid = invalid_distance <= 100000;
             ASSERT_FALSE(is_valid);
-
-            return true;
-        });
-
-        // A distance just above the OLD 100,000m cap must now be ACCEPTED
-        // -- this is the behaviour the modification actually changes.
-        suite->addTest("A distance above the old 100000m cap is now accepted", []() {
-            long distance = 150000;
-            bool is_valid = distance >= 500 && distance <= 1000000;
-            ASSERT_TRUE(is_valid);
-
+            
             return true;
         });
         
@@ -127,13 +114,13 @@ public:
         
         // Test calibration with large count diff
         suite->addTest("Calibration with large count difference", []() {
-            long input_meters = 1000000;  // maximum (raised by RB-CAL-05)
+            long input_meters = 100000;  // maximum
             long count_diff = 1000000;   // large count
-
+            
             long new_cal = (input_meters * 1000 * 1000) / count_diff;
-            // 1000000 * 1000000 / 1000000 = 1000000
-            ASSERT_EQ(new_cal, 1000000);
-
+            // 100000 * 1000000 / 1000000 = 100000
+            ASSERT_EQ(new_cal, 100000);
+            
             return true;
         });
         
