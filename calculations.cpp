@@ -417,32 +417,29 @@ CompactGaugeLayout computeCompactGaugeLayout(double width, double height) {
     // values run off the panel.
     L.fscale  = std::min(1.0, L.radius / REF_RADIUS);
 
-    L.valSize   = 44 * L.fscale;
-    L.labelSize = 16 * L.fscale;
-    L.labelGap  = 8 * L.fscale;
-    L.rowGap    = 48 * L.fscale;
+    L.valSize    = 44 * L.fscale;
+    L.curTopSize = 50 * L.fscale;  // RB-DRV-08: Current/Target/Total/Trip's enlarged size
+    L.labelSize  = 16 * L.fscale;
+    L.labelGap   = 8 * L.fscale;
+    L.rowGap     = 48 * L.fscale;
 
     // rightAnchor: symmetric about the hub, far enough out to clear the arc.
-    // Every speed value right-aligns to it.
+    // Every Total/Trip speed value right-aligns to it.
     L.rightAnchor = L.centerX + L.radius * 0.72;
     // distanceAnchor: where every distance value AND the "Distance (metres)"
     // caption below it (RB-DRV-02) both right-align to, so a value's last
     // digit and the caption's closing ")" always share one vertical edge --
-    // no text measurement needed, both anchor to the identical X.
-    L.distanceAnchor = L.radius * 0.72;
+    // no text measurement needed, both anchor to the identical X. RB-DRV-08
+    // shifts this 10px right of the arc-derived offset.
+    L.distanceAnchor = L.radius * 0.72 + 10.0;
 
-    // Current sits alone at the top of the panel. Its baseline is derived
-    // from the old 50px heading size so the block does not shift when the
-    // value font drops to valSize to match the rows below.
-    const double cur_top_size = 50 * L.fscale;
-    L.curBaseline = 4 * L.fscale + cur_top_size * 0.78;
-
-    // Target on top, Total beneath it, Trip on the bottom row just above the
-    // hub -- so the eye travels target -> what you are actually averaging.
-    const double bottom_baseline = L.centerY - 10;
-    L.targetBaseline = bottom_baseline - 2 * L.rowGap;
-    L.totalBaseline  = bottom_baseline - L.rowGap;
-    L.tripBaseline   = bottom_baseline;
+    // Coloured band arc is drawn at `radius` with lineWidth 12, so its outer
+    // edge sits radius+6 out from the hub. Current's value right-aligns to,
+    // and top-aligns with, this arc's bottom-right end / topmost point
+    // (RB-DRV-08); Target mirrors it on the left.
+    L.bandOuterX  = L.centerX + (L.radius + 6.0);
+    L.bandTargetX = L.centerX - (L.radius + 6.0);
+    L.bandTopY    = L.centerY - (L.radius + 6.0);
 
     // The ahead/behind readout is lifted so its top edge sits above the hub.
     // Drawn after the needle, it paints the hub out -- the hub carries no
@@ -450,6 +447,13 @@ CompactGaugeLayout computeCompactGaugeLayout(double width, double height) {
     // look at, so it gets the centre of the dial.
     L.boxHeight = 50.0;
     L.boxY      = L.centerY - 10;
+
+    // Total/Trip rows: RB-DRV-08 draws them at curTopSize instead of valSize
+    // and nudges them up, with extra line spacing, so the taller text's
+    // descenders clear the ahead/behind box sitting above them.
+    const double lineGap = L.rowGap + 10 * L.fscale;
+    L.tripBaseline  = L.boxY - (0.22 * L.curTopSize + 6 * L.fscale);
+    L.totalBaseline = L.tripBaseline - lineGap;
 
     // Footer rides on the bottom edge of the box, so the two never overlap
     // however the box is sized.

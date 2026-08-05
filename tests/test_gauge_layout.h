@@ -36,19 +36,49 @@ public:
             // right-aligning to, an absolute offset from the arc's own
             // radius, not a centre-relative gap.
             CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
-            // radius = 375, so distanceAnchor = 375 * 0.72 = 270.
-            return std::abs(L.distanceAnchor - 270.0) < 0.001
+            // radius = 375, so the arc-derived offset is 375 * 0.72 = 270;
+            // RB-DRV-08 adds a flat +10 shift, giving 280.
+            return std::abs(L.distanceAnchor - 280.0) < 0.001
                 && L.distanceAnchor < L.centerX;
         });
 
-        suite->addTest("Target sits above Total sits above Trip", []() {
-            // Smaller baseline = higher on screen. Rows must be one rowGap
-            // apart so a distance on the left lines up with its speed.
+        suite->addTest("distance anchor is shifted 10px right of the arc offset (RB-DRV-08)", []() {
             CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
-            return L.targetBaseline < L.totalBaseline
-                && L.totalBaseline < L.tripBaseline
-                && std::abs((L.totalBaseline - L.targetBaseline) - L.rowGap) < 0.001
-                && std::abs((L.tripBaseline - L.totalBaseline) - L.rowGap) < 0.001;
+            // radius = 375, so the un-shifted offset would be 270; RB-DRV-08
+            // adds a flat +10.
+            return std::abs(L.distanceAnchor - 280.0) < 0.001;
+        });
+
+        suite->addTest("curTopSize is 50 at full scale", []() {
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            return std::abs(L.curTopSize - 50.0) < 0.001;
+        });
+
+        suite->addTest("band edges straddle the centre and sit above centerY", []() {
+            // bandOuterX/bandTargetX mirror the hub by radius+6 (the arc's
+            // outer edge, lineWidth 12 centred on `radius`); bandTopY is
+            // that same radius+6 offset straight up.
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            double expectedOuter = L.centerX + (L.radius + 6.0);
+            double expectedTarget = L.centerX - (L.radius + 6.0);
+            double expectedTopY = L.centerY - (L.radius + 6.0);
+            return std::abs(L.bandOuterX - expectedOuter) < 0.001
+                && std::abs(L.bandTargetX - expectedTarget) < 0.001
+                && std::abs(L.bandTopY - expectedTopY) < 0.001
+                && L.bandTopY < L.centerY;
+        });
+
+        suite->addTest("Total sits above Trip, separated by more than rowGap", []() {
+            // RB-DRV-08: Target moved off this stack entirely (to the
+            // top-left corner); Total/Trip are drawn at the larger
+            // curTopSize with extra line spacing so the taller glyphs'
+            // descenders clear the ahead/behind box above them -- so the
+            // gap is now rowGap plus a scaled margin, not exactly rowGap.
+            CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
+            double gap = L.tripBaseline - L.totalBaseline;
+            return L.totalBaseline < L.tripBaseline
+                && gap > L.rowGap
+                && gap < L.rowGap + 20.0 * L.fscale + 0.001;
         });
 
         suite->addTest("row gap is 48 at full scale", []() {
@@ -56,15 +86,21 @@ public:
             return std::abs(L.rowGap - 48.0) < 0.001;
         });
 
-        suite->addTest("Current sits above every other row", []() {
+        suite->addTest("curTopSize is the largest text size in the layout", []() {
+            // RB-DRV-08: Current/Target moved to curTopSize, the single
+            // largest font in the layout -- there is no more separate
+            // curBaseline/targetBaseline row stack to compare rows against.
             CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
-            return L.curBaseline < L.targetBaseline;
+            return L.curTopSize > L.valSize && L.curTopSize > L.labelSize;
         });
 
         suite->addTest("Trip row clears the needle hub", []() {
-            // The bottom row must not collide with the hub at centerY.
+            // The bottom row must not collide with the hub at centerY, and
+            // must sit clearly above the ahead/behind box's top edge (which
+            // covers the hub) -- RB-DRV-08 nudges Trip up specifically so
+            // its descenders clear that box.
             CompactGaugeLayout L = computeCompactGaugeLayout(800, 480);
-            return L.tripBaseline < L.centerY;
+            return L.tripBaseline < L.centerY && L.tripBaseline < L.boxY;
         });
 
         suite->addTest("caption clears the Trip row above it", []() {
