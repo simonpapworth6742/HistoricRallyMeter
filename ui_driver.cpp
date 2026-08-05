@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdio>
 #include <ctime>
+#include <cstring>
 #include <fstream>
 #include <string>
 
@@ -212,7 +213,11 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     // centre of the dial. The wide layout keeps the original smaller box
     // below the hub, where there is nothing to cover.
     {
-        double digital_size = data->driverCompactMode ? 32.0 : 22.0;
+        CompactGaugeLayout L{};
+        if (data->driverCompactMode) {
+            L = computeCompactGaugeLayout(width, height);
+        }
+        double digital_size = data->driverCompactMode ? L.valSize : 22.0;
         cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
         cairo_set_font_size(cr, digital_size);
 
@@ -221,11 +226,15 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
 
         double box_width, box_height, box_y, border;
         if (data->driverCompactMode) {
-            CompactGaugeLayout L = computeCompactGaugeLayout(width, height);
-            box_width  = std::max(180.0, dext.x_advance + 24);
-            box_height = L.boxHeight;
-            box_y      = L.boxY;
-            border     = 3.0;
+            // 10% wider than the fitted/minimum width, at the user's
+            // request (matches the mockup's own `* 1.1` factor) -- applied
+            // to the final computed width so it scales whichever branch
+            // (the 180px floor or the digit-fitted width) is in effect.
+            box_width  = std::max(180.0, dext.x_advance + 24) * 1.1;
+            box_height = digital_size + 20.0;  // RB-DRV-08: fit-to-font, symmetric about the old box centre
+            double box_center_y = L.boxY + L.boxHeight / 2.0;
+            box_y = box_center_y - box_height / 2.0;
+            border = 3.0;
         } else {
             box_width  = std::max(130.0, dext.x_advance + 16);
             box_height = 36.0;
@@ -242,9 +251,38 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         cairo_rectangle(cr, box_x, box_y, box_width, box_height);
         cairo_stroke(cr);
 
-        cairo_move_to(cr, centerX - dext.width / 2,
-                          box_y + box_height / 2 + dext.height / 2 - 2);
-        cairo_show_text(cr, digital);
+        if (data->driverCompactMode) {
+            // RB-DRV-08: centre the "." on the box's horizontal centre (not
+            // the whole string, which reads off-centre because of the
+            // leading sign), and centre the digits vertically using the
+            // glyphs' actual ink bounds rather than a hand-picked offset --
+            // canvas/cairo baseline positioning is a font-metric
+            // approximation that reads slightly off for bold monospace.
+            double box_center_y = box_y + box_height / 2.0;
+            const char* dot = strchr(digital, '.');
+            double text_start_x;
+            if (dot == nullptr) {
+                text_start_x = centerX - dext.x_advance / 2.0;
+            } else {
+                std::string before_dot(digital, dot - digital);
+                cairo_text_extents_t before_ext, dot_ext;
+                cairo_text_extents(cr, before_dot.c_str(), &before_ext);
+                cairo_text_extents(cr, ".", &dot_ext);
+                text_start_x = centerX - before_ext.x_advance - dot_ext.x_advance / 2.0;
+            }
+            double baseline_y = box_center_y + (dext.height / 2.0 - dext.y_bearing - dext.height);
+            // dext.y_bearing is negative (extends upward from baseline);
+            // ascent = -y_bearing, descent = height + y_bearing.
+            double ascent = -dext.y_bearing;
+            double descent = dext.height + dext.y_bearing;
+            baseline_y = box_center_y + (ascent - descent) / 2.0;
+            cairo_move_to(cr, text_start_x, baseline_y);
+            cairo_show_text(cr, digital);
+        } else {
+            cairo_move_to(cr, centerX - dext.width / 2,
+                              box_y + box_height / 2 + dext.height / 2 - 2);
+            cairo_show_text(cr, digital);
+        }
     }
 
     // Scale chevrons + segment-end tick along the needle.
@@ -322,10 +360,11 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
         cairo_text_extents_t te;
 
-        // Right-aligned value: a fixed right anchor keeps the decimal point
-        // in place as the digits change.
+        // Right-aligned Total/Trip value, at the enlarged curTopSize
+        // (RB-DRV-08): a fixed right anchor keeps the decimal point in
+        // place as the digits change.
         auto drawValue = [&](const char* text, double baseline) {
-            cairo_set_font_size(cr, L.valSize);
+            cairo_set_font_size(cr, L.curTopSize);
             cairo_text_extents(cr, text, &te);
             cairo_move_to(cr, L.rightAnchor - te.x_advance, baseline);
             cairo_show_text(cr, text);
@@ -337,32 +376,63 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             cairo_move_to(cr, L.rightAnchor + L.labelGap, baseline);
             cairo_show_text(cr, text);
         };
-        // Right-aligned distance, on the same baseline as its speed, to
-        // distanceAnchor -- the same X the "Distance (metres)" caption
-        // right-aligns to (RB-DRV-02), so the value's last digit and the
-        // caption's closing ")" share one vertical edge.
+        // Right-aligned distance, at curTopSize (RB-DRV-08), on the same
+        // baseline as its speed, to distanceAnchor -- the same X the
+        // "Distance (metres)" caption right-aligns to (RB-DRV-02), so the
+        // value's last digit and the caption's closing ")" share one
+        // vertical edge.
         auto drawDistance = [&](const char* text, double baseline) {
-            cairo_set_font_size(cr, L.valSize);
+            cairo_set_font_size(cr, L.curTopSize);
             cairo_text_extents(cr, text, &te);
             cairo_move_to(cr, L.distanceAnchor - te.x_advance, baseline);
             cairo_show_text(cr, text);
         };
+        // Top-corner value: right-aligns to `anchor_x` (Current: bandOuterX;
+        // Target: mirrored, left-aligned from bandTargetX), top-aligns with
+        // L.bandTopY using the drawn text's own ink ascent (font-metric
+        // ascent isn't pure geometry, so this can't be precomputed in
+        // CompactGaugeLayout -- RB-DRV-08). Returns the baseline used, so
+        // the caller can place the label directly beneath it.
+        auto drawTopCorner = [&](const char* text, double anchor_x, bool right_align) -> double {
+            cairo_set_font_size(cr, L.curTopSize);
+            cairo_text_extents(cr, text, &te);
+            double ascent = -te.y_bearing;
+            double baseline = L.bandTopY + ascent;
+            double x = right_align ? (anchor_x - te.x_advance) : anchor_x;
+            cairo_move_to(cr, x, baseline);
+            cairo_show_text(cr, text);
+            return baseline;
+        };
+        auto drawTopCornerLabel = [&](const char* text, double anchor_x, bool right_align, double value_baseline) {
+            cairo_set_font_size(cr, L.labelSize);
+            cairo_text_extents_t lte;
+            cairo_text_extents(cr, text, &lte);
+            double x = right_align ? (anchor_x - lte.x_advance) : anchor_x;
+            cairo_move_to(cr, x, value_baseline + L.labelSize + L.labelGap);
+            cairo_show_text(cr, text);
+        };
 
-        // {current}: top of the panel, on the same anchor and at the same
-        // size as the average speeds, so every digit lines up.
+        // Current: top-right corner, right-aligned to the coloured band's
+        // outer edge, top-aligned with the band's topmost point, "Current"
+        // label underneath (RB-DRV-08).
         cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-        drawValue(gtk_label_get_text(data->currentSpeedLabel), L.curBaseline);
-        drawCaption("Current", L.curBaseline);
+        {
+            double baseline = drawTopCorner(gtk_label_get_text(data->currentSpeedLabel), L.bandOuterX, true);
+            drawTopCornerLabel("Current", L.bandOuterX, true, baseline);
+        }
 
-        // Target is the value being driven toward -- the one number the
-        // driver is actively trying to match, so it is the only row pulled
-        // out of white. Current already reads as "closest to Target" by
-        // sitting directly beneath it (RB-DRV-01's row order).
+        // Target: top-left corner, mirrored -- left-aligned to the band's
+        // other edge, "Target" label underneath. Still the only row pulled
+        // out of white -- it is the value being driven toward.
         cairo_set_source_rgb(cr, 1.0, 0.867, 0.0);  // #FFDD00
-        drawValue(gtk_label_get_text(data->targetSpeedLabel), L.targetBaseline);
-        drawCaption("Target", L.targetBaseline);
+        {
+            double baseline = drawTopCorner(gtk_label_get_text(data->targetSpeedLabel), L.bandTargetX, false);
+            drawTopCornerLabel("Target", L.bandTargetX, false, baseline);
+        }
 
-        // {tot}: white, mirrored by the Total distance on the left.
+        // {tot}: white, mirrored by the Total distance on the left. Both at
+        // curTopSize, nudged up with extra line spacing (RB-DRV-08) so the
+        // taller glyphs clear the ahead/behind box above them.
         cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
         drawValue(gtk_label_get_text(data->totalSpeedLabel), L.totalBaseline);
         drawCaption("Total", L.totalBaseline);
@@ -395,9 +465,10 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             cairo_move_to(cr, L.distanceAnchor - te.x_advance, L.captionBaseline);
             cairo_show_text(cr, dist_caption.c_str());
 
-            // Centred: there is no value column edge on this side to match.
+            // Centred (nudged 15px right at the user's request) -- there is
+            // no value column edge on this side to match.
             cairo_text_extents(cr, speed_caption.c_str(), &te);
-            cairo_move_to(cr, (L.centerX + width) / 2 - te.x_advance / 2, L.captionBaseline);
+            cairo_move_to(cr, (L.centerX + width) / 2 - te.x_advance / 2 + 15.0, L.captionBaseline);
             cairo_show_text(cr, speed_caption.c_str());
         }
 

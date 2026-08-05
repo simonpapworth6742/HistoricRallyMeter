@@ -179,18 +179,37 @@ struct CompactGaugeLayout {
     double centerX;         // hub x
     double centerY;         // hub y
     double fscale;          // font scale, 1.0 at the reference radius
-    double valSize;         // Current/Target/Total/Trip value font size
+    double valSize;         // Total/Trip speed+distance value font size AND
+                             // the ahead/behind digital box's font size
+                             // (RB-DRV-08 dropped the box back to this size)
+    double curTopSize;      // Current/Target value font size (RB-DRV-08) --
+                             // the single largest text size in the layout
     double labelSize;       // row caption font size
     double labelGap;        // gap between a value's anchor and its caption
     double rowGap;          // vertical spacing between value rows
-    double rightAnchor;     // right edge every speed value aligns to
+    double rightAnchor;     // right edge every Total/Trip speed value aligns to
     double distanceAnchor;  // right edge every distance value AND the
                              // "Distance (metres)" caption (RB-DRV-02) align
                              // to -- both right-aligned to the same X, so a
                              // value's last digit and the caption's closing
-                             // ")" always share one vertical edge
-    double curBaseline;     // Current speed, top of the panel
-    double targetBaseline;  // Target speed
+                             // ")" always share one vertical edge. Shifted
+                             // 10px right of the arc-derived offset by
+                             // RB-DRV-08.
+    double bandOuterX;      // right edge of the coloured band arc's bottom
+                             // (2*PI) end -- Current's value right-aligns
+                             // here (RB-DRV-08); band drawn at `radius` with
+                             // lineWidth 12, so its outer edge is radius+6
+                             // out from centerX
+    double bandTargetX;     // left edge of the coloured band arc's bottom
+                             // end, mirrored -- Target's value left-aligns
+                             // here (RB-DRV-08)
+    double bandTopY;        // topmost point of the coloured band arc, above
+                             // the "0" reading -- Current/Target's value top
+                             // edges align here (RB-DRV-08); the actual
+                             // baseline is computed by the caller from this
+                             // Y plus the drawn text's own ascent (font-
+                             // metric ascent isn't pure geometry, so it
+                             // can't live in this struct -- see ui_driver.cpp)
     double totalBaseline;   // Total average speed / Total distance
     double tripBaseline;    // Trip average speed / Trip distance
     double captionBaseline; // column captions, under the value rows
