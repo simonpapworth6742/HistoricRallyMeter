@@ -893,33 +893,38 @@ void on_add_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     bool autoNext = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(data->autoNextCheck));
     
     if (speed_str && dist_str && strlen(speed_str) > 0 && strlen(dist_str) > 0) {
-        double target_kph = std::stod(speed_str);
-        double target_counts_per_hour = kphToCountsPerHour(target_kph, data->state->calibration);
-        
-        // Split distance by comma to allow multiple segments at the same speed
-        std::string dist_input(dist_str);
-        std::stringstream dist_stream(dist_input);
-        std::string token;
+        // RB-SEG-03: both fields are ';'-separated lists now, not just
+        // distance. A single speed still broadcasts to every distance (the
+        // original use case); multiple speeds must match the distance
+        // count and pair positionally -- see buildSegmentSpeedDistancePairs()
+        // in calculations.cpp for the exact rule and why mismatched counts
+        // are rejected outright rather than guessed at.
+        std::vector<double> speeds = parseSemicolonList(speed_str);
+        std::vector<double> distances = parseSemicolonList(dist_str);
+        std::vector<std::pair<double, double>> pairs;
+        bool paired = buildSegmentSpeedDistancePairs(speeds, distances, pairs);
+
         bool added = false;
-        
-        while (std::getline(dist_stream, token, ';')) {
-            if (token.empty()) continue;
-            double distance_m = std::stod(token);
-            if (distance_m <= 0) continue;
-            
-            double distance_counts = (distance_m * 1e6) / data->state->calibration;
-            
-            Segment seg;
-            seg.target_speed_kph = target_kph;
-            seg.target_speed_counts_per_hour = target_counts_per_hour;
-            seg.distance_m = distance_m;
-            seg.distance_counts = distance_counts;
-            seg.autoNext = autoNext;
-            
-            data->state->segments.push_back(seg);
-            added = true;
+
+        if (paired) {
+            for (const auto& [target_kph, distance_m] : pairs) {
+                if (distance_m <= 0) continue;
+
+                double target_counts_per_hour = kphToCountsPerHour(target_kph, data->state->calibration);
+                double distance_counts = (distance_m * 1e6) / data->state->calibration;
+
+                Segment seg;
+                seg.target_speed_kph = target_kph;
+                seg.target_speed_counts_per_hour = target_counts_per_hour;
+                seg.distance_m = distance_m;
+                seg.distance_counts = distance_counts;
+                seg.autoNext = autoNext;
+
+                data->state->segments.push_back(seg);
+                added = true;
+            }
         }
-        
+
         if (added) {
             ConfigFile::save(*data->state);
             

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <utility>
 #include "rally_state.h"
 #include "rally_types.h"
 
@@ -269,5 +270,23 @@ bool gaugeTickLabelsVisible(double seconds);
 // i/tick_count of the sweep, i.e. i * (max_val / tick_count) seconds, not
 // i seconds, whenever max_val has a fractional remainder.
 double gaugeTickAngle(int index, double max_val);
+
+// Splits a ';'-separated list of numbers (as typed into the Stage Setup
+// screen's speed/distance entries) into parsed doubles, skipping empty
+// tokens (e.g. from a leading/trailing/doubled ';'). Order preserved.
+std::vector<double> parseSemicolonList(const std::string& input);
+
+// Pairs a parsed speed list with a parsed distance list for on_add_segment()
+// (RB-SEG-03). If speeds has exactly one entry, it is broadcast to every
+// distance (the original, still-supported single-speed/multi-distance use
+// case). If speeds and distances have the same non-zero size, they are
+// paired positionally (speed i with distance i) -- this is the fix: the
+// previous code silently reused only the first parsed speed for every
+// segment when multiple were entered. Any other combination (speeds empty,
+// or counts differ and neither is 1) is rejected: `out` is cleared and
+// false is returned, so the caller adds nothing rather than guessing.
+bool buildSegmentSpeedDistancePairs(const std::vector<double>& speeds,
+                                     const std::vector<double>& distances,
+                                     std::vector<std::pair<double, double>>& out);
 
 #endif // CALCULATIONS_H
