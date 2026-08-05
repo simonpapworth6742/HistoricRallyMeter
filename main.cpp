@@ -275,8 +275,20 @@ static gboolean on_window_close_save(G_GNUC_UNUSED GtkWidget* widget, G_GNUC_UNU
 
 static ToneGenerator* g_beepToneGen = nullptr;
 
-static gboolean on_button_beep(GSignalInvocationHint*, guint, const GValue*, gpointer) {
-    if (g_beepToneGen) g_beepToneGen->playBeep();
+static gboolean on_button_beep(GSignalInvocationHint*, guint n_param_values,
+                                const GValue* param_values, gpointer) {
+    if (!g_beepToneGen) return TRUE;
+    // param_values[0] is the emitting instance (the clicked button). Skip
+    // the click-feedback beep for buttons marked "no_click_beep" -- the
+    // Sim Control Panel's speed/START/STOP buttons, which fire dozens of
+    // times during a test drive and don't want a beep on every press.
+    if (n_param_values > 0) {
+        GObject* instance = static_cast<GObject*>(g_value_get_object(&param_values[0]));
+        if (instance && g_object_get_data(instance, "no_click_beep")) {
+            return TRUE;
+        }
+    }
+    g_beepToneGen->playBeep();
     return TRUE;
 }
 

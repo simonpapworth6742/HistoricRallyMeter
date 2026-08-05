@@ -608,7 +608,8 @@ void updateDriverDisplay(AppData* data) {
                 SimpleToneResult simple = updateSimpleTone(
                     data->simpleToneState, seconds, stage_dist_m, past_stage_end);
                 if (simple.active) {
-                    data->toneGen->setCadence(SIMPLE_TONE_SUSTAIN_MS, 0, simple.freq_hz);
+                    ToneWaveform wave = simple.triangle_wave ? ToneWaveform::Triangle : ToneWaveform::Sine;
+                    data->toneGen->setCadence(SIMPLE_TONE_SUSTAIN_MS, 0, simple.freq_hz, wave);
                 } else {
                     data->toneGen->setCadence(0, 0);
                 }
