@@ -1211,6 +1211,37 @@ gboolean on_force_single_display_toggle(G_GNUC_UNUSED GtkSwitch* sw, gboolean st
     return FALSE;  // allow default handler to update the switch visual state
 }
 
+// "tone mode off/on" switch on the Stage Setup screen -- master enable
+// for the ahead/behind tone, independent of which type is selected.
+// Takes effect immediately: ui_driver.cpp reads the flag fresh every
+// 10ms tick, same as force_single_display's mechanism but without
+// needing a restart (nothing here depends on window/monitor layout).
+gboolean on_tone_enabled_toggle(G_GNUC_UNUSED GtkSwitch* sw, gboolean state,
+                                gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->state->tone_enabled = state;
+    ConfigFile::save(*data->state);
+    return FALSE;  // allow default handler to update the switch visual state
+}
+
+// "Type 1[ ] 2[ ]" checkboxes on the Stage Setup screen -- mutually
+// exclusive via a cross-reference on each widget (set in
+// createStageSetupScreen) rather than a new AppData field pair,
+// matching the "app_data"/"mode" g_object_set_data() pattern this file
+// already uses (see on_beep_mode_toggled, on_segment_auto_toggled).
+// Only acts when a box becomes CHECKED; unchecking the other box (which
+// this triggers) is a no-op re-entry, since that call sees active=false
+// and returns immediately -- no infinite loop.
+void on_tone_type_toggled(GtkWidget* widget, gpointer user_data) {
+    if (!gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget))) return;
+    AppData* data = static_cast<AppData*>(user_data);
+    GtkWidget* other = GTK_WIDGET(g_object_get_data(G_OBJECT(widget), "other_type_check"));
+    if (other) gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(other), FALSE);
+    bool is_type2 = (GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "tone_type")) == 2);
+    data->state->simple_tone_mode = is_type2;
+    ConfigFile::save(*data->state);
+}
+
 void on_save_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     

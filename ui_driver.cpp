@@ -5,6 +5,8 @@
 #include "counter_poller.h"
 #include "tone_generator.h"
 #include "callbacks.h"
+#include "simple_tone.h"
+#include "arrow_tone.h"
 #include <iomanip>
 #include <sstream>
 #include <cmath>
@@ -644,88 +646,53 @@ void updateDriverDisplay(AppData* data) {
            << std::setw(2) << secs << "." << tenths;
         gtk_label_set_text(data->aheadBehindLabel, ss.str().c_str());
         
-        // Speed adjustment arrows - only if more than 0.1 seconds off
-        
-        if (abs_seconds > 0.1 && target_kph > 0) {
-            // Calculate speed needed to match target in next 500 meters
-            double target_kph_raw = countsPerHourToKPH(seg.target_speed_counts_per_hour, data->state->calibration);
-            double target_time_s = 500.0 / (target_kph_raw / 3.6);
-            
-            double adjusted_time_s;
-            if (seconds < 0) {
-                adjusted_time_s = target_time_s - abs_seconds;
-            } else {
-                adjusted_time_s = target_time_s + abs_seconds;
-            }
-            
-            double speed_diff;
-            if (adjusted_time_s > 0.1) {
-                double needed_kph = (500.0 / adjusted_time_s) * 3.6;
-                speed_diff = needed_kph - target_kph_raw;
-            } else {
-                // Deficit too large to recover in 500m - max arrows in needed direction
-                speed_diff = (seconds < 0) ? 999.0 : -999.0;
-            }
-            
-            if (data->state->units) {
-                speed_diff = speed_diff * 0.621371;
-            }
-            
-            double abs_diff = std::abs(speed_diff);
-            int num_arrows = 0;
-            if (abs_diff >= 10.0) {
-                num_arrows = 3;
-            } else if (abs_diff >= 3.0) {
-                num_arrows = 2;
-            } else if (abs_diff > 0) {
-                num_arrows = 1;
-            }
-            
-            if (num_arrows > 0) {
-                ss.str("");
-                const char* color = (speed_diff > 0) ? "#00CC00" : "#EE0000";
-                const char* arrow = (speed_diff > 0) ? "↑" : "↓";
-                ss << "<span foreground=\"" << color << "\">";
-                for (int i = 0; i < num_arrows; i++) ss << arrow;
-                ss << "</span>";
-                gtk_label_set_markup(data->speedAdjustArrowsLabel, ss.str().c_str());
-            } else {
-                gtk_label_set_text(data->speedAdjustArrowsLabel, "");
-            }
-            
-            // Tone cadence: only after 250m from stage start and before end of last segment.
-            // Silent if within ±0.1s or beyond ±30s.
-            // Behind (speed_diff > 0, speed up): C6=1046.50
-            // Ahead  (speed_diff < 0, slow down): F6=1396.91
-            if (data->toneGen) {
-                double stage_dist_m = countsToMeters(total_count_diff_ab, data->state->calibration);
-                double total_stage_counts = 0.0;
-                for (const auto& s : data->state->segments)
-                    total_stage_counts += s.distance_counts;
-                bool past_stage_end = (static_cast<double>(total_count_diff_ab) >= total_stage_counts);
-                bool in_tone_zone = (stage_dist_m >= 250.0) && !past_stage_end;
+        // Speed adjustment arrows (always driven by the arrow-based
+        // calculation, regardless of tone mode -- the visual indicator is
+        // unaffected by simple_tone_mode) and the ahead/behind tone
+        // (driven by whichever algorithm simple_tone_mode selects).
+        double stage_dist_m = countsToMeters(total_count_diff_ab, data->state->calibration);
+        double total_stage_counts = 0.0;
+        for (const auto& s : data->state->segments)
+            total_stage_counts += s.distance_counts;
+        bool past_stage_end = (static_cast<double>(total_count_diff_ab) >= total_stage_counts);
 
-                if (!in_tone_zone || abs_seconds > 30.0 || num_arrows == 0) {
-                    data->toneGen->setCadence(0, 0);
-                } else {
-                    bool behind = (speed_diff > 0);
-                    double freq = behind ? 1046.50 : 1396.91;
-                    int tone, silence;
-                    if (num_arrows >= 3) {
-                        tone = 700; silence = 300;
-                    } else if (num_arrows == 2) {
-                        tone = 500; silence = 200;
-                    } else {
-                        tone = 100; silence = 100;
-                    }
-                    data->toneGen->setCadence(tone, silence, freq);
-                }
-            }
+        ArrowToneResult arrow = computeArrowBasedTone(
+            seconds, seg.target_speed_counts_per_hour, data->state->calibration,
+            data->state->units, stage_dist_m, past_stage_end);
+
+        if (arrow.num_arrows > 0) {
+            ss.str("");
+            const char* color = arrow.increase_speed ? "#00CC00" : "#EE0000";
+            const char* glyph = arrow.increase_speed ? "↑" : "↓";
+            ss << "<span foreground=\"" << color << "\">";
+            for (int i = 0; i < arrow.num_arrows; i++) ss << glyph;
+            ss << "</span>";
+            gtk_label_set_markup(data->speedAdjustArrowsLabel, ss.str().c_str());
         } else {
             gtk_label_set_text(data->speedAdjustArrowsLabel, "");
-            if (data->toneGen) data->toneGen->setCadence(0, 0);
         }
-        
+
+        if (data->toneGen) {
+            if (!data->state->tone_enabled) {
+                data->toneGen->setCadence(0, 0);
+            } else if (data->state->simple_tone_mode) {
+                SimpleToneResult simple = updateSimpleTone(
+                    data->simpleToneState, seconds, stage_dist_m, past_stage_end);
+                if (simple.active) {
+                    ToneWaveform wave = simple.triangle_wave ? ToneWaveform::Triangle : ToneWaveform::Sine;
+                    data->toneGen->setCadence(SIMPLE_TONE_SUSTAIN_MS, 0, simple.freq_hz, wave);
+                } else {
+                    data->toneGen->setCadence(0, 0);
+                }
+            } else {
+                if (arrow.tone_active) {
+                    data->toneGen->setCadence(arrow.tone_ms, arrow.silence_ms, arrow.freq_hz);
+                } else {
+                    data->toneGen->setCadence(0, 0);
+                }
+            }
+        }
+
         // Redraw gauge
         gtk_widget_queue_draw(data->rallyGaugeDrawingArea);
         if (data->copilotGaugeArea)

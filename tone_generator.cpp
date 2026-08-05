@@ -11,6 +11,18 @@ static constexpr unsigned CHUNK_FRAMES = SAMPLE_RATE * CHUNK_MS / 1000;
 static constexpr unsigned FADE_MS      = 5;
 static constexpr unsigned FADE_FRAMES  = SAMPLE_RATE * FADE_MS / 1000;
 
+// phase is in radians, 0..2*M_PI. Sine is the usual sin(phase); triangle
+// is a standard -1..1 triangle built from the same phase so both shapes
+// stay phase-continuous under the no-phase-reset frequency handling below.
+static double waveSample(double phase, ToneWaveform wave) {
+    if (wave == ToneWaveform::Sine) {
+        return std::sin(phase);
+    }
+    double t = phase / (2.0 * M_PI);
+    t -= std::floor(t);
+    return 4.0 * std::fabs(t - 0.5) - 1.0;
+}
+
 ToneGenerator::ToneGenerator() = default;
 
 ToneGenerator::~ToneGenerator() {
@@ -28,11 +40,12 @@ void ToneGenerator::stop() {
     if (worker_.joinable()) worker_.join();
 }
 
-void ToneGenerator::setCadence(int tone_ms, int silence_ms, double freq_hz) {
+void ToneGenerator::setCadence(int tone_ms, int silence_ms, double freq_hz, ToneWaveform wave) {
     std::lock_guard<std::mutex> lk(mu_);
     tone_ms_ = tone_ms;
     silence_ms_ = silence_ms;
     freq_hz_ = freq_hz;
+    wave_ = wave;
 }
 
 void ToneGenerator::playBeep() {
@@ -60,6 +73,7 @@ void ToneGenerator::threadFunc() {
 
     double phase = 0.0;
     double active_freq = 0.0;
+    ToneWaveform active_wave = ToneWaveform::Sine;
     int cycle_ms = 0;
     bool in_tone = true;
     // Envelope: 0.0 = silent, 1.0 = full volume; ramps smoothly between states
@@ -87,11 +101,13 @@ void ToneGenerator::threadFunc() {
 
         int cur_tone, cur_silence;
         double cur_freq;
+        ToneWaveform cur_wave;
         {
             std::lock_guard<std::mutex> lk(mu_);
             cur_tone = tone_ms_;
             cur_silence = silence_ms_;
             cur_freq = freq_hz_;
+            cur_wave = wave_;
         }
 
         if (cur_tone <= 0 || cur_freq <= 0.0) {
@@ -102,7 +118,7 @@ void ToneGenerator::threadFunc() {
                 for (unsigned i = 0; i < CHUNK_FRAMES; i++) {
                     envelope -= env_dec;
                     if (envelope < 0.0) envelope = 0.0;
-                    chunk_buf[i] = static_cast<int16_t>(AMPLITUDE * 32767.0 * envelope * std::sin(phase));
+                    chunk_buf[i] = static_cast<int16_t>(AMPLITUDE * 32767.0 * envelope * waveSample(phase, active_wave));
                     phase += phase_inc;
                     if (phase >= 2.0 * M_PI) phase -= 2.0 * M_PI;
                 }
@@ -115,10 +131,21 @@ void ToneGenerator::threadFunc() {
             continue;
         }
 
-        if (cur_freq != active_freq) {
-            phase = 0.0;
-            active_freq = cur_freq;
-        }
+        // Never reset phase on a frequency change -- only the phase
+        // increment (rate of advance) needs to change going forward.
+        // Snapping phase to 0 here used to make sin(phase) jump straight
+        // from wherever the waveform was to sin(0)=0 at full envelope,
+        // an audible click/thud on every retune -- most noticeable with
+        // the simple-tone-mode continuous pitch ramp, which retunes far
+        // more often than the old fixed two-frequency scheme did.
+        active_freq = cur_freq;
+        // A waveform-shape change (sine<->triangle) can still jump the
+        // sample value at a given phase even without a frequency change.
+        // In practice this only happens crossing simple-tone-mode's
+        // behind/ahead boundary, which always passes through the silent
+        // +/-0.2s quiet band first, so envelope is at/near 0 when the
+        // shape actually switches -- no audible click in the common case.
+        active_wave = cur_wave;
 
         int threshold = in_tone ? cur_tone : cur_silence;
         if (cycle_ms >= threshold) {
@@ -139,7 +166,7 @@ void ToneGenerator::threadFunc() {
                 envelope -= env_rate;
                 if (envelope < 0.0) envelope = 0.0;
             }
-            chunk_buf[i] = static_cast<int16_t>(AMPLITUDE * 32767.0 * envelope * std::sin(phase));
+            chunk_buf[i] = static_cast<int16_t>(AMPLITUDE * 32767.0 * envelope * waveSample(phase, active_wave));
             phase += phase_inc;
             if (phase >= 2.0 * M_PI) phase -= 2.0 * M_PI;
         }

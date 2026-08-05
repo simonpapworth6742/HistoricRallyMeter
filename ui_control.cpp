@@ -109,6 +109,7 @@ GtkWidget* createControlWindow(AppData* data) {
         GtkWidget* btn = gtk_button_new_with_label(std::to_string(kph).c_str());
         gtk_widget_set_size_request(btn, 100, 70);
         g_object_set_data(G_OBJECT(btn), "kph", GINT_TO_POINTER(kph));
+        g_object_set_data(G_OBJECT(btn), "no_click_beep", GINT_TO_POINTER(1));
         g_signal_connect(btn, "clicked", G_CALLBACK(on_control_speed_clicked), data);
         data->controlSpeedButtons[i] = btn;
         gtk_grid_attach(GTK_GRID(grid), btn, i % 3, i / 3, 1, 1);
@@ -121,12 +122,14 @@ GtkWidget* createControlWindow(AppData* data) {
     data->controlStartBtn = gtk_button_new_with_label("START");
     gtk_style_context_add_class(gtk_widget_get_style_context(data->controlStartBtn), "control-start-button");
     gtk_widget_set_size_request(data->controlStartBtn, -1, 70);
+    g_object_set_data(G_OBJECT(data->controlStartBtn), "no_click_beep", GINT_TO_POINTER(1));
     g_signal_connect(data->controlStartBtn, "clicked", G_CALLBACK(on_control_start_clicked), data);
     gtk_box_pack_start(GTK_BOX(hbox), data->controlStartBtn, TRUE, TRUE, 0);
 
     data->controlStopBtn = gtk_button_new_with_label("STOP");
     gtk_style_context_add_class(gtk_widget_get_style_context(data->controlStopBtn), "control-stop-button");
     gtk_widget_set_size_request(data->controlStopBtn, -1, 70);
+    g_object_set_data(G_OBJECT(data->controlStopBtn), "no_click_beep", GINT_TO_POINTER(1));
     g_signal_connect(data->controlStopBtn, "clicked", G_CALLBACK(on_control_stop_clicked), data);
     gtk_box_pack_start(GTK_BOX(hbox), data->controlStopBtn, TRUE, TRUE, 0);
 
