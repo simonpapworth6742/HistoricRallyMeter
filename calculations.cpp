@@ -192,9 +192,43 @@ double calculateAheadBehindFromStageStart(const RallyState& state, int64_t curre
     if (current_seg.target_speed_counts_per_hour <= 0.0) {
         return 0.0;
     }
-    
+
     double counts_per_second = current_seg.target_speed_counts_per_hour / 3600.0;
     double seconds = diff / counts_per_second;
-    
+
     return seconds;
+}
+
+std::vector<double> parseSemicolonList(const std::string& input) {
+    std::vector<double> result;
+    std::stringstream stream(input);
+    std::string token;
+    while (std::getline(stream, token, ';')) {
+        if (token.empty()) continue;
+        result.push_back(std::stod(token));
+    }
+    return result;
+}
+
+bool buildSegmentSpeedDistancePairs(const std::vector<double>& speeds,
+                                     const std::vector<double>& distances,
+                                     std::vector<std::pair<double, double>>& out) {
+    out.clear();
+    if (speeds.empty() || distances.empty()) return false;
+
+    if (speeds.size() == 1) {
+        for (double d : distances) {
+            out.emplace_back(speeds[0], d);
+        }
+        return true;
+    }
+
+    if (speeds.size() != distances.size()) {
+        return false;
+    }
+
+    for (size_t i = 0; i < speeds.size(); i++) {
+        out.emplace_back(speeds[i], distances[i]);
+    }
+    return true;
 }
