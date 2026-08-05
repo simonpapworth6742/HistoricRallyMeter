@@ -22,6 +22,18 @@ public:
     long segment_current_number = -1;  // -1 = no segment
     long rallyTimeOffset_ms = 0;  // offset in milliseconds
     long ahead_behind_zero_offset_ms = 0;  // manual offset for driver's ahead/behind display
+
+    // Manual distance corrections applied to the Total and Trip readouts, in
+    // centimetres (the unit distances are computed in). Set from the co-pilot
+    // main screen's -10 / set / +10 controls to dial out wheel slip or a
+    // roadbook discrepancy without resetting the counter and losing the
+    // elapsed time. Each is cleared when its own counter is reset or a stage
+    // starts -- even though the -10/+10 buttons that set them always write
+    // to both together (a wheel-slip correction affects the one shared
+    // measurement both readouts are derived from).
+    long total_distance_adjust_cm = 0;
+    long trip_distance_adjust_cm = 0;
+
     uint64_t auto_start_rally_time_minutes = 0;  // minutes since 1/1/2020, 0 = not set
     std::vector<Segment> segments;
     
@@ -32,6 +44,18 @@ public:
     // Alarm: co-pilot sets distance alarm that rings a doorbell
     int alarm_distance_km = 0;          // 0 = no alarm active
     int64_t alarm_target_counts = 0;    // absolute count target from total_start
+
+    // Beep Assist: operator-entered waypoints that sound a short beep as they
+    // are reached, so the co-pilot's eyes can stay on the roadbook instead of
+    // the odometer. Waypoints are absolute distances from the Total counter's
+    // zero -- the way a roadbook lists them -- so a mis-entered value corrupts
+    // one waypoint rather than every one after it.
+    bool beep_assist_enabled = false;
+    std::vector<double> beep_waypoints_m;
+    double beep_advance_m = 0.0;      // navigation mode: beep this far before
+    double beep_advance_s = 0.0;      // timing mode: beep this long before
+    bool beep_navigation_mode = false;
+    bool beep_timing_mode = false;
 
     // Force single-display mode even when multiple screens exist
     bool force_single_display = false;

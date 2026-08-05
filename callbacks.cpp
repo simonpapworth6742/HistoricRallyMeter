@@ -6,6 +6,7 @@
 #include "calculations.h"
 #include "ui_driver.h"
 #include "ui_copilot.h"
+#include "ui_control.h"
 #include "counter_poller.h"
 #include "tone_generator.h"
 #include <cmath>
@@ -15,6 +16,8 @@
 #include <cstring>
 #include <chrono>
 #include <functional>
+#include <string>
+#include <stdexcept>
 
 gboolean on_window_delete(G_GNUC_UNUSED GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, G_GNUC_UNUSED gpointer user_data) {
     gtk_main_quit();
@@ -44,6 +47,13 @@ void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->total_start_cntr1 = current_poll.cntr1;
     data->state->total_start_cntr2 = current_poll.cntr2;
     data->state->total_start_time_ms = getRallyTime_ms(*data->state);
+    // The correction described the old baseline; carrying it across a reset
+    // would silently offset a counter the operator just zeroed.
+    data->state->total_distance_adjust_cm = 0;
+    // Waypoints are measured from the Total counter's zero, so re-zeroing it
+    // puts every waypoint back in front of the car.
+    data->beepNextNavIndex = 0;
+    data->beepNextTimingIndex = 0;
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -54,6 +64,9 @@ void on_trip_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->trip_start_cntr1 = current_poll.cntr1;
     data->state->trip_start_cntr2 = current_poll.cntr2;
     data->state->trip_start_time_ms = getRallyTime_ms(*data->state);
+    // The correction described the old baseline; carrying it across a reset
+    // would silently offset a counter the operator just zeroed.
+    data->state->trip_distance_adjust_cm = 0;
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -86,7 +99,104 @@ static void applyDialogStyle(GtkWidget* dialog) {
     G_GNUC_END_IGNORE_DEPRECATIONS
     if (action_area && GTK_IS_BUTTON_BOX(action_area)) {
         gtk_box_set_spacing(GTK_BOX(action_area), 20);
+        gtk_button_box_set_layout(GTK_BUTTON_BOX(action_area), GTK_BUTTONBOX_CENTER);
     }
+}
+
+// Raw, uncorrected distance in centimetres for one of the two counters.
+// Shared by both correction callbacks so they clamp against the same figure
+// the display is derived from.
+static long rawDistanceCm(AppData* data, bool is_trip) {
+    auto poll = data->poller->getMostRecent();
+    int64_t counts = is_trip
+        ? calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
+                                  data->state->trip_start_cntr1, data->state->trip_start_cntr2)
+        : calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
+                                  data->state->total_start_cntr1, data->state->total_start_cntr2);
+    return countsToCentimeters(counts, data->state->calibration);
+}
+
+void on_distance_adjust(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    long delta_cm = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "delta_m")) * 100L;
+
+    // Both counters share the same underlying wheel measurement, so a
+    // wheel-slip correction has to apply to both -- otherwise Trip would
+    // keep showing the slipped, uncorrected value. Clamped independently:
+    // Total and Trip can have travelled different distances at this instant,
+    // so a -10 that is safe for one could still drive the other negative.
+    long& total_adjust = data->state->total_distance_adjust_cm;
+    total_adjust += clampDistanceAdjust(rawDistanceCm(data, false) + total_adjust, delta_cm);
+
+    long& trip_adjust = data->state->trip_distance_adjust_cm;
+    trip_adjust += clampDistanceAdjust(rawDistanceCm(data, true) + trip_adjust, delta_cm);
+
+    ConfigFile::save(*data->state);
+    updateCopilotDisplay(data);
+}
+
+void on_distance_set(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+
+    GtkWidget* dialog = gtk_dialog_new_with_buttons(
+        "Set Total Distance",
+        GTK_WINDOW(gtk_widget_get_toplevel(widget)),
+        GTK_DIALOG_MODAL,
+        "Set", GTK_RESPONSE_OK,
+        "Cancel", GTK_RESPONSE_CANCEL,
+        nullptr);
+
+    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(content), 10);
+
+    GtkWidget* promptRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_pack_start(GTK_BOX(content), promptRow, FALSE, FALSE, 3);
+
+    GtkWidget* prompt = gtk_label_new("Set Total (m)");
+    gtk_box_pack_start(GTK_BOX(promptRow), prompt, FALSE, FALSE, 0);
+
+    GtkEntry* entry = GTK_ENTRY(gtk_entry_new());
+    gtk_entry_set_text(entry,
+        std::to_string(adjustedDistanceMeters(rawDistanceCm(data, false),
+                                              data->state->total_distance_adjust_cm)).c_str());
+    // Capped at 6 digits (999,999 m): past that the display auto-switches
+    // to km, which reads as if the entered value got truncated.
+    gtk_entry_set_max_length(entry, 6);
+    // Pre-filled with the current value; select it so the first digit typed
+    // replaces it instead of appending onto it.
+    gtk_editable_select_region(GTK_EDITABLE(entry), 0, -1);
+    gtk_box_pack_start(GTK_BOX(promptRow), GTK_WIDGET(entry), TRUE, TRUE, 0);
+
+    // The main screen has no keypad of its own, and the box has no physical
+    // keyboard, so the dialog brings one with it.
+    GtkEntry* previous_entry = data->activeEntry;
+    data->activeEntry = entry;
+    gtk_box_pack_start(GTK_BOX(content), createNumericKeypad(data), FALSE, FALSE, 3);
+
+    applyDialogStyle(dialog);
+    gtk_widget_show_all(dialog);
+
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_OK) {
+        const char* text = gtk_entry_get_text(entry);
+        try {
+            long wanted_cm = static_cast<long>(std::stod(text) * 100.0);
+            if (wanted_cm >= 0) {
+                // Solve for the correction that makes the reading equal what
+                // the operator entered. Trip's correction is untouched --
+                // "set" has no Trip equivalent.
+                long raw_cm = rawDistanceCm(data, false);
+                data->state->total_distance_adjust_cm = wanted_cm - raw_cm;
+                ConfigFile::save(*data->state);
+            }
+        } catch (const std::exception&) {
+            // Unparseable entry: leave the correction as it was rather than
+            // zeroing a good one on a typo.
+        }
+    }
+
+    data->activeEntry = previous_entry;
+    gtk_widget_destroy(dialog);
+    updateCopilotDisplay(data);
 }
 
 void performStageGo(AppData* data) {
@@ -109,13 +219,19 @@ void performStageGo(AppData* data) {
         data->state->segment_current_number = 0;
     }
 
-    data->gaugeScale = 0;
-    data->gaugeScaleChangeTime = 0;
     data->aheadBehindSeconds = 0.0;
     data->smoothedSpeed = -1.0;
     data->state->ahead_behind_zero_offset_ms = 0;
+    // Both counters restart here, so both corrections describe a baseline
+    // that no longer exists.
+    data->state->total_distance_adjust_cm = 0;
+    data->state->trip_distance_adjust_cm = 0;
     data->autoStartTriggered = false;
-    
+    // Waypoints are measured from the Total counter's zero, so re-zeroing it
+    // puts every waypoint back in front of the car.
+    data->beepNextNavIndex = 0;
+    data->beepNextTimingIndex = 0;
+
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
     
     ConfigFile::save(*data->state);
@@ -123,25 +239,88 @@ void performStageGo(AppData* data) {
 }
 
 static const int RESPONSE_AUTO_START = 99;
+static const int RESPONSE_AUTO_START_NEXT_MINUTE = 98;
+
+// Defined further down (used by on_show_autostart/on_autostart_set); forward
+// declared here so the quick-set button below can share the same epoch.
+static int64_t getAutoStartEpochMs();
+
+// Always the *next* minute boundary, even if rally_ms already sits exactly on
+// one -- the quick-set button's printed time must still be ahead when pressed.
+static int64_t nextRoundMinute_ms(int64_t rally_ms) {
+    return ((rally_ms / 60000) + 1) * 60000;
+}
+
+static std::string formatHms(int64_t epoch_ms) {
+    time_t s = epoch_ms / 1000;
+    struct tm* t = localtime(&s);
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);
+    return std::string(buf);
+}
+
+// Commits the autostart time directly (no manual entry needed), reusing the
+// same state field and epoch as the "Set Autostart" screen.
+static void setAutoStartToNextRoundMinute(AppData* data) {
+    int64_t target_ms = nextRoundMinute_ms(getRallyTime_ms(*data->state));
+    int64_t epoch_ms = getAutoStartEpochMs();
+    data->state->auto_start_rally_time_minutes =
+        static_cast<uint64_t>((target_ms - epoch_ms) / 60000);
+    data->autoStartTriggered = false;
+    ConfigFile::save(*data->state);
+}
 
 void on_stage_go(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    
+
+    std::string nextMinuteLabel = "Autostart "
+        + formatHms(nextRoundMinute_ms(getRallyTime_ms(*data->state)));
+
     GtkWidget* dialog = gtk_dialog_new_with_buttons(
         "Confirm Stage Go",
         GTK_WINDOW(gtk_widget_get_toplevel(widget)),
         GTK_DIALOG_MODAL,
-        "Yes", GTK_RESPONSE_YES,
-        "Auto start", RESPONSE_AUTO_START,
+        // "Now" rather than "Yes": what distinguishes this from the autostart
+        // option is that the stage begins immediately.
+        "Now", GTK_RESPONSE_YES,
+        "Set Autostart", RESPONSE_AUTO_START,
+        nextMinuteLabel.c_str(), RESPONSE_AUTO_START_NEXT_MINUTE,
         "No", GTK_RESPONSE_NO,
         nullptr);
-    
+
     GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
-    gtk_container_set_border_width(GTK_CONTAINER(content), 20);
-    
-    GtkWidget* label = gtk_label_new("Stage Go?\n\nThis will reset Total, Trip,\nand Segment counters.");
+    gtk_container_set_border_width(GTK_CONTAINER(content), 8);
+
+    // Show what is actually about to start, highlighted: this dialog guards
+    // the most destructive action on the box, and an operator who recalled
+    // the wrong memory slot or mis-edited a segment had no way to notice
+    // before confirming. The summary is the segments page's own content --
+    // there is no separate stage name or number in the model to show
+    // instead.
+    std::string summary = stageSummary(data->state->segments);
+    std::string markup = "Stage Go?\n\nStage = <span foreground=\"#FFDD00\">"
+                       + summary + "</span>\n"
+                       + "Total and Trip Counters will reset";
+
+    GtkWidget* label = gtk_label_new(nullptr);
+    gtk_label_set_markup(GTK_LABEL(label), markup.c_str());
     gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
-    gtk_box_pack_start(GTK_BOX(content), label, TRUE, TRUE, 10);
+    // A stage with many segments would otherwise force the dialog as wide
+    // as the whole comma-separated list on one line; wrap it instead.
+    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+    // width_chars, not just max_width_chars: fixing the measurement width
+    // up front gives GTK a single, stable wrap pass. max_width_chars alone
+    // only caps the natural width, so the dialog's first size-negotiation
+    // pass (before the final width is settled) can wrap taller than the
+    // final render needs, leaving reserved-but-unused height below the text.
+    gtk_label_set_width_chars(GTK_LABEL(label), 44);
+    gtk_label_set_max_width_chars(GTK_LABEL(label), 44);
+    // expand=FALSE: with TRUE the label was stretched to fill whatever
+    // extra height the button row's width forced onto the dialog, and its
+    // 0.5 yalign centred the text in that slack -- an equal gap above
+    // "Stage Go?" and below the last line, both growing every time
+    // wrapping added another line. Natural size only, no slack to centre in.
+    gtk_box_pack_start(GTK_BOX(content), label, FALSE, FALSE, 0);
     gtk_widget_show(label);
     
     applyDialogStyle(dialog);
@@ -153,6 +332,11 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
         performStageGo(data);
     } else if (response == RESPONSE_AUTO_START) {
         on_show_autostart(widget, user_data);
+    } else if (response == RESPONSE_AUTO_START_NEXT_MINUTE) {
+        // Already fully committed by setAutoStartToNextRoundMinute -- no
+        // Set/Save step needed, so just return to whatever screen was
+        // showing rather than detouring through the autostart setup screen.
+        setAutoStartToNextRoundMinute(data);
     }
 }
 
@@ -308,6 +492,7 @@ gboolean update_display(gpointer user_data) {
     
     updateDriverDisplay(data);
     updateCopilotDisplay(data);
+    updateControlDisplay(data);
 
     if (data->webServer) {
         auto now = std::chrono::system_clock::now();
@@ -371,19 +556,19 @@ GtkWidget* createNumericKeypad(AppData* data) {
     
     for (int i = 0; i < 12; i++) {
         GtkWidget* btn = gtk_button_new_with_label(digits[i]);
-        gtk_widget_set_size_request(btn, 60, 48);
+        gtk_widget_set_size_request(btn, 60, 42);
         g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
         gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
     }
     
     // Row 5: Clear and Backspace
     GtkWidget* clearBtn = gtk_button_new_with_label("C");
-    gtk_widget_set_size_request(clearBtn, 60, 48);
+    gtk_widget_set_size_request(clearBtn, 60, 42);
     g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_keypad_clear), data);
     gtk_grid_attach(GTK_GRID(keypad), clearBtn, 0, 4, 1, 1);
-    
+
     GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
-    gtk_widget_set_size_request(bkspBtn, 130, 48);
+    gtk_widget_set_size_request(bkspBtn, 130, 42);
     g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
     gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
     
@@ -399,18 +584,18 @@ GtkWidget* createDateTimeKeypad(AppData* data) {
     
     for (int i = 0; i < 12; i++) {
         GtkWidget* btn = gtk_button_new_with_label(digits[i]);
-        gtk_widget_set_size_request(btn, 60, 48);
+        gtk_widget_set_size_request(btn, 60, 42);
         g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
         gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
     }
     
     GtkWidget* clearBtn = gtk_button_new_with_label("C");
-    gtk_widget_set_size_request(clearBtn, 60, 48);
+    gtk_widget_set_size_request(clearBtn, 60, 42);
     g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_keypad_clear), data);
     gtk_grid_attach(GTK_GRID(keypad), clearBtn, 0, 4, 1, 1);
-    
+
     GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
-    gtk_widget_set_size_request(bkspBtn, 130, 48);
+    gtk_widget_set_size_request(bkspBtn, 130, 42);
     g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
     gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
     
@@ -420,25 +605,50 @@ GtkWidget* createDateTimeKeypad(AppData* data) {
 // Keypad callbacks
 void on_keypad_digit(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    if (data->activeBuffer) {
+        gtk_text_buffer_insert_at_cursor(data->activeBuffer,
+                                         gtk_button_get_label(GTK_BUTTON(widget)), -1);
+        return;
+    }
     if (!data->activeEntry) return;
-    
+
     const char* digit = gtk_button_get_label(GTK_BUTTON(widget));
+
+    // A digit typed while the entry's text is selected (e.g. the current
+    // value a dialog pre-fills on open) replaces it, matching normal
+    // text-field behaviour -- otherwise the typed digits silently append
+    // to whatever was left in the box, inflating the result.
+    gint sel_start, sel_end;
+    if (gtk_editable_get_selection_bounds(GTK_EDITABLE(data->activeEntry), &sel_start, &sel_end)) {
+        gtk_editable_delete_selection(GTK_EDITABLE(data->activeEntry));
+    }
+
     const char* current = gtk_entry_get_text(data->activeEntry);
-    
     std::string new_text = std::string(current) + digit;
     gtk_entry_set_text(data->activeEntry, new_text.c_str());
 }
 
 void on_keypad_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    if (data->activeBuffer) {
+        gtk_text_buffer_set_text(data->activeBuffer, "", -1);
+        return;
+    }
     if (!data->activeEntry) return;
     gtk_entry_set_text(data->activeEntry, "");
 }
 
 void on_keypad_backspace(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    if (data->activeBuffer) {
+        GtkTextIter cursor;
+        gtk_text_buffer_get_iter_at_mark(data->activeBuffer, &cursor,
+                                         gtk_text_buffer_get_insert(data->activeBuffer));
+        gtk_text_buffer_backspace(data->activeBuffer, &cursor, TRUE, TRUE);
+        return;
+    }
     if (!data->activeEntry) return;
-    
+
     const char* current = gtk_entry_get_text(data->activeEntry);
     std::string text(current);
     if (!text.empty()) {
@@ -450,7 +660,15 @@ void on_keypad_backspace(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 gboolean on_entry_focus(GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     data->activeEntry = GTK_ENTRY(widget);
+    data->activeBuffer = nullptr;
     gtk_widget_show(data->numericKeypad);
+    return FALSE;
+}
+
+gboolean on_textview_focus(GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->activeEntry = nullptr;   // exactly one keypad target at a time
+    data->activeBuffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(widget));
     return FALSE;
 }
 
@@ -505,16 +723,16 @@ void refreshSegmentList(AppData* data) {
         long distance_m = static_cast<long>(seg.distance_m);
         
         GtkWidget* row = gtk_list_box_row_new();
-        GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-        gtk_style_context_add_class(gtk_widget_get_style_context(box), "segment-row");
-        gtk_container_add(GTK_CONTAINER(row), box);
-        
+        GtkWidget* grid = gtk_grid_new();
+        gtk_grid_set_column_spacing(GTK_GRID(grid), SEGMENT_COL_SPACING);
+        gtk_style_context_add_class(gtk_widget_get_style_context(grid), "segment-row");
+        gtk_container_add(GTK_CONTAINER(row), grid);
+
         // Speed entry (editable)
         std::stringstream ss;
         ss << std::fixed << std::setprecision(2) << target_kph;
         GtkWidget* speedEntry = gtk_entry_new();
         gtk_entry_set_text(GTK_ENTRY(speedEntry), ss.str().c_str());
-        gtk_widget_set_size_request(speedEntry, 100, 36);
         g_object_set_data(G_OBJECT(speedEntry), "app_data", data);
         g_object_set_data(G_OBJECT(speedEntry), "entry_type", (gpointer)"speed");
         g_signal_connect(speedEntry, "changed", G_CALLBACK(on_segment_entry_changed), GINT_TO_POINTER(i));
@@ -525,7 +743,6 @@ void refreshSegmentList(AppData* data) {
         ss << distance_m;
         GtkWidget* distEntry = gtk_entry_new();
         gtk_entry_set_text(GTK_ENTRY(distEntry), ss.str().c_str());
-        gtk_widget_set_size_request(distEntry, 100, 36);
         g_object_set_data(G_OBJECT(distEntry), "app_data", data);
         g_object_set_data(G_OBJECT(distEntry), "entry_type", (gpointer)"distance");
         g_signal_connect(distEntry, "changed", G_CALLBACK(on_segment_entry_changed), GINT_TO_POINTER(i));
@@ -549,16 +766,25 @@ void refreshSegmentList(AppData* data) {
         
         // Delete button
         GtkWidget* deleteBtn = gtk_button_new_with_label("del");
-        gtk_widget_set_size_request(deleteBtn, -1, 36);
         g_object_set_data(G_OBJECT(deleteBtn), "app_data", data);
         g_signal_connect(deleteBtn, "clicked", G_CALLBACK(on_delete_segment), GINT_TO_POINTER(i));
-        
-        gtk_box_pack_start(GTK_BOX(box), speedEntry, FALSE, FALSE, 5);
-        gtk_box_pack_start(GTK_BOX(box), distEntry, FALSE, FALSE, 5);
-        gtk_box_pack_start(GTK_BOX(box), autoCheck, FALSE, FALSE, 15);
-        gtk_box_pack_start(GTK_BOX(box), timeLabel, FALSE, FALSE, 5);
-        gtk_box_pack_start(GTK_BOX(box), deleteBtn, FALSE, FALSE, 5);
-        
+
+        gtk_widget_set_size_request(speedEntry, SEGMENT_COL_SPEED, 36);
+        gtk_grid_attach(GTK_GRID(grid), speedEntry, 0, 0, 1, 1);
+
+        gtk_widget_set_size_request(distEntry, SEGMENT_COL_DISTANCE, 36);
+        gtk_grid_attach(GTK_GRID(grid), distEntry, 1, 0, 1, 1);
+
+        gtk_widget_set_size_request(autoCheck, SEGMENT_COL_AUTO, -1);
+        gtk_grid_attach(GTK_GRID(grid), autoCheck, 2, 0, 1, 1);
+
+        gtk_label_set_xalign(GTK_LABEL(timeLabel), 0.0);
+        gtk_widget_set_size_request(timeLabel, SEGMENT_COL_TIME, -1);
+        gtk_grid_attach(GTK_GRID(grid), timeLabel, 3, 0, 1, 1);
+
+        gtk_widget_set_size_request(deleteBtn, SEGMENT_COL_DELETE, 36);
+        gtk_grid_attach(GTK_GRID(grid), deleteBtn, 4, 0, 1, 1);
+
         gtk_list_box_insert(data->segmentListBox, row, -1);
         gtk_widget_show_all(row);
     }
@@ -581,7 +807,10 @@ void on_calibration_start(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 // Helper function to update calibration display
 void updateCalibrationDisplay(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
-    
+
+    gtk_label_set_text(data->calibrationClockLabel,
+        formatTime(getRallyTime_ms(*data->state)).c_str());
+
     // Calculate counts from calibration start (or total start if not started)
     uint64_t start_cntr1 = data->cal_started ? data->cal_start_cntr1 : data->state->total_start_cntr1;
     uint64_t start_cntr2 = data->cal_started ? data->cal_start_cntr2 : data->state->total_start_cntr2;
@@ -600,14 +829,15 @@ void updateCalibrationDisplay(AppData* data) {
         cntr_a = cntr1_diff;
     }
     
-    // Distance in meters
     long total_m = countsToCentimeters(cntr_a, data->state->calibration) / 100;
-    
-    // Format: "Total distance: xxx,xxx m  (counts calculated: CNTR_A  1: CNTR_1  2: CNTR_2)"
-    std::stringstream ss;
-    ss << "Total distance: " << total_m << " m  (counts calculated: " << cntr_a 
-       << "   1: " << cntr1_diff << "   2: " << cntr2_diff << ")";
-    gtk_label_set_text(data->totalDistCalLabel, ss.str().c_str());
+    gtk_label_set_text(data->totalDistCalLabel,
+        calibrationReadoutLine(total_m, cntr_a, cntr1_diff, cntr2_diff).c_str());
+
+    char current[96];
+    snprintf(current, sizeof(current),
+             "Current <span foreground=\"#FFDD00\">Calibration %ld pulses/KM</span>. Reset to",
+             static_cast<long>(pulsesPerKm(data->state->calibration) + 0.5));
+    gtk_label_set_markup(data->calibrationCurrentLabel, current);
 }
 
 // Helper function to update date/time display
@@ -810,7 +1040,7 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     if (dist_str && strlen(dist_str) > 0) {
         long rally_distance_m = std::stol(dist_str);
         
-        if (rally_distance_m >= 500 && rally_distance_m <= 100000) {
+        if (rally_distance_m >= 500 && rally_distance_m <= 1000000) {
             auto current_poll = data->poller->getMostRecent();
             
             // Use calibration start values if started, otherwise use total_start
@@ -848,12 +1078,25 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     }
 }
 
-void on_reset_calibration_1m(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+void on_reset_calibration_pulses(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+    const char* text = gtk_entry_get_text(data->resetPulsesEntry);
+    if (!text || !*text) return;
 
-    // 1m per pulse: 1 count = 1000mm, so 1000 counts = 1,000,000mm
-    data->state->calibration = 1000000;
+    double pulses_per_km = 0.0;
+    try {
+        pulses_per_km = std::stod(text);
+    } catch (const std::exception&) {
+        return;  // unparseable entry -- leave calibration untouched
+    }
 
+    long new_calibration = calibrationFromPulsesPerKm(pulses_per_km);
+    if (new_calibration <= 0) return;  // zero/negative entry -- no-op, not a crash
+
+    data->state->calibration = new_calibration;
+
+    // Recalculate count-based values in all segments from stable human
+    // values, same as every other calibration change.
     for (auto& seg : data->state->segments) {
         seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
         seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
@@ -866,17 +1109,19 @@ void on_reset_calibration_1m(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data
     }
 
     ConfigFile::save(*data->state);
-    data->cal_started = false;
-    gtk_entry_set_text(data->rallyDistEntry, "");
     updateCalibrationDisplay(data);
 }
 
-static void updateSensorModeLabel(AppData* data) {
-    if (data->state->counters) {
-        gtk_label_set_text(data->sensorModeLabel, "Currently set to both sensors");
-    } else {
-        gtk_label_set_text(data->sensorModeLabel, "Currently set to sensor 1");
-    }
+void updateSensorModeLabel(AppData* data) {
+    // The sensor selection silently changes what every other number on this
+    // screen means, so the phrase itself is highlighted in the same yellow
+    // the driver panel uses for the live speed.
+    const char* phrase = data->state->counters
+        ? "using Sensors 1+2 (avg)"
+        : "using Sensor 1";
+    std::string markup = std::string("Currently <span foreground=\"#FFDD00\">")
+                       + phrase + "</span>";
+    gtk_label_set_markup(data->sensorModeLabel, markup.c_str());
 }
 
 void on_set_sensor_1(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
@@ -1122,4 +1367,63 @@ void on_autostart_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     ConfigFile::save(*data->state);
     gtk_entry_set_text(data->autoStartTimeEntry, "");
     updateAutoStartDisplay(data);
+}
+
+// Re-parse the waypoint list on every edit. Parsing is cheap and forgiving
+// (a malformed token is skipped, not fatal), so there is no need to make the
+// operator confirm -- and no half-entered state to get stuck in.
+void on_beep_waypoints_changed(GtkTextBuffer* buffer, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    GtkTextIter start, end;
+    gtk_text_buffer_get_bounds(buffer, &start, &end);
+    gchar* text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+    data->state->beep_waypoints_m = parseBeepWaypointsKm(text ? text : "");
+    g_free(text);
+
+    // The list changed under the cursor, so the cursor is meaningless; rebuild
+    // it from where the car actually is.
+    auto poll = data->poller->getMostRecent();
+    int64_t counts = calculateDistanceCounts(*data->state, poll.cntr1, poll.cntr2,
+                                             data->state->total_start_cntr1,
+                                             data->state->total_start_cntr2);
+    double travelled_m = countsToMeters(counts, data->state->calibration);
+    data->beepNextNavIndex = beepCursorFor(data->state->beep_waypoints_m, travelled_m);
+    data->beepNextTimingIndex = beepCursorFor(data->state->beep_waypoints_m, travelled_m);
+
+    ConfigFile::save(*data->state);
+}
+
+gboolean on_beep_enable_toggled(G_GNUC_UNUSED GtkWidget* widget, gboolean state, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->state->beep_assist_enabled = state;
+    ConfigFile::save(*data->state);
+    return FALSE;  // let the switch draw the new state
+}
+
+void on_beep_mode_toggled(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    bool active = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widget));
+    if (GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "mode")) == 1)
+        data->state->beep_timing_mode = active;
+    else
+        data->state->beep_navigation_mode = active;
+    ConfigFile::save(*data->state);
+}
+
+void on_beep_advance_changed(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    const char* text = gtk_entry_get_text(GTK_ENTRY(widget));
+    bool is_seconds = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "mode")) == 1;
+    double value = 0.0;
+    try {
+        if (text && *text) value = std::stod(text);
+    } catch (const std::exception&) {
+        // Mid-typing the field is briefly unparseable ("." on its own); treat
+        // that as no lead-in rather than rejecting the keystroke.
+        value = 0.0;
+    }
+    if (value < 0.0) value = 0.0;
+    if (is_seconds) data->state->beep_advance_s = value;
+    else            data->state->beep_advance_m = value;
+    ConfigFile::save(*data->state);
 }

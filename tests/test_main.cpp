@@ -12,10 +12,19 @@
 #include "test_rally_clock.h"
 #include "test_edge_cases.h"
 #include "test_calibration_independent.h"
+#include "test_sim_counter.h"
+#include "test_counter_poller_real.h"
+#include "test_elapsed.h"
+#include "test_distance_adjust.h"
+#include "test_segment_row.h"
+#include "test_beep_assist.h"
+#include "test_calibration_display.h"
+#include "test_stage_summary.h"
+#include "test_gauge_layout.h"
 
 int main() {
     TestRunner runner;
-    
+
     // Create test suites
     TestConfigFile configTests;
     TestDistance distanceTests;
@@ -27,7 +36,16 @@ int main() {
     TestRallyClock clockTests;
     TestEdgeCases edgeCaseTests;
     TestCalibrationIndependent calIndepTests;
-    
+    TestSimCounter simCounterTests;
+    TestCounterPollerReal realPollerTests;
+    TestElapsed elapsedTests;
+    TestDistanceAdjust distanceAdjustTests;
+    TestSegmentRow segmentRowTests;
+    TestBeepAssist beepAssistTests;
+    TestCalibrationDisplay calDisplayTests;
+    TestStageSummary stageSummaryTests;
+    TestGaugeLayout gaugeLayoutTests;
+
     // Add all test suites
     runner.addSuite(configTests.createSuite());
     runner.addSuite(distanceTests.createSuite());
@@ -39,9 +57,18 @@ int main() {
     runner.addSuite(clockTests.createSuite());
     runner.addSuite(edgeCaseTests.createSuite());
     runner.addSuite(calIndepTests.createSuite());
-    
+    runner.addSuite(simCounterTests.createSuite());
+    runner.addSuite(realPollerTests.createSuite());
+    runner.addSuite(elapsedTests.createSuite());
+    runner.addSuite(distanceAdjustTests.createSuite());
+    runner.addSuite(segmentRowTests.createSuite());
+    runner.addSuite(beepAssistTests.createSuite());
+    runner.addSuite(calDisplayTests.createSuite());
+    runner.addSuite(stageSummaryTests.createSuite());
+    runner.addSuite(gaugeLayoutTests.createSuite());
+
     // Run all tests
     int failures = runner.runAll();
-    
+
     return (failures > 0) ? 1 : 0;
 }
