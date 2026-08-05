@@ -810,7 +810,7 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     if (dist_str && strlen(dist_str) > 0) {
         long rally_distance_m = std::stol(dist_str);
         
-        if (rally_distance_m >= 500 && rally_distance_m <= 100000) {
+        if (rally_distance_m >= 500 && rally_distance_m <= 1000000) {
             auto current_poll = data->poller->getMostRecent();
             
             // Use calibration start values if started, otherwise use total_start
