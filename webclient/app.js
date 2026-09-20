@@ -366,10 +366,27 @@
 
   // Restarted only when the cadence changes; telemetry repeats it 10 times a
   // second.
+  //
+  // The pitch is deliberately NOT part of the key. The box retunes without
+  // resetting its waveform -- ToneGenerator changes only the phase increment,
+  // precisely so a retune makes no click -- and the phone has to match, or the
+  // same driving sounds smooth on the box and chopped on the phone. Rebuilding
+  // the oscillator for a new frequency cost a 10ms fade-out and a 10ms fade-in
+  // every time, which in the simple tone's continuous pitch ramp is a hole in
+  // the sound at every change. setValueAtTime on a running oscillator is
+  // phase-continuous, so it is the same retune the box does. A change of
+  // WAVEFORM still rebuilds: it is rare, and it only happens across the silent
+  // quiet band, where there is nothing playing to interrupt.
   function applyTone(c) {
     const sounding = soundOn && !!audioCtx && !!c && c.tone_ms > 0 && c.freq_hz > 0;
-    const key = sounding ? [c.tone_ms, c.silence_ms, c.freq_hz, c.wave].join('|') : '';
-    if ((tone ? tone.key : '') === key) return;
+    const key = sounding ? [c.tone_ms, c.silence_ms, c.wave].join('|') : '';
+    if ((tone ? tone.key : '') === key) {
+      if (tone && c && tone.freq !== c.freq_hz) {
+        tone.osc.frequency.setValueAtTime(c.freq_hz, audioCtx.currentTime);
+        tone.freq = c.freq_hz;
+      }
+      return;
+    }
     stopTone();
     if (!sounding) return;
     const ctx = audio();
@@ -380,7 +397,7 @@
     gain.gain.value = 0;
     osc.connect(gain).connect(ctx.destination);
     osc.start();
-    const t = { osc: osc, gain: gain, key: key, toneMs: c.tone_ms, timer: null };
+    const t = { osc: osc, gain: gain, key: key, freq: c.freq_hz, toneMs: c.tone_ms, timer: null };
     tone = t;
     if (c.silence_ms > 0) {
       pulse(t);
@@ -392,11 +409,18 @@
     }
   }
 
-  // Silence rather than a stuck tone if the box stops talking.
+  // Silence rather than a stuck tone if the box stops talking. Telemetry
+  // arrives ten times a second, so this only fires on a real gap -- but at one
+  // second it was firing on ordinary ones. A phone in a moving car, on the
+  // box's own wifi, drops a second of traffic often enough that the tone cut
+  // out and came back while the box's speaker played straight through. Three
+  // seconds still silences a genuinely dead link within a few beats of the
+  // cadence, which is all this is for.
+  const TONE_WATCHDOG_MS = 3000;
   function toneHeard(c) {
     applyTone(c);
     clearTimeout(toneWatchdog);
-    toneWatchdog = setTimeout(stopTone, 1000);
+    toneWatchdog = setTimeout(stopTone, TONE_WATCHDOG_MS);
   }
 
   function showSound() {
