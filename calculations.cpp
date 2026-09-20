@@ -316,10 +316,21 @@ bool retimeSegmentBoundaryForward(std::vector<Segment>& segs, long index,
     // boundary after it does not move.
     double surrendered = cur.distance_counts - static_cast<double>(driven_counts);
     cur.distance_counts = static_cast<double>(driven_counts);
-    next.distance_counts += surrendered;
-    // A "next" pressed past the end of the segment hands back a negative
-    // distance, which would leave the next segment shorter than nothing.
-    if (next.distance_counts < 0.0) next.distance_counts = 0.0;
+    // A "next" pressed past the end of the NEXT segment asks it to give back
+    // more distance than it has. Clamping it at zero dropped the difference:
+    // nothing accounted for it, so the stage total grew, the finish moved out
+    // by the overshoot and every later change point went with it -- and the
+    // segment's target speed was never driven either way.
+    //
+    // Owner's ruling (2026-09-20): at that point the crew are already deep in
+    // a navigation error, and nothing can put the stage back as written. The
+    // honest answer is to keep the missed segment whole and let the stage run
+    // long, so its speed is still driven and no distance disappears. A press
+    // the next segment CAN absorb is unchanged: it shrinks and the finish
+    // stays put, which is the ordinary case.
+    if (next.distance_counts + surrendered >= 0.0) {
+        next.distance_counts += surrendered;
+    }
     resyncSegmentMeters(cur, calibration);
     resyncSegmentMeters(next, calibration);
     return true;
@@ -430,6 +441,15 @@ bool undoSegmentChange(RallyState& state, uint64_t c1, uint64_t c2, int64_t stag
     }
     const long cur = state.segment_current_number;
     rebaseSegmentAt(state, c1, c2, stage_counts - segmentStartStageCounts(segs, cur));
+    // "next" zeroes Trip at the press (rebaseTripToSegment), so undoing that
+    // press has to put Trip back too -- otherwise it keeps counting from the
+    // mistake and reads short for the rest of the segment, which is the very
+    // number the co-pilot judges the next change point by. Trip belongs to
+    // the segment, so it takes the segment's own baseline, not "now".
+    state.trip_start_cntr1 = state.segment_start_cntr1;
+    state.trip_start_cntr2 = state.segment_start_cntr2;
+    state.trip_start_time_ms = state.segment_start_time_ms;
+    state.trip_distance_adjust_cm = 0;
     state.undo_valid = false;   // once only
     return true;
 }
@@ -841,6 +861,15 @@ double averageSpeedForDisplay(double average_speed, bool hold_at_zero) {
     return hold_at_zero ? 0.0 : average_speed;
 }
 
+int64_t elapsedForDisplay(int64_t elapsed_s, bool hold_at_zero) {
+    // Arming an "At HH:MM" start zeroes the distance at the press but leaves
+    // the clock for the minute, so the elapsed figure beside Total and Trip
+    // was still running from the PREVIOUS stage: "0 m" against something like
+    // "47:12" for the whole countdown, on the panel the co-pilot reads at the
+    // line. The averages beside them are already held this way.
+    return hold_at_zero ? 0 : elapsed_s;
+}
+
 bool stageDistanceComplete(const std::vector<Segment>& segs, int64_t stage_counts) {
     if (segs.empty()) return true;
     double total = 0.0;
@@ -898,6 +927,18 @@ bool stageAbortable(const RallyState& state) {
 }
 
 void rebaseTotalDistance(RallyState& state, uint64_t c1, uint64_t c2) {
+    // The alarm stores the odometer reading it fires at, measured from the
+    // Total counter's zero -- and that zero is about to move. Take the
+    // distance already covered off the target so what is LEFT to run is
+    // unchanged: a 20 km alarm set at 5 km still has 20 km to go after a
+    // reset, instead of firing 25 km later. Beep Assist's waypoints were
+    // given the same treatment; the alarm was missed.
+    if (state.alarm_distance_km > 0) {
+        const int64_t covered = calculateDistanceCounts(state, c1, c2,
+            state.total_start_cntr1, state.total_start_cntr2);
+        state.alarm_target_counts -= covered;
+        if (state.alarm_target_counts < 0) state.alarm_target_counts = 0;
+    }
     state.total_start_cntr1 = c1;
     state.total_start_cntr2 = c2;
     state.segment_start_cntr1 = c1;

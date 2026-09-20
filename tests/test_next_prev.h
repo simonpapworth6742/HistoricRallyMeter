@@ -21,6 +21,81 @@ public:
     TestSuite* createSuite() {
         auto* suite = new TestSuite("Next / Prev Tests");
 
+        // RB-SEG-07. A press the NEXT segment can absorb is the ordinary
+        // case and must not change: it shrinks, the stage total is unmoved.
+        suite->addTest("a press the next segment can absorb leaves the stage length alone", []() {
+            auto segs = roadbook();                 // 1000 / 2000 / 1500 = 4500
+            // In segment 1 (Auto off), pressed at 2500 -- well past its own
+            // 1000, but inside segment 2, which ends at 3000.
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, 2500, 600000));
+            ASSERT_NEAR(segs[0].distance_counts, 2500.0, 0.001);
+            ASSERT_NEAR(segs[1].distance_counts,  500.0, 0.001);
+            ASSERT_NEAR(segs[2].distance_counts, 1500.0, 0.001);
+            double total = segs[0].distance_counts + segs[1].distance_counts
+                         + segs[2].distance_counts;
+            ASSERT_NEAR(total, 4500.0, 0.001);      // finish unmoved
+            return true;
+        });
+
+        // RB-SEG-07. Past the END of the next segment it cannot absorb the
+        // press. It used to be clamped to zero and the remainder dropped --
+        // the stage total grew by less than the overshoot, the missed
+        // segment's speed was never driven, and every later change point
+        // moved. Owner's ruling: keep it whole and let the stage run long.
+        suite->addTest("a press past the next segment keeps that segment whole", []() {
+            auto segs = roadbook();                 // 1000 / 2000 / 1500 = 4500
+            // In segment 1, pressed at 3500 -- past segment 2's end at 3000.
+            ASSERT_TRUE(retimeSegmentBoundaryForward(segs, 0, 3500, 600000));
+            ASSERT_NEAR(segs[0].distance_counts, 3500.0, 0.001);
+            ASSERT_NEAR(segs[1].distance_counts, 2000.0, 0.001);  // untouched
+            ASSERT_NEAR(segs[2].distance_counts, 1500.0, 0.001);
+            double total = segs[0].distance_counts + segs[1].distance_counts
+                         + segs[2].distance_counts;
+            ASSERT_NEAR(total, 7000.0, 0.001);      // 3500 + the rest, in full
+            // Nothing is thrown away: the two later segments keep their whole
+            // roadbook lengths, so their speeds are still driven.
+            ASSERT_EQ(segmentStartStageCounts(segs, 1), 3500);
+            ASSERT_EQ(segmentStartStageCounts(segs, 2), 5500);
+            return true;
+        });
+
+        // RB-NAV-15. "next" zeroes Trip; undoing it has to put Trip back to
+        // the segment's own baseline, or Trip reads short for the rest of the
+        // segment -- and Trip is what the co-pilot judges the next change
+        // point by.
+        suite->addTest("prev puts Trip back to the segment it lands in", []() {
+            RallyState state;
+            state.calibration = 600000;
+            state.counters = false;
+            state.stage_segments = roadbook();
+            state.total_start_time_ms = 1000;
+            // A "next" was pressed in segment 0 at 600 and moved us to 1.
+            ASSERT_TRUE(retimeSegmentBoundaryForward(state.stage_segments, 0, 600,
+                                                     state.calibration));
+            state.segment_current_number = 1;
+            state.undo_valid = true;
+            state.undo_automatic = false;
+            state.undo_from_index = 0;
+            state.undo_from_counts = 1000;      // segment 0 before the press
+            state.undo_to_counts   = 2000;      // segment 1 before the press
+            state.undo_stage_start_ms = state.total_start_time_ms;
+            // Trip was zeroed at the press and has been counting since.
+            state.trip_start_cntr1 = 900;
+            state.trip_start_cntr2 = 900;
+            state.trip_start_time_ms = 55555;
+            state.trip_distance_adjust_cm = 250;
+
+            // prev, with the car at 800 counts into the stage.
+            ASSERT_TRUE(undoSegmentChange(state, 800, 800, 800));
+            ASSERT_EQ(state.segment_current_number, 0);
+            // Trip now measures from the segment, not from the mistaken press.
+            ASSERT_EQ(state.trip_start_cntr1, state.segment_start_cntr1);
+            ASSERT_EQ(state.trip_start_cntr2, state.segment_start_cntr2);
+            ASSERT_EQ(state.trip_start_time_ms, state.segment_start_time_ms);
+            ASSERT_EQ(state.trip_distance_adjust_cm, 0);
+            return true;
+        });
+
         suite->addTest("prev merges the segment back and keeps the next known point", []() {
             auto segs = roadbook();
             // "next" pressed too early, at 600: boundary 1 moved to 600.
