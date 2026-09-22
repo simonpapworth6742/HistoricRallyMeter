@@ -174,7 +174,7 @@ The tones should sound from the stage start while within the stage. Once past th
 
 Updates per second is the number of times this display has been updated in a second, Rolling count of driver display render/update calls over the last full second.
 
-If auto_start_stage_at_rally_time relative to rally time is in the future by less than 24 hours, then overlayed on the drivers display in 30px a count down clock "T- hh:mm:ss" with a thick white border, when zero seconds is reached the "stage go" rountine must be triggered as if the co-piliot had pressed and confirmed "stage go".
+If auto_start_stage_at_rally_time relative to rally time is in the future by less than 24 hours, then overlayed on the drivers display in 30px a count down clock "T- hh:mm:ss" with a thick white border, when zero seconds is reached the "stage go" rountine must be triggered once, as if the co-piliot had pressed and confirmed "stage go", and the stored auto start time is cleared. It must not start the stage again on the following updates. Ahead/behind tones then follow the normal stage-go rules from that start.
 
 **Rally Gauge Display:**
 The ahead/behind timing is displayed as a 180-degree semicircular gauge (rally gauge style):
@@ -356,7 +356,7 @@ Layout:
 
 - Navigation buttons spread across full-width bottom row (20px font, 43px tall):
 
-- stage go: shown when no current segment is selected (segment_current_number is -1, or does not point at a segment). Conformation dialog (with 30px text and buttons with at least 20px between buttons), with "Auto start" option,  with yes reseting Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green, and zero's the ahead_behind_zero_offset_ms. "Auto start" option should go to the "Auto start setup screen. While a current segment is selected, the same button reads "abort stage". Its conformation dialog asks "Abort stage?"; Yes sets segment_current_number to -1 and saves, No leaves the stage running.
+- stage go: shown when no current segment is selected (segment_current_number is -1, or does not point at a segment). Conformation dialog (with 30px text and buttons with at least 20px between buttons), with "Auto start" option,  with yes reseting Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green, and zero's the ahead_behind_zero_offset_ms. Yes also clears any auto start time still in the future, so the stage starts immediately and that countdown does not fire later. "Auto start" option should go to the "Auto start setup screen. While a current segment is selected, the same button reads "abort stage". Its conformation dialog asks "Abort stage?"; Yes sets segment_current_number to -1 and saves, No leaves the stage running.
  
 - segments: goes to Stage Setup
 
@@ -432,7 +432,7 @@ on it, but no ";" and ".".
 **5) Auto Start Setup Screen**
 
 ```
-On entry pre fill the time entry box's with the current auto start date and time.
+On entry, if an auto start time is saved and still in the future, prefill the time entry with that time. If it is blank or in the past, prefill the entry with the soonest whole minute that is at least 30 seconds ahead of rally time.
 All fonts to be 20px
 
 +----------------------------------------------------------------------------------------------------------+
@@ -447,11 +447,12 @@ All fonts to be 20px
 |  [Clear]                              [set]                                             [back]           |
 +----------------------------------------------------------------------------------------------------------+
 ```
+The bottom row buttons use the same 20px font and 43px height as the TwinMaster navigation buttons.
 Display a numeric keypad for entry on the right, it is the same keypad layout as the Date/Time setup screen.
 
 Only allow time to be entered in the 24 hour clock, display an error and don't allow the time to be set if more than 3 hours in advance.
 
-Clear - sets the auto_start time to 0, making it in the past and therefor it has no further effect.
+Clear - sets the auto_start time to 0, making it in the past and therefor it has no further effect. The time entry is then filled with the soonest whole minute at least 30 seconds ahead, the same as a blank entry on opening the screen.
 Set - sets the auto start time in the config file etc. recording the offeset as defined, the screen is updated to show the new values.
 
 ## Remote Web Access (mobile phones)

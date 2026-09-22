@@ -348,6 +348,9 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
     gtk_widget_destroy(dialog);
     
     if (response == GTK_RESPONSE_YES) {
+        // Manual start replaces a pending auto start.
+        data->state->auto_start_rally_time_minutes = 0;
+        data->autoStartTriggered = false;
         performStageGo(data);
     } else if (response == RESPONSE_AUTO_START) {
         on_show_autostart(widget, user_data);
@@ -1432,12 +1435,35 @@ static int64_t getAutoStartEpochMs() {
     return static_cast<int64_t>(mktime(&epoch_tm)) * 1000;
 }
 
+// Soonest hh:mm:00 that is at least 30 seconds after the current rally time.
+static std::string suggestedAutoStartEntry(const RallyState& state) {
+    int64_t earliest_ms = getRallyTime_ms(state) + 30000;
+    time_t earliest_s = earliest_ms / 1000;
+    int extra_ms = static_cast<int>(earliest_ms % 1000);
+    struct tm t = *localtime(&earliest_s);
+    if (t.tm_sec != 0 || extra_ms != 0) {
+        t.tm_sec = 0;
+        t.tm_min += 1;
+        mktime(&t);
+    }
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t.tm_hour, t.tm_min, t.tm_sec);
+    return buf;
+}
+
+static bool autoStartIsInFuture(const RallyState& state) {
+    if (state.auto_start_rally_time_minutes == 0) return false;
+    int64_t target_ms = getAutoStartEpochMs() +
+        static_cast<int64_t>(state.auto_start_rally_time_minutes) * 60000;
+    return target_ms > getRallyTime_ms(state);
+}
+
 void on_show_autostart(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     gtk_stack_set_visible_child_name(data->copilotStack, "autostart");
     data->activeEntry = data->autoStartTimeEntry;
     
-    if (data->state->auto_start_rally_time_minutes > 0) {
+    if (autoStartIsInFuture(*data->state)) {
         int64_t target_ms = getAutoStartEpochMs() + 
             static_cast<int64_t>(data->state->auto_start_rally_time_minutes) * 60000;
         time_t target_s = target_ms / 1000;
@@ -1446,7 +1472,7 @@ void on_show_autostart(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);
         gtk_entry_set_text(data->autoStartTimeEntry, buf);
     } else {
-        gtk_entry_set_text(data->autoStartTimeEntry, "");
+        gtk_entry_set_text(data->autoStartTimeEntry, suggestedAutoStartEntry(*data->state).c_str());
     }
     
     updateAutoStartDisplay(data);
@@ -1522,6 +1548,6 @@ void on_autostart_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->state->auto_start_rally_time_minutes = 0;
     data->autoStartTriggered = false;
     ConfigFile::save(*data->state);
-    gtk_entry_set_text(data->autoStartTimeEntry, "");
+    gtk_entry_set_text(data->autoStartTimeEntry, suggestedAutoStartEntry(*data->state).c_str());
     updateAutoStartDisplay(data);
 }

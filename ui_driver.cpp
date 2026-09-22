@@ -750,8 +750,12 @@ void updateDriverDisplay(AppData* data) {
         } else if (diff_ms <= 0 && diff_ms > -2000) {
             GtkWidget* frame = gtk_widget_get_parent(GTK_WIDGET(data->countdownLabel));
             if (frame) gtk_widget_hide(frame);
-            data->autoStartTriggered = true;
+            // One start only. performStageGo clears autoStartTriggered, so
+            // drop the scheduled time first; otherwise every update for the
+            // next two seconds starts the stage again and silences the tones.
+            data->state->auto_start_rally_time_minutes = 0;
             performStageGo(data);
+            data->autoStartTriggered = true;
         } else {
             GtkWidget* frame = gtk_widget_get_parent(GTK_WIDGET(data->countdownLabel));
             if (frame) gtk_widget_hide(frame);

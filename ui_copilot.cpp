@@ -1058,10 +1058,12 @@ GtkWidget* createAutoStartScreen(AppData* data) {
     g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_autostart_clear), data);
     g_signal_connect(setBtn, "clicked", G_CALLBACK(on_autostart_set), data);
     g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
-    
-    gtk_box_pack_start(GTK_BOX(buttonBox), clearBtn, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(buttonBox), setBtn, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(buttonBox), backBtn, TRUE, TRUE, 0);
+
+    for (GtkWidget* btn : {clearBtn, setBtn, backBtn}) {
+        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "nav-button");
+        gtk_widget_set_size_request(btn, -1, 43);
+        gtk_box_pack_start(GTK_BOX(buttonBox), btn, TRUE, TRUE, 0);
+    }
     
     return screen;
 }
