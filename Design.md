@@ -157,7 +157,7 @@ Seconds ahead/behind formula (high precision): ideal_counts = (time_ms_since_seg
 
 Indicate the change in acceleration required green / red arrows to the driver with sound as well (provided within the stage) as the visual indicators, if driving to +- 0.1 seconds ahead / behind or greater than +-30 seconds emit no tone. Provided the distance is within the Stage using the same three acceleration brackets as the red / green arrows make 0.1 second tone with 0.1 second no tone, moving to 0.5/0.2 seconds and lastly 0.7/0.3 seconds.
 The tones generated should be piano C6,C6,C6 when behind and F6,F6,F6 when ahead.The tone generator should apply a 5ms fade-in/fade-out envelope at every tone-to-silence and silence-to-tone transition.
-The tones should only sound after the first 250 meters of the stage start and while withing the stage, once past the end of the last segment the tones should stop.
+The tones should sound from the stage start while within the stage. Once past the end of the last segment the tones should stop.
 
 Updates per second is the number of times this display has been updated in a second, Rolling count of driver display render/update calls over the last full second.
 

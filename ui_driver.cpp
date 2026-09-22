@@ -619,19 +619,17 @@ void updateDriverDisplay(AppData* data) {
                 gtk_label_set_text(data->speedAdjustArrowsLabel, "");
             }
             
-            // Tone cadence: only after 250m from stage start and before end of last segment.
+            // Tone cadence: silent once past the end of the last segment.
             // Silent if within ±0.1s or beyond ±30s.
             // Behind (speed_diff > 0, speed up): C6=1046.50
             // Ahead  (speed_diff < 0, slow down): F6=1396.91
             if (data->toneGen) {
-                double stage_dist_m = countsToMeters(total_count_diff_ab, data->state->calibration);
                 double total_stage_counts = 0.0;
                 for (const auto& s : data->state->segments)
                     total_stage_counts += s.distance_counts;
                 bool past_stage_end = (static_cast<double>(total_count_diff_ab) >= total_stage_counts);
-                bool in_tone_zone = (stage_dist_m >= 250.0) && !past_stage_end;
 
-                if (!in_tone_zone || abs_seconds > 30.0 || num_arrows == 0) {
+                if (past_stage_end || abs_seconds > 30.0 || num_arrows == 0) {
                     data->toneGen->setCadence(0, 0);
                 } else {
                     bool behind = (speed_diff > 0);
