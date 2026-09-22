@@ -137,6 +137,19 @@ public:
             
             return true;
         });
+
+        suite->addTest("Power loss keeps distance already covered", []() {
+            RallyState state;
+            state.counters = false;
+            uint64_t start = 1000;
+            int64_t carry = 0;
+            continueCountAfterPowerLoss(10, 5000, start, carry);
+            ASSERT_EQ(start, 10u);
+            ASSERT_EQ(carry, 4000);
+            int64_t distance = calculateDistanceCounts(state, 30, 0, start, 0, carry, 0);
+            ASSERT_EQ(distance, 4020);  // 20 new pulses plus the 4000 already covered
+            return true;
+        });
         
         return suite;
     }

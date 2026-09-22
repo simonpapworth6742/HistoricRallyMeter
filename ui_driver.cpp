@@ -494,7 +494,8 @@ void updateDriverDisplay(AppData* data) {
     // Trip average speed
     int64_t trip_count_diff = calculateDistanceCounts(*data->state, 
         current_poll.cntr1, current_poll.cntr2,
-        data->state->trip_start_cntr1, data->state->trip_start_cntr2);
+        data->state->trip_start_cntr1, data->state->trip_start_cntr2,
+        data->state->trip_carry_cntr1, data->state->trip_carry_cntr2);
     double trip_speed = calculateAverageSpeed(*data->state,
         data->state->trip_start_time_ms, current_time_ms, trip_count_diff);
     ss.str("");
@@ -504,7 +505,8 @@ void updateDriverDisplay(AppData* data) {
     // Total average speed
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2);
+        data->state->total_start_cntr1, data->state->total_start_cntr2,
+            data->state->total_carry_cntr1, data->state->total_carry_cntr2);
     double total_speed = calculateAverageSpeed(*data->state,
         data->state->total_start_time_ms, current_time_ms, total_count_diff);
     ss.str("");
@@ -527,7 +529,8 @@ void updateDriverDisplay(AppData* data) {
         // Ahead/behind - calculated from stage start accounting for all segment speeds
         int64_t total_count_diff_ab = calculateDistanceCounts(*data->state,
             current_poll.cntr1, current_poll.cntr2,
-            data->state->total_start_cntr1, data->state->total_start_cntr2);
+            data->state->total_start_cntr1, data->state->total_start_cntr2,
+            data->state->total_carry_cntr1, data->state->total_carry_cntr2);
         double seconds = calculateAheadBehindFromStageStart(*data->state, current_time_ms, total_count_diff_ab);
         seconds += data->state->ahead_behind_zero_offset_ms / 1000.0;
         
@@ -539,7 +542,8 @@ void updateDriverDisplay(AppData* data) {
         {
             int64_t seg_count_diff = calculateDistanceCounts(*data->state,
                 current_poll.cntr1, current_poll.cntr2,
-                data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+                data->state->segment_start_cntr1, data->state->segment_start_cntr2,
+                data->state->segment_carry_cntr1, data->state->segment_carry_cntr2);
             double seg_total = seg.distance_counts;
             if (seg_total > 0.0) {
                 double frac = static_cast<double>(seg_count_diff) / seg_total;
@@ -677,7 +681,8 @@ void updateDriverDisplay(AppData* data) {
         const Segment& current_seg = data->state->segments[data->state->segment_current_number];
         int64_t seg_count_diff = calculateDistanceCounts(*data->state,
             current_poll.cntr1, current_poll.cntr2,
-            data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+            data->state->segment_start_cntr1, data->state->segment_start_cntr2,
+                data->state->segment_carry_cntr1, data->state->segment_carry_cntr2);
         
         double remaining_counts = current_seg.distance_counts - static_cast<double>(seg_count_diff);
         double remaining_m = countsToMeters(static_cast<int64_t>(remaining_counts), data->state->calibration);

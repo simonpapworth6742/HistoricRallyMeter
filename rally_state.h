@@ -19,6 +19,23 @@ public:
     uint64_t segment_start_cntr1 = 0;
     uint64_t segment_start_cntr2 = 0;
     int64_t segment_start_time_ms = 0;
+    // Counts already covered on a chip whose count went back to zero.
+    int64_t total_carry_cntr1 = 0;
+    int64_t total_carry_cntr2 = 0;
+    int64_t trip_carry_cntr1 = 0;
+    int64_t trip_carry_cntr2 = 0;
+    int64_t segment_carry_cntr1 = 0;
+    int64_t segment_carry_cntr2 = 0;
+    // Last count the application saw, written with the config.
+    uint64_t last_cntr1 = 0;
+    uint64_t last_cntr2 = 0;
+    // True once this application has cleared that chip's power-loss flag.
+    bool cntr1_pls_cleared = false;
+    bool cntr2_pls_cleared = false;
+
+    void clearTotalCarry() { total_carry_cntr1 = 0; total_carry_cntr2 = 0; }
+    void clearTripCarry() { trip_carry_cntr1 = 0; trip_carry_cntr2 = 0; }
+    void clearSegmentCarry() { segment_carry_cntr1 = 0; segment_carry_cntr2 = 0; }
     long segment_current_number = -1;  // -1 = no segment
     long rallyTimeOffset_ms = 0;  // offset in milliseconds
     long ahead_behind_zero_offset_ms = 0;  // manual offset for driver's ahead/behind display

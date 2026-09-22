@@ -13,8 +13,11 @@
 #include <iomanip>
 #include <ctime>
 #include <cstring>
+#include <cstdlib>
 #include <chrono>
 #include <functional>
+
+static void writeCalRunEntries(AppData* data, long metres, long calibration);
 
 gboolean on_window_delete(G_GNUC_UNUSED GtkWidget* widget, G_GNUC_UNUSED GdkEvent* event, G_GNUC_UNUSED gpointer user_data) {
     gtk_main_quit();
@@ -43,6 +46,7 @@ void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     auto current_poll = data->poller->getMostRecent();
     data->state->total_start_cntr1 = current_poll.cntr1;
     data->state->total_start_cntr2 = current_poll.cntr2;
+    data->state->clearTotalCarry();
     data->state->total_start_time_ms = getRallyTime_ms(*data->state);
     ConfigFile::save(*data->state);
     notifyWebState(data);
@@ -53,6 +57,7 @@ void on_trip_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     auto current_poll = data->poller->getMostRecent();
     data->state->trip_start_cntr1 = current_poll.cntr1;
     data->state->trip_start_cntr2 = current_poll.cntr2;
+    data->state->clearTripCarry();
     data->state->trip_start_time_ms = getRallyTime_ms(*data->state);
     ConfigFile::save(*data->state);
     notifyWebState(data);
@@ -104,6 +109,9 @@ void performStageGo(AppData* data) {
     data->state->segment_start_cntr1 = current_poll.cntr1;
     data->state->segment_start_cntr2 = current_poll.cntr2;
     data->state->segment_start_time_ms = current_time;
+    data->state->clearTotalCarry();
+    data->state->clearTripCarry();
+    data->state->clearSegmentCarry();
 
     if (!data->state->segments.empty()) {
         data->state->segment_current_number = 0;
@@ -280,10 +288,12 @@ void on_next_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         data->state->segment_start_cntr1 = current_poll.cntr1;
         data->state->segment_start_cntr2 = current_poll.cntr2;
         data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
+        data->state->clearSegmentCarry();
         // Reset trip
         data->state->trip_start_cntr1 = current_poll.cntr1;
         data->state->trip_start_cntr2 = current_poll.cntr2;
         data->state->trip_start_time_ms = data->state->segment_start_time_ms;
+        data->state->clearTripCarry();
         ConfigFile::save(*data->state);
     }
 }
@@ -297,7 +307,8 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     auto current_poll = data->poller->getMostRecent();
     int64_t seg_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+        data->state->segment_start_cntr1, data->state->segment_start_cntr2,
+        data->state->segment_carry_cntr1, data->state->segment_carry_cntr2);
     
     Segment& cur_seg = data->state->segments[data->state->segment_current_number];
     int64_t remaining_counts = cur_seg.distance_counts - seg_count_diff;
@@ -319,9 +330,11 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         data->state->segment_start_cntr1 = current_poll.cntr1;
         data->state->segment_start_cntr2 = current_poll.cntr2;
         data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
+        data->state->clearSegmentCarry();
         data->state->trip_start_cntr1 = current_poll.cntr1;
         data->state->trip_start_cntr2 = current_poll.cntr2;
         data->state->trip_start_time_ms = data->state->segment_start_time_ms;
+        data->state->clearTripCarry();
     } else if (near_start) {
         // "prev": extend previous segment distance to end here, reset current segment start to now
         Segment& prev_seg = data->state->segments[data->state->segment_current_number - 1];
@@ -331,9 +344,11 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         data->state->segment_start_cntr1 = current_poll.cntr1;
         data->state->segment_start_cntr2 = current_poll.cntr2;
         data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
+        data->state->clearSegmentCarry();
         data->state->trip_start_cntr1 = current_poll.cntr1;
         data->state->trip_start_cntr2 = current_poll.cntr2;
         data->state->trip_start_time_ms = data->state->segment_start_time_ms;
+        data->state->clearTripCarry();
     }
     
     ConfigFile::save(*data->state);
@@ -345,6 +360,18 @@ gboolean update_display(gpointer user_data) {
     
     // Poll counters (respects 5ms minimum interval)
     data->poller->poll(data->counter1, data->counter2, data->register_addr);
+
+    auto recent = data->poller->getMostRecent();
+    if (recent.time_ms != 0) {
+        bool changed = data->state->last_cntr1 != recent.cntr1 || data->state->last_cntr2 != recent.cntr2;
+        data->state->last_cntr1 = recent.cntr1;
+        data->state->last_cntr2 = recent.cntr2;
+        static int64_t last_persist_ms = 0;
+        if (changed && recent.time_ms - last_persist_ms >= 15000) {
+            ConfigFile::save(*data->state);
+            last_persist_ms = recent.time_ms;
+        }
+    }
     
     // Check for auto-advance segments
     if (data->state->segment_current_number >= 0 && 
@@ -354,7 +381,8 @@ gboolean update_display(gpointer user_data) {
             auto current_poll = data->poller->getMostRecent();
             int64_t seg_count_diff = calculateDistanceCounts(*data->state,
                 current_poll.cntr1, current_poll.cntr2,
-                data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+                data->state->segment_start_cntr1, data->state->segment_start_cntr2,
+        data->state->segment_carry_cntr1, data->state->segment_carry_cntr2);
             
             if (seg_count_diff >= seg.distance_counts) {
                 // Advance to next segment
@@ -364,10 +392,12 @@ gboolean update_display(gpointer user_data) {
                     data->state->segment_start_cntr1 = current_poll.cntr1;
                     data->state->segment_start_cntr2 = current_poll.cntr2;
                     data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
+                    data->state->clearSegmentCarry();
                     // Reset trip
                     data->state->trip_start_cntr1 = current_poll.cntr1;
                     data->state->trip_start_cntr2 = current_poll.cntr2;
                     data->state->trip_start_time_ms = data->state->segment_start_time_ms;
+                    data->state->clearTripCarry();
                     ConfigFile::save(*data->state);
                     notifyWebState(data);
                 }
@@ -402,7 +432,16 @@ void on_show_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     
     // Reset calibration state when entering screen
     data->cal_started = false;
+    data->cal_running = false;
+    data->cal_stopped = false;
+    data->cal_pulse_count = 0;
     data->activeEntry = data->rallyDistEntry;  // Set active entry for keypad
+    data->cal_syncing = true;
+    if (data->rallyDistEntry) gtk_entry_set_text(data->rallyDistEntry, "");
+    if (data->calNewEntry) {
+        gtk_entry_set_text(data->calNewEntry, std::to_string(data->state->calibration).c_str());
+    }
+    data->cal_syncing = false;
     
     // Update calibration display
     updateCalibrationDisplay(data);
@@ -440,19 +479,19 @@ GtkWidget* createNumericKeypad(AppData* data) {
     
     for (int i = 0; i < 12; i++) {
         GtkWidget* btn = gtk_button_new_with_label(digits[i]);
-        gtk_widget_set_size_request(btn, 60, 48);
+        gtk_widget_set_size_request(btn, 63, 50);
         g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
         gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
     }
     
     // Row 5: Clear and Backspace
     GtkWidget* clearBtn = gtk_button_new_with_label("C");
-    gtk_widget_set_size_request(clearBtn, 60, 48);
+    gtk_widget_set_size_request(clearBtn, 63, 50);
     g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_keypad_clear), data);
     gtk_grid_attach(GTK_GRID(keypad), clearBtn, 0, 4, 1, 1);
     
     GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
-    gtk_widget_set_size_request(bkspBtn, 130, 48);
+    gtk_widget_set_size_request(bkspBtn, 136, 50);
     g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
     gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
     
@@ -468,18 +507,18 @@ GtkWidget* createDateTimeKeypad(AppData* data) {
     
     for (int i = 0; i < 12; i++) {
         GtkWidget* btn = gtk_button_new_with_label(digits[i]);
-        gtk_widget_set_size_request(btn, 60, 48);
+        gtk_widget_set_size_request(btn, 63, 50);
         g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
         gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
     }
     
     GtkWidget* clearBtn = gtk_button_new_with_label("C");
-    gtk_widget_set_size_request(clearBtn, 60, 48);
+    gtk_widget_set_size_request(clearBtn, 63, 50);
     g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_keypad_clear), data);
     gtk_grid_attach(GTK_GRID(keypad), clearBtn, 0, 4, 1, 1);
     
     GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
-    gtk_widget_set_size_request(bkspBtn, 130, 48);
+    gtk_widget_set_size_request(bkspBtn, 136, 50);
     g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
     gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
     
@@ -633,31 +672,132 @@ void refreshSegmentList(AppData* data) {
     }
 }
 
+static bool parseLongText(const char* text, long& out) {
+    if (!text || *text == '\0') return false;
+    char* end = nullptr;
+    long value = std::strtol(text, &end, 10);
+    if (end == text || *end != '\0') return false;
+    out = value;
+    return true;
+}
+
+// Pulses since Start. While Stop is in effect, the counters captured then are used
+// so this run stays still. The rally distances keep using the live counters.
+static int64_t calibrationRunPulses(AppData* data) {
+    if (!data->cal_running && !data->cal_stopped) return 0;
+    uint64_t cntr1;
+    uint64_t cntr2;
+    if (data->cal_stopped) {
+        cntr1 = data->cal_frozen_cntr1;
+        cntr2 = data->cal_frozen_cntr2;
+    } else {
+        auto current_poll = data->poller->getMostRecent();
+        cntr1 = current_poll.cntr1;
+        cntr2 = current_poll.cntr2;
+    }
+    return calculateDistanceCounts(*data->state, cntr1, cntr2,
+        data->cal_start_cntr1, data->cal_start_cntr2, 0, 0);
+}
+
+static void markCalStep(GtkWidget* btn, bool next) {
+    if (!btn) return;
+    GtkStyleContext* ctx = gtk_widget_get_style_context(btn);
+    if (next) gtk_style_context_add_class(ctx, "cal-workflow-next");
+    else gtk_style_context_remove_class(ctx, "cal-workflow-next");
+}
+
+static void refreshCalWorkflow(AppData* data) {
+    bool edit = data->cal_stopped && data->cal_pulse_count > 0;
+    if (data->calStopBtn) gtk_widget_set_sensitive(data->calStopBtn, data->cal_running);
+    if (data->calSetBtn) gtk_widget_set_sensitive(data->calSetBtn, edit);
+    if (data->rallyDistEntry) gtk_widget_set_sensitive(GTK_WIDGET(data->rallyDistEntry), edit);
+    if (data->calNewEntry) gtk_widget_set_sensitive(GTK_WIDGET(data->calNewEntry), edit);
+    markCalStep(data->calStartBtn, !data->cal_running && !data->cal_stopped);
+    markCalStep(data->calStopBtn, data->cal_running);
+    markCalStep(data->calSetBtn, data->cal_stopped);
+}
+
+static void writeCalRunEntries(AppData* data, long metres, long calibration) {
+    data->cal_syncing = true;
+    if (data->rallyDistEntry) {
+        gtk_entry_set_text(data->rallyDistEntry, std::to_string(metres).c_str());
+    }
+    if (data->calNewEntry) {
+        gtk_entry_set_text(data->calNewEntry, std::to_string(calibration).c_str());
+    }
+    data->cal_syncing = false;
+}
+
 // Callback for calibration start button
 void on_calibration_start(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     auto current_poll = data->poller->getMostRecent();
-    
-    // Remember baseline counter values
+
     data->cal_start_cntr1 = current_poll.cntr1;
     data->cal_start_cntr2 = current_poll.cntr2;
+    data->cal_running = true;
+    data->cal_stopped = false;
     data->cal_started = true;
-    
-    // Update display immediately
+    data->cal_pulse_count = 0;
+    writeCalRunEntries(data, 0, data->state->calibration);
     updateCalibrationDisplay(data);
+}
+
+void on_calibration_stop(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (!data->cal_running) return;
+
+    auto current_poll = data->poller->getMostRecent();
+    data->cal_frozen_cntr1 = current_poll.cntr1;
+    data->cal_frozen_cntr2 = current_poll.cntr2;
+    data->cal_running = false;
+    data->cal_stopped = true;
+
+    int64_t pulses = calibrationRunPulses(data);
+    data->cal_pulse_count = pulses;
+    long metres = countsToCentimeters(pulses, data->state->calibration) / 100;
+    writeCalRunEntries(data, metres, data->state->calibration);
+    updateCalibrationDisplay(data);
+}
+
+void on_cal_meters_changed(G_GNUC_UNUSED GtkEditable* editable, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (data->cal_syncing || data->cal_running) return;
+    if (!data->cal_stopped || data->cal_pulse_count <= 0 || !data->calNewEntry) return;
+
+    long metres = 0;
+    if (!parseLongText(gtk_entry_get_text(data->rallyDistEntry), metres) || metres < 0) return;
+    long calibration = (metres * 1000000L) / data->cal_pulse_count;
+    data->cal_syncing = true;
+    gtk_entry_set_text(data->calNewEntry, std::to_string(calibration).c_str());
+    data->cal_syncing = false;
+}
+
+void on_cal_new_changed(G_GNUC_UNUSED GtkEditable* editable, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (data->cal_syncing || data->cal_running) return;
+    if (!data->cal_stopped || data->cal_pulse_count <= 0 || !data->rallyDistEntry) return;
+
+    long calibration = 0;
+    if (!parseLongText(gtk_entry_get_text(data->calNewEntry), calibration) || calibration < 0) return;
+    long metres = (calibration * data->cal_pulse_count) / 1000000L;
+    data->cal_syncing = true;
+    gtk_entry_set_text(data->rallyDistEntry, std::to_string(metres).c_str());
+    data->cal_syncing = false;
 }
 
 // Helper function to update calibration display
 void updateCalibrationDisplay(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
     
-    // Calculate counts from calibration start (or total start if not started)
-    uint64_t start_cntr1 = data->cal_started ? data->cal_start_cntr1 : data->state->total_start_cntr1;
-    uint64_t start_cntr2 = data->cal_started ? data->cal_start_cntr2 : data->state->total_start_cntr2;
+    // Left side stays the rally's current distance. The calibration run is on the right.
+    uint64_t start_cntr1 = data->state->total_start_cntr1;
+    uint64_t start_cntr2 = data->state->total_start_cntr2;
     
-    // Individual counter differences
-    int64_t cntr1_diff = current_poll.cntr1 - start_cntr1;
-    int64_t cntr2_diff = current_poll.cntr2 - start_cntr2;
+    int64_t carry1 = data->state->total_carry_cntr1;
+    int64_t carry2 = data->state->total_carry_cntr2;
+    int64_t cntr1_diff = static_cast<int64_t>(current_poll.cntr1) - static_cast<int64_t>(start_cntr1) + carry1;
+    int64_t cntr2_diff = static_cast<int64_t>(current_poll.cntr2) - static_cast<int64_t>(start_cntr2) + carry2;
     
     // CNTR_A (calculated) - average if two counters, or just cntr1 if single
     int64_t cntr_a;
@@ -672,11 +812,46 @@ void updateCalibrationDisplay(AppData* data) {
     // Distance in meters
     long total_m = countsToCentimeters(cntr_a, data->state->calibration) / 100;
     
-    // Format: "Total distance: xxx,xxx m  (counts calculated: CNTR_A  1: CNTR_1  2: CNTR_2)"
+    if (data->sensorCountsLabel) {
+        std::stringstream counts;
+        counts << "Current Sensor counts\n"
+               << "1: " << current_poll.cntr1 << "\n"
+               << "2: " << current_poll.cntr2;
+        gtk_label_set_text(data->sensorCountsLabel, counts.str().c_str());
+    }
+
+    // Format: total distance, then the counts since the calibration start
     std::stringstream ss;
-    ss << "Total distance: " << total_m << " m  (counts calculated: " << cntr_a 
-       << "   1: " << cntr1_diff << "   2: " << cntr2_diff << ")";
+    ss << "Total distance: " << total_m << " m\n"
+       << "Counts calculated: " << cntr_a << "\n"
+       << "1: " << cntr1_diff << "\n"
+       << "2: " << cntr2_diff;
     gtk_label_set_text(data->totalDistCalLabel, ss.str().c_str());
+
+    if (data->calibrationValueLabel) {
+        double metres_per_pulse = static_cast<double>(data->state->calibration) / 1e6;
+        std::stringstream cal;
+        cal << "Current Calibration\n"
+            << data->state->calibration << " mm/1000p\n"
+            << "meters per pulse\n"
+            << std::fixed << std::setprecision(6) << metres_per_pulse << " m/pulse";
+        gtk_label_set_text(data->calibrationValueLabel, cal.str().c_str());
+    }
+
+    int64_t pulses = calibrationRunPulses(data);
+    data->cal_pulse_count = pulses;
+    long run_m = (data->cal_running || data->cal_stopped)
+        ? countsToCentimeters(pulses, data->state->calibration) / 100
+        : 0;
+    if (data->calRunLabel) {
+        std::stringstream run;
+        run << "Distance: " << run_m << " m\nPulses: " << pulses;
+        gtk_label_set_text(data->calRunLabel, run.str().c_str());
+    }
+    if (data->cal_running) {
+        writeCalRunEntries(data, run_m, data->state->calibration);
+    }
+    refreshCalWorkflow(data);
 }
 
 // Helper function to update date/time display
@@ -874,50 +1049,71 @@ void on_memory_clear(GtkWidget* widget, gpointer user_data) {
 
 void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    
-    const char* dist_str = gtk_entry_get_text(data->rallyDistEntry);
-    if (dist_str && strlen(dist_str) > 0) {
-        long rally_distance_m = std::stol(dist_str);
-        
-        if (rally_distance_m >= 500 && rally_distance_m <= 100000) {
-            auto current_poll = data->poller->getMostRecent();
-            
-            // Use calibration start values if started, otherwise use total_start
-            uint64_t start_cntr1 = data->cal_started ? data->cal_start_cntr1 : data->state->total_start_cntr1;
-            uint64_t start_cntr2 = data->cal_started ? data->cal_start_cntr2 : data->state->total_start_cntr2;
-            
-            int64_t total_count_diff = calculateDistanceCounts(*data->state,
-                current_poll.cntr1, current_poll.cntr2,
-                start_cntr1, start_cntr2);
-            
-            if (total_count_diff > 0) {
-                // new_cal = (input_meters * 1000 * 1000) / total_count_diff
-                data->state->calibration = (rally_distance_m * 1000000) / total_count_diff;
-                
-                // Recalculate count-based values in all segments from stable human values
-                for (auto& seg : data->state->segments) {
-                    seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-                    seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
-                }
-                for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
-                    for (auto& seg : data->state->memory_slots[i]) {
-                        seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-                        seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
-                    }
-                }
-                
-                ConfigFile::save(*data->state);
-                
-                // Clear entry and reset calibration state
-                gtk_entry_set_text(data->rallyDistEntry, "");
-                data->cal_started = false;
-                updateCalibrationDisplay(data);
-            }
+    if (!data->cal_stopped || data->cal_pulse_count <= 0) return;
+
+    long rally_distance_m = 0;
+    long new_calibration = 0;
+    if (!parseLongText(gtk_entry_get_text(data->rallyDistEntry), rally_distance_m)) return;
+    if (!parseLongText(gtk_entry_get_text(data->calNewEntry), new_calibration)) return;
+    if (rally_distance_m <= 0 || rally_distance_m > 100000 || new_calibration <= 0) return;
+
+    data->state->calibration = new_calibration;
+
+    for (auto& seg : data->state->segments) {
+        seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
+        seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+    }
+    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+        for (auto& seg : data->state->memory_slots[i]) {
+            seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
+            seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
         }
     }
+
+    ConfigFile::save(*data->state);
+    data->cal_started = false;
+    data->cal_running = false;
+    data->cal_stopped = false;
+    data->cal_pulse_count = 0;
+    writeCalRunEntries(data, 0, data->state->calibration);
+    updateCalibrationDisplay(data);
 }
 
-void on_reset_calibration_1m(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+static bool confirmCalibrationAction(GtkWidget* widget, const char* title, const char* message) {
+    GtkWidget* dialog = gtk_dialog_new_with_buttons(
+        title,
+        GTK_WINDOW(gtk_widget_get_toplevel(widget)),
+        GTK_DIALOG_MODAL,
+        "Yes", GTK_RESPONSE_YES,
+        "No", GTK_RESPONSE_NO,
+        nullptr);
+    gtk_window_set_resizable(GTK_WINDOW(dialog), FALSE);
+    gtk_window_set_position(GTK_WINDOW(dialog), GTK_WIN_POS_CENTER_ON_PARENT);
+    GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+    gtk_container_set_border_width(GTK_CONTAINER(content), 12);
+    GtkWidget* label = gtk_label_new(message);
+    gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
+    gtk_label_set_line_wrap(GTK_LABEL(label), TRUE);
+    gtk_label_set_line_wrap_mode(GTK_LABEL(label), PANGO_WRAP_WORD_CHAR);
+    gtk_label_set_width_chars(GTK_LABEL(label), 42);
+    gtk_label_set_max_width_chars(GTK_LABEL(label), 42);
+    gtk_widget_set_halign(label, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(content), label, FALSE, FALSE, 6);
+    gtk_widget_show(label);
+    applyDialogStyle(dialog);
+    gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    gtk_widget_destroy(dialog);
+    return response == GTK_RESPONSE_YES;
+}
+
+void on_reset_calibration_1m(GtkWidget* widget, gpointer user_data) {
+    if (!confirmCalibrationAction(widget, "Reset calibration",
+            "Reset the calibration to 1 metre per pulse?\n\n"
+            "This sets the calibration to 1000000 mm per 1000 pulses "
+            "and replaces the current value. Segment and memory speeds "
+            "and distances are recalculated and saved.")) {
+        return;
+    }
     AppData* data = static_cast<AppData*>(user_data);
 
     // 1m per pulse: 1 count = 1000mm, so 1000 counts = 1,000,000mm
@@ -936,19 +1132,28 @@ void on_reset_calibration_1m(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data
 
     ConfigFile::save(*data->state);
     data->cal_started = false;
-    gtk_entry_set_text(data->rallyDistEntry, "");
+    data->cal_running = false;
+    data->cal_stopped = false;
+    data->cal_pulse_count = 0;
+    writeCalRunEntries(data, 0, data->state->calibration);
     updateCalibrationDisplay(data);
 }
 
 static void updateSensorModeLabel(AppData* data) {
     if (data->state->counters) {
-        gtk_label_set_text(data->sensorModeLabel, "Currently set to both sensors");
+        gtk_label_set_text(data->sensorModeLabel, "Using Sensor 1&2 adv.");
     } else {
-        gtk_label_set_text(data->sensorModeLabel, "Currently set to sensor 1");
+        gtk_label_set_text(data->sensorModeLabel, "Using Sensor 1 only");
     }
 }
 
-void on_set_sensor_1(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+void on_set_sensor_1(GtkWidget* widget, gpointer user_data) {
+    if (!confirmCalibrationAction(widget, "Use sensor 1 only",
+            "Use sensor 1 only?\n\n"
+            "Distance will be taken from sensor 1. Sensor 2 will not be used. "
+            "Segment and memory speeds and distances are recalculated and saved.")) {
+        return;
+    }
     AppData* data = static_cast<AppData*>(user_data);
     data->state->counters = false;
 
@@ -968,7 +1173,13 @@ void on_set_sensor_1(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     updateCalibrationDisplay(data);
 }
 
-void on_set_sensor_both(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+void on_set_sensor_both(GtkWidget* widget, gpointer user_data) {
+    if (!confirmCalibrationAction(widget, "Average both sensors",
+            "Average sensor 1 and sensor 2?\n\n"
+            "Distance will be the average of the two sensors. "
+            "Segment and memory speeds and distances are recalculated and saved.")) {
+        return;
+    }
     AppData* data = static_cast<AppData*>(user_data);
     data->state->counters = true;
 
@@ -995,7 +1206,8 @@ void on_alarm_set(GtkWidget* widget, gpointer user_data) {
     auto current_poll = data->poller->getMostRecent();
     int64_t total_counts = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2);
+        data->state->total_start_cntr1, data->state->total_start_cntr2,
+        data->state->total_carry_cntr1, data->state->total_carry_cntr2);
     
     int64_t km_in_counts = static_cast<int64_t>((static_cast<double>(km) * 1000.0 * 1e6) / data->state->calibration);
     data->state->alarm_distance_km = km;

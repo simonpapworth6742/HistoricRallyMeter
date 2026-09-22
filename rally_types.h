@@ -119,14 +119,27 @@ struct AppData {
     GtkWidget* calibrationMainBox;  // Main horizontal container for keypad
     GtkLabel* totalDistCalLabel;
     GtkLabel* totalCountCalLabel;
+    GtkLabel* sensorCountsLabel = nullptr;  // live CNTR_1 / CNTR_2 above Total distance
     GtkEntry* rallyDistEntry;
+    GtkEntry* calNewEntry = nullptr;    // Calculated calibration, linked to the metres entry
+    GtkLabel* calRunLabel = nullptr;    // Distance and pulses for the calibration run
+    GtkWidget* calStartBtn = nullptr;
+    GtkWidget* calStopBtn = nullptr;
+    GtkWidget* calSetBtn = nullptr;
     GtkWidget* calibrationKeypad;   // Numeric keypad for calibration
-    GtkLabel* sensorModeLabel;      // "Currently set to sensor 1 / both sensors"
+    GtkLabel* sensorModeLabel;      // "Using Sensor 1 only" or "Using Sensor 1&2 adv."
+    GtkLabel* calibrationValueLabel = nullptr;
     
-    // Calibration baseline values (set when "start" is pressed)
+    // Calibration run. Start counts up from zero; Stop freezes that count.
     uint64_t cal_start_cntr1 = 0;
     uint64_t cal_start_cntr2 = 0;
-    bool cal_started = false;  // True once "start" has been pressed
+    uint64_t cal_frozen_cntr1 = 0;
+    uint64_t cal_frozen_cntr2 = 0;
+    int64_t cal_pulse_count = 0;
+    bool cal_started = false;
+    bool cal_running = false;
+    bool cal_stopped = false;
+    bool cal_syncing = false;  // Programmatic entry updates must not retrigger the other box
     
     // Date/Time setup screen
     GtkWidget* dateTimeScreen;

@@ -262,10 +262,44 @@ static gboolean on_window_close_save(G_GNUC_UNUSED GtkWidget* widget, G_GNUC_UNU
               << "size: " << data->state->driver_window_width << "x" << data->state->driver_window_height
               << " monitor: " << data->state->driver_window_monitor << std::endl;
     
+    auto recent = data->poller->getMostRecent();
+    if (recent.time_ms != 0) {
+        data->state->last_cntr1 = recent.cntr1;
+        data->state->last_cntr2 = recent.cntr2;
+    }
     ConfigFile::save(*data->state);
     
     gtk_main_quit();
     return TRUE;
+}
+
+// One chip. Leaves the count mode alone: these are pulse counters.
+// A power-loss flag that this app has cleared before means the count went
+// back to zero. A flag that has never been cleared is left over from before
+// this was tracked, so the start readings stay.
+static void accountForChipPowerLoss(I2CCounter& counter, bool& plsCleared, uint64_t& last,
+                                     uint64_t& totalStart, int64_t& totalCarry,
+                                     uint64_t& tripStart, int64_t& tripCarry,
+                                     uint64_t& segmentStart, int64_t& segmentCarry) {
+    uint32_t live = counter.readRegister(0x07);
+    bool lost = counter.powerLost();
+    if (lost && plsCleared) {
+        std::cerr << "Counter 0x" << std::hex << counter.address()
+                  << std::dec << " lost power. Last count " << last
+                  << ", live count " << live << std::endl;
+        continueCountAfterPowerLoss(live, last, totalStart, totalCarry);
+        continueCountAfterPowerLoss(live, last, tripStart, tripCarry);
+        continueCountAfterPowerLoss(live, last, segmentStart, segmentCarry);
+    } else if (lost) {
+        std::cerr << "Counter 0x" << std::hex << counter.address()
+                  << std::dec << " power-loss flag was already set. Start readings left unchanged."
+                  << std::endl;
+    }
+    if (lost) {
+        counter.clearPowerLoss();
+        plsCleared = true;
+    }
+    last = live;
 }
 
 static ToneGenerator* g_beepToneGen = nullptr;
@@ -306,16 +340,29 @@ int main(int argc, char* argv[]) {
         std::cerr << "[DEBUG] Step 5: Opening I2C counter2 at 0x71..." << std::endl;
         I2CCounter counter2(I2C_BUS, CNTR_2_ADDRESS);
         std::cerr << "[DEBUG] Step 5: counter2 OK" << std::endl;
+
+        accountForChipPowerLoss(counter1, state.cntr1_pls_cleared, state.last_cntr1,
+            state.total_start_cntr1, state.total_carry_cntr1,
+            state.trip_start_cntr1, state.trip_carry_cntr1,
+            state.segment_start_cntr1, state.segment_carry_cntr1);
+        accountForChipPowerLoss(counter2, state.cntr2_pls_cleared, state.last_cntr2,
+            state.total_start_cntr2, state.total_carry_cntr2,
+            state.trip_start_cntr2, state.trip_carry_cntr2,
+            state.segment_start_cntr2, state.segment_carry_cntr2);
+        ConfigFile::save(state);
         
-        if (state.total_start_cntr1 == 0 && state.total_start_cntr2 == 0) {
+        if (state.total_start_cntr1 == 0 && state.total_start_cntr2 == 0 &&
+            state.total_carry_cntr1 == 0 && state.total_carry_cntr2 == 0) {
             state.total_start_cntr1 = counter1.readRegister(REGISTER);
             state.total_start_cntr2 = counter2.readRegister(REGISTER);
         }
-        if (state.trip_start_cntr1 == 0 && state.trip_start_cntr2 == 0) {
+        if (state.trip_start_cntr1 == 0 && state.trip_start_cntr2 == 0 &&
+            state.trip_carry_cntr1 == 0 && state.trip_carry_cntr2 == 0) {
             state.trip_start_cntr1 = counter1.readRegister(REGISTER);
             state.trip_start_cntr2 = counter2.readRegister(REGISTER);
         }
-        if (state.segment_start_cntr1 == 0 && state.segment_start_cntr2 == 0) {
+        if (state.segment_start_cntr1 == 0 && state.segment_start_cntr2 == 0 &&
+            state.segment_carry_cntr1 == 0 && state.segment_carry_cntr2 == 0) {
             state.segment_start_cntr1 = counter1.readRegister(REGISTER);
             state.segment_start_cntr2 = counter2.readRegister(REGISTER);
         }

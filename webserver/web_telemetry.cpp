@@ -22,7 +22,8 @@ NextPrevState computeNextPrevState(AppData* data) {
     const Segment& cur_seg = data->state->segments[data->state->segment_current_number];
     int64_t seg_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+        data->state->segment_start_cntr1, data->state->segment_start_cntr2,
+        data->state->segment_carry_cntr1, data->state->segment_carry_cntr2);
     int64_t remaining_counts = cur_seg.distance_counts - seg_count_diff;
     long remaining_m = countsToCentimeters(remaining_counts, data->state->calibration) / 100;
     long travelled_m = countsToCentimeters(seg_count_diff, data->state->calibration) / 100;
@@ -55,14 +56,16 @@ std::string buildTelemetryJson(AppData* data) {
 
     int64_t trip_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->trip_start_cntr1, data->state->trip_start_cntr2);
+        data->state->trip_start_cntr1, data->state->trip_start_cntr2,
+        data->state->trip_carry_cntr1, data->state->trip_carry_cntr2);
     long trip_m = countsToCentimeters(trip_count_diff, data->state->calibration) / 100;
     double trip_avg = calculateAverageSpeed(*data->state,
         data->state->trip_start_time_ms, current_time_ms, trip_count_diff);
 
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2);
+        data->state->total_start_cntr1, data->state->total_start_cntr2,
+        data->state->total_carry_cntr1, data->state->total_carry_cntr2);
     long total_m = countsToCentimeters(total_count_diff, data->state->calibration) / 100;
     double total_avg = calculateAverageSpeed(*data->state,
         data->state->total_start_time_ms, current_time_ms, total_count_diff);

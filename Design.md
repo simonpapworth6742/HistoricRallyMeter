@@ -129,7 +129,17 @@ double distance – number of counts for the segment (high precision floating po
 Boolean autoNext – True =  when the distance of this segment has been reached the next segment is started automatically, changing the segment_current value and segment_start counter as well as resetting the trip counter values, false = the next segment button on the co-pilots TwinMaster display must be pressed to advance to the next segment, setting the segment_current, segment_counters and Trip counters
  
 
-The system has two counters available CNTR_1 and CNTR_2, when configured to use one gearbox counter then the distance since total, trip or segment  will be the value of the current CNTR_1 minus the total / trip / segment start_cntr1. If configured to two wheel then the distance since total, trip or segment will be ( (CNTR_1 - the total / trip / segment start_cntr1) + (CNTR_2 - the total / trip / segment start_cntr2) ) then divided by 2. Use integer maths, this caculated counter should be called CNTR_A
+The system has two counters available CNTR_1 and CNTR_2, when configured to use one gearbox counter then the distance since total, trip or segment  will be the value of the current CNTR_1 minus the total / trip / segment start_cntr1, plus any count carried for that chip after a power loss. If configured to two wheel then the distance since total, trip or segment will be ( (CNTR_1 - the total / trip / segment start_cntr1 + carried count 1) + (CNTR_2 - the total / trip / segment start_cntr2 + carried count 2) ) then divided by 2. Use integer maths, this caculated counter should be called CNTR_A
+
+The counter chips are simple pulse counters. The application does not change their count mode.
+
+Each chip has a power-loss flag. The application stores the last count it saw for each chip, and whether it has cleared that flag before. On startup, for each chip on its own:
+
+- Flag clear: the count is still the one the start readings belong to. Leave the total, trip and segment start readings for that chip unchanged, so distance covered while the Pi was down stays included.
+- Flag set, and this application has cleared it before: that chip's count went back to zero. Add (last stored count − start reading) to the carried count for total, trip and segment on that chip, then set those three start readings to the live count. Later pulses add on. The other chip is left alone.
+- Flag set, and this application has never cleared it: clear the flag and leave the start readings. A flag left over from before this was tracked does not mean the count was just wiped.
+
+After a set flag is handled, the application clears it. A later start with the flag set again means that chip lost power since the last start. The last count of each chip is written with the config. A Total, Trip or segment reset clears the carried count for that distance.
 
 Calibration, As the wheels / gearbox rotate and the car moves forward, the amount the car travels in meters per counter increment has to be set via calibration. It is expected that there could be as few as one counter increment per wheel revolution and as many as sixteen. To ensure accuracy the calibration will be stored as the number of millimetres travelled per 1000 counts. Meters travelled = (count_diff * calibration) / 1000 / 1000. Keeping the calibration as a larger number enables integer maths to calculate speeds and distance travelled in centimetres. When updating the calibration new_cal = (input_meters * 1000 * 1000) / total_count_diff (to match mm/1000 counts).
 
@@ -271,7 +281,7 @@ Allows target speed, distance and AutoNext for multiple segments of a rally stag
 +----------------------------------------------------------------------------------------------------------+
 ```
 The exisiting segments should have editable values and scroll if there are more than 5 rows, The font should be 18px. The scrollbar should be touch-friendly: slider 20px wide, trough 24px wide.
-When editing any value a numeric entry keyboard should be shown on the right of the screen with a ";" button, buttons 72x58 pixels.
+When editing any value a numeric entry keyboard should be shown on the right of the screen with a ";" button, buttons 63x50 pixels.
 The New line at the bottom should have fonts 18px, speed entry boxe 130x40 pixels and distance 300x40 pixels, and buttons 80x40 pixels.
 The distance allows mutiple values seperated by ";" to be entered, each semi-colon seperated value creates a segment at the speed defined.
 
@@ -289,28 +299,35 @@ If a memory location has a segments stored then the recall button should be a wh
 
 **2) Calibration Screen**
 
-The start button should zero the counts and total distance covered values on the display, and remember the actual CNTR_1 and CNTR_2 values
-The display should update the distances and counters every 10 ms while this screen is shown, but not when it is not displayed.
-save button should update the stored calibration as defined above.
+The screen is two columns. The left third shows the current readings in one 20px font: the live sensor counts under the title "Current Sensor counts", "Using Sensor 1 only" or "Using Sensor 1&2 adv.", then total distance, the calculated count and the two counter counts, then the current calibration as mm/1000p and meters per pulse. The right two thirds is the calibration run, also in 20px text: Start, Stop and Set in a vertical column, the counting distance, the actual-distance entry, the new-calibration entry, and the keypad. The next step is shown in white: Start until it is pressed, then Stop, then Set, then Start again after Set. Along the bottom of the screen, as on the other pages: Set sensor 1, set both sensors, reset to 1m per pulse, and back at the right.
+Start remembers CNTR_1 and CNTR_2 and counts distance in metres and pulses up from zero. That distance is copied into the actual-distance entry while the run is going. Stop freezes that count. The rest of the rally meter keeps running. After Stop, the actual metres traveled can be edited, and the new calibration entry below it stays in step: changing the metres recalculates the calibration, and changing the calibration recalculates the metres. Set stores that calibration.
+The display should update the distances and counters every 10 ms while this screen is shown, but not when it is not displayed. After Stop, the calibration-run count does not advance.
 ```
-+----------------------------------------------------------------------------------------------------------+
-|                                        CALIBRATION                                                       |
-+----------------------------------------------------------------------------------------------------------+
-|   Total distance: xxx,xxx m  (counts caluated :CNTR_A   1:CNTR_1   2:CNTR_2)                             |
-+----------------------------------------------------------------------------------------------------------+
-|   Actual distance covered:  [______________] meters       [reset to 1m per pulse]                        |
-+----------------------------------------------------------------------------------------------------------+
-|   Currently set to {sensor 1 / both sensors}        [Set sensor 1]  [set both sensors and agv.]          |
-+----------------------------------------------------------------------------------------------------------+
-|     [start]                         [save]                                                      [back]   |
-+----------------------------------------------------------------------------------------------------------+
++------------------------------------------+----------------------------------------------------------------------------+
+| LEFT (1/3) current info, from the top | RIGHT (2/3) change calibration                                               |
+| Current Sensor counts                | CALIBRATION                                                                    |
+| 1: xxxxxxxxxx                        | [Start]  Distance: 0 m    Pulses: 0                                          |
+| 2: xxxxxxxxxx                        | [Stop]   Actual distance traveled [________] meters                          |
+| Using Sensor 1 only / 1&2 adv.       | [Set]    New calibration [________] mm/1000p                                 |
+|                                      |                              keypad                                          |
+| Total distance: xxx,xxx m            |                                                                              |
+| Counts calculated: CNTR_A            |                                                                              |
+| 1: CNTR_1                            |                                                                              |
+| 2: CNTR_2                            |                                                                              |
+| Current Calibration                  |                                                                              |
+| NNNNNN mm/1000p                      |                                                                              |
+| meters per pulse                     |                                                                              |
+| 0.NNNNNN m/pulse                     |                                                                              |
++------------------------------------------+----------------------------------------------------------------------------+
+| [Set sensor 1]  [set both sensors and agv.]  [reset to 1m per pulse]              [back] |
++------------------------------------------------------------------------------------------+
 ```
 
-Min input: 500m, Max input: 100,000m.
+Max input: 100,000m. There is no minimum distance.
 new_cal = (input_meters * 1000 * 1000) / total_count_diff
 When editing any value a numeric entry keyboard should be shown on the right of the screen, the same as the stage setup screen.
-When [save] is pressed the new calibaration should be changed in the rally_config file as well as recaculating all target_speed and distance in the segments and memeory.
-The config and caculations should be updated when [Set sensor 1] or [set both sensors and agv.] is selected.
+When [Set] is pressed the new calibration should be changed in the rally_config file as well as recaculating all target_speed and distance in the segments and memeory.
+The config and caculations should be updated when [Set sensor 1] or [set both sensors and agv.] is selected. Each of those buttons, and [reset to 1m per pulse], first shows a confirmation dialog that explains the change. The dialog is only as large as that text, so the explanation and the Yes and No buttons fit on the co-pilot screen. Yes applies it and saves. No leaves the calibration and sensor mode as they are.
 ---
 
 **3) TwinMaster Screen (Default)**
@@ -640,7 +657,7 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 ### Calibration Tests
 - Default calibration value is 600000
 - New calibration = (input_meters * 1000 * 1000) / total_count_diff
-- Minimum input distance is 500 meters
+- No minimum input distance
 - Maximum input distance is 100,000 meters
 - Calibration change does not affect stored segment target speeds
 - Calibration change affects all subsequent distance/speed calculations
@@ -745,7 +762,7 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 ### Calibration Screen Tests
 - Display total distance in meters using current calibration
 - Display total count difference (raw counter value)
-- Input validation rejects values below 500 meters
+- Input validation accepts any distance above zero
 - Input validation rejects values above 100,000 meters
 - Save button calculates and stores new calibration
 - Back button returns without saving changes
