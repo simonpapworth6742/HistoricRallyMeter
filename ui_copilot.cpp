@@ -91,7 +91,8 @@ static void applyCopilotCSS() {
         "scrollbar slider { min-width: 20px; min-height: 20px; }"
         "scrollbar.vertical slider { min-width: 20px; }"
         "scrollbar trough { min-width: 24px; }"
-        "button.memory-populated { background-image: none; background-color: #FFFFFF; color: #000000; }",
+        "button.memory-populated { background-image: none; background-color: #FFFFFF; color: #000000; }"
+        "button.tone-mute { padding: 0; border: none; background: none; min-width: 30px; min-height: 30px; color: #FFFFFF; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -206,6 +207,14 @@ void updateCopilotDisplay(AppData* data) {
     gtk_label_set_text(data->tripUnitLabel, trip_unit);
     
     gtk_label_set_text(data->tripTimeLabel, formatElapsed(trip_secs).c_str());
+
+    // A selected segment is "in a stage": the nav button aborts instead of starting.
+    if (data->stageGoBtn) {
+        bool in_stage = data->state->segment_current_number >= 0 &&
+            data->state->segment_current_number < static_cast<long>(data->state->segments.size());
+        gtk_button_set_label(GTK_BUTTON(data->stageGoBtn), in_stage ? "abort stage" : "stage go");
+    }
+    refreshToneMuteButton(data);
     
     // Next segment info: distance remaining in current segment + speed of next segment
     if (data->state->segment_current_number >= 0 &&
@@ -379,23 +388,41 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_size_request(rightPanel, data->singleDisplayMode ? 500 : 360, -1);
     gtk_box_pack_start(GTK_BOX(mainArea), rightPanel, FALSE, data->singleDisplayMode ? TRUE : FALSE, 0);
 
+    data->toneMuteBtn = gtk_button_new();
+    gtk_style_context_add_class(gtk_widget_get_style_context(data->toneMuteBtn), "tone-mute");
+    gtk_widget_set_size_request(data->toneMuteBtn, 30, 30);
+    gtk_widget_set_valign(data->toneMuteBtn, GTK_ALIGN_CENTER);
+    GtkWidget* muteImage = gtk_image_new_from_icon_name("audio-volume-high-symbolic", GTK_ICON_SIZE_BUTTON);
+    gtk_image_set_pixel_size(GTK_IMAGE(muteImage), 30);
+    gtk_button_set_image(GTK_BUTTON(data->toneMuteBtn), muteImage);
+    gtk_widget_set_no_show_all(data->toneMuteBtn, TRUE);
+    g_signal_connect(data->toneMuteBtn, "clicked", G_CALLBACK(on_tone_mute_toggle), data);
+
     if (data->singleDisplayMode) {
         data->copilotGaugeArea = gtk_drawing_area_new();
         gtk_widget_set_hexpand(data->copilotGaugeArea, TRUE);
         gtk_widget_set_vexpand(data->copilotGaugeArea, TRUE);
         g_signal_connect(data->copilotGaugeArea, "draw", G_CALLBACK(on_gauge_draw), data);
-        gtk_box_pack_start(GTK_BOX(rightPanel), data->copilotGaugeArea, TRUE, TRUE, 0);
+
+        GtkWidget* overlay = gtk_overlay_new();
+        gtk_container_add(GTK_CONTAINER(overlay), data->copilotGaugeArea);
+        gtk_overlay_add_overlay(GTK_OVERLAY(overlay), data->toneMuteBtn);
+        gtk_widget_set_halign(data->toneMuteBtn, GTK_ALIGN_END);
+        gtk_widget_set_valign(data->toneMuteBtn, GTK_ALIGN_START);
+        gtk_widget_set_margin_end(data->toneMuteBtn, 150);
+        gtk_box_pack_start(GTK_BOX(rightPanel), overlay, TRUE, TRUE, 0);
 
         data->alarmCountdownLabel = nullptr;
         data->alarmClearBtn = nullptr;
     } else {
-    // Top row: rally clock
+    // Top row: rally clock, mute button immediately to its left
     GtkWidget* topRightRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(rightPanel), topRightRow, FALSE, FALSE, 0);
 
     gtk_label_set_width_chars(data->copilotRallyClockLabel, 8);
     gtk_label_set_xalign(data->copilotRallyClockLabel, 1.0);
     gtk_box_pack_end(GTK_BOX(topRightRow), GTK_WIDGET(data->copilotRallyClockLabel), FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(topRightRow), data->toneMuteBtn, FALSE, FALSE, 0);
     
     // Alarm buttons: 3 rows of 4
     GtkWidget* alarmBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
@@ -451,20 +478,20 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
     gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 0);
     
-    GtkWidget* stageGoBtn = gtk_button_new_with_label("stage go");
+    data->stageGoBtn = gtk_button_new_with_label("stage go");
     GtkWidget* segmentsBtn = gtk_button_new_with_label("segments");
     data->adjZeroBtn = gtk_button_new_with_label("Adj. driver Zero (0.00s)");
     GtkWidget* calBtn = gtk_button_new_with_label("calibration");
     GtkWidget* datetimeBtn = gtk_button_new_with_label("date/time");
 
-    GtkWidget* navBtns[] = {stageGoBtn, segmentsBtn, data->adjZeroBtn, calBtn, datetimeBtn};
+    GtkWidget* navBtns[] = {data->stageGoBtn, segmentsBtn, data->adjZeroBtn, calBtn, datetimeBtn};
     for (auto* btn : navBtns) {
         gtk_style_context_add_class(gtk_widget_get_style_context(btn), "nav-button");
         gtk_widget_set_size_request(btn, -1, 43);
         gtk_box_pack_start(GTK_BOX(buttonBox), btn, TRUE, TRUE, 0);
     }
 
-    g_signal_connect(stageGoBtn, "clicked", G_CALLBACK(on_stage_go), data);
+    g_signal_connect(data->stageGoBtn, "clicked", G_CALLBACK(on_stage_go), data);
     g_signal_connect(segmentsBtn, "clicked", G_CALLBACK(on_show_segments), data);
     g_signal_connect(data->adjZeroBtn, "clicked", G_CALLBACK(on_adj_driver_zero), data);
     g_signal_connect(calBtn, "clicked", G_CALLBACK(on_show_calibration), data);

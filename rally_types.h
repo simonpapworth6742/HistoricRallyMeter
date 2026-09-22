@@ -91,6 +91,9 @@ struct AppData {
     GtkLabel* nextUnitLabel;
     GtkLabel* nextSpeedLabel;
     GtkWidget* nextPrevBtn;
+    GtkWidget* stageGoBtn = nullptr;
+    GtkWidget* toneMuteBtn = nullptr;
+    bool tonesMuted = false;          // ahead/behind tones only; not saved
     GtkWidget* adjZeroBtn;
     GtkLabel* alarmCountdownLabel;
     GtkWidget* alarmClearBtn;

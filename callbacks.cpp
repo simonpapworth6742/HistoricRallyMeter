@@ -115,6 +115,7 @@ void performStageGo(AppData* data) {
     data->smoothedSpeed = -1.0;
     data->state->ahead_behind_zero_offset_ms = 0;
     data->autoStartTriggered = false;
+    data->tonesMuted = false;
     
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
     
@@ -122,10 +123,78 @@ void performStageGo(AppData* data) {
     notifyWebState(data);
 }
 
+static const char* toneMuteIconName(bool muted) {
+    GtkIconTheme* theme = gtk_icon_theme_get_default();
+    const char* symbolic = muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic";
+    const char* plain = muted ? "audio-volume-muted" : "audio-volume-high";
+    if (gtk_icon_theme_has_icon(theme, symbolic)) return symbolic;
+    return plain;
+}
+
+void refreshToneMuteButton(AppData* data) {
+    if (!data || !data->toneMuteBtn) return;
+    bool in_stage = data->state->segment_current_number >= 0 &&
+        data->state->segment_current_number < static_cast<long>(data->state->segments.size());
+    if (in_stage) gtk_widget_show(data->toneMuteBtn);
+    else gtk_widget_hide(data->toneMuteBtn);
+
+    GtkWidget* image = gtk_button_get_image(GTK_BUTTON(data->toneMuteBtn));
+    if (GTK_IS_IMAGE(image)) {
+        const char* wanted = toneMuteIconName(data->tonesMuted);
+        const gchar* current = nullptr;
+        GtkIconSize icon_size;
+        gtk_image_get_icon_name(GTK_IMAGE(image), &current, &icon_size);
+        if (!current || strcmp(current, wanted) != 0) {
+            gtk_image_set_from_icon_name(GTK_IMAGE(image), wanted, GTK_ICON_SIZE_BUTTON);
+            gtk_image_set_pixel_size(GTK_IMAGE(image), 30);
+        }
+    }
+}
+
+void on_tone_mute_toggle(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->tonesMuted = !data->tonesMuted;
+    if (data->tonesMuted && data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
+    refreshToneMuteButton(data);
+}
+
 static const int RESPONSE_AUTO_START = 99;
 
 void on_stage_go(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
+
+    bool in_stage = data->state->segment_current_number >= 0 &&
+        data->state->segment_current_number < static_cast<long>(data->state->segments.size());
+    if (in_stage) {
+        GtkWidget* dialog = gtk_dialog_new_with_buttons(
+            "Confirm Abort Stage",
+            GTK_WINDOW(gtk_widget_get_toplevel(widget)),
+            GTK_DIALOG_MODAL,
+            "Yes", GTK_RESPONSE_YES,
+            "No", GTK_RESPONSE_NO,
+            nullptr);
+
+        GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
+        gtk_container_set_border_width(GTK_CONTAINER(content), 20);
+
+        GtkWidget* label = gtk_label_new("Abort stage?");
+        gtk_label_set_justify(GTK_LABEL(label), GTK_JUSTIFY_CENTER);
+        gtk_box_pack_start(GTK_BOX(content), label, TRUE, TRUE, 10);
+        gtk_widget_show(label);
+
+        applyDialogStyle(dialog);
+
+        gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+        gtk_widget_destroy(dialog);
+
+        if (response == GTK_RESPONSE_YES) {
+            data->state->segment_current_number = -1;
+            if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
+            ConfigFile::save(*data->state);
+            notifyWebState(data);
+        }
+        return;
+    }
     
     GtkWidget* dialog = gtk_dialog_new_with_buttons(
         "Confirm Stage Go",

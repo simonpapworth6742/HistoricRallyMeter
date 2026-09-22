@@ -629,7 +629,7 @@ void updateDriverDisplay(AppData* data) {
                     total_stage_counts += s.distance_counts;
                 bool past_stage_end = (static_cast<double>(total_count_diff_ab) >= total_stage_counts);
 
-                if (past_stage_end || abs_seconds > 30.0 || num_arrows == 0) {
+                if (data->tonesMuted || past_stage_end || abs_seconds > 30.0 || num_arrows == 0) {
                     data->toneGen->setCadence(0, 0);
                 } else {
                     bool behind = (speed_diff > 0);

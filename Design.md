@@ -157,7 +157,7 @@ Seconds ahead/behind formula (high precision): ideal_counts = (time_ms_since_seg
 
 Indicate the change in acceleration required green / red arrows to the driver with sound as well (provided within the stage) as the visual indicators, if driving to +- 0.1 seconds ahead / behind or greater than +-30 seconds emit no tone. Provided the distance is within the Stage using the same three acceleration brackets as the red / green arrows make 0.1 second tone with 0.1 second no tone, moving to 0.5/0.2 seconds and lastly 0.7/0.3 seconds.
 The tones generated should be piano C6,C6,C6 when behind and F6,F6,F6 when ahead.The tone generator should apply a 5ms fade-in/fade-out envelope at every tone-to-silence and silence-to-tone transition.
-The tones should sound from the stage start while within the stage. Once past the end of the last segment the tones should stop.
+The tones should sound from the stage start while within the stage. Once past the end of the last segment the tones should stop. While the TwinMaster mute button is muted, these ahead/behind tones do not sound. Button beeps and the distance alarm still sound. The mute is not stored. Stage go starts unmuted.
 
 Updates per second is the number of times this display has been updated in a second, Rolling count of driver display render/update calls over the last full second.
 
@@ -320,14 +320,14 @@ Two-column layout with bottom navigation row:
 ```
 +-------------------------------------------------------------------+--------------------------------------+
 | LEFT PANEL (70%)                                                  | RIGHT PANEL (30%)                    |
-|                                                                   |                           hh:mm:ss   |
+|                                                                   |                  [mute]   hh:mm:ss   |
 |  [Total]  xxx,xxx  m  mmm:ss                                      |  Alarm in [2] [3] [4]                |
 |                                                                   |           [5] [6] [7]                |
 |  [Trip]   xxx,xxx  m  mmm:ss                                      |           [8] [9] [10]               |
 |                                                                   |          [11] [12] [13]              |
 |  [Next/prev]   xxx,xxx  m   xxx kph                               |  x,xxx m to alarm  [clear]           |
 +-------------------------------------------------------------------+--------------------------------------+
-|   [stage go]      [segments]   [Adj. driver Zero (xx.xxs)]      [calibration]        [date/time]                  |
+|   [stage go / abort stage]  [segments]   [Adj. driver Zero (xx.xxs)]   [calibration]     [date/time]     |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
@@ -351,6 +351,7 @@ Layout:
   
 - Right panel:
   - Rally clock (hh:mm:ss) at top, right-aligned (30px bold, minimum 8 chars wide)
+  - Mute button immediately to the left of the clock, shown only while a current segment is selected. It is the same height as the 30px clock and uses the standard unmuted icon (audio-volume-high) or muted icon (audio-volume-muted). Pressing it toggles. The choice is not saved. Stage go sets it back to unmuted. While muted, the ahead/behind tones do not sound; button beeps and the distance alarm still sound.
   - Alarm buttons in four rows with 4px vertical gap — "Alarm in" label (20px) + [2]-[4] on first row, [5]-[7] on second row, [8]-[10] on third row, [11]-[13] on fourth row (22px font, 62x47px buttons)
   - Alarm countdown ("x,xxx m to alarm") and [clear] button below alarm buttons (28px white font #FFFFFF)
 
@@ -358,7 +359,7 @@ Layout:
 
 - Navigation buttons spread across full-width bottom row (20px font, 43px tall):
 
-- stage go: conformation dialog (with 30px text and buttons with at least 20px between buttons), with "Auto start" option,  with yes reseting Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green, and zero's the ahead_behind_zero_offset_ms. "Auto start" option should go to the "Auto start setup screen.
+- stage go: shown when no current segment is selected (segment_current_number is -1, or does not point at a segment). Conformation dialog (with 30px text and buttons with at least 20px between buttons), with "Auto start" option,  with yes reseting Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green, and zero's the ahead_behind_zero_offset_ms. "Auto start" option should go to the "Auto start setup screen. While a current segment is selected, the same button reads "abort stage". Its conformation dialog asks "Abort stage?"; Yes sets segment_current_number to -1 and saves, No leaves the stage running.
  
 - segments: goes to Stage Setup
 
