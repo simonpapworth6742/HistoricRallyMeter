@@ -111,7 +111,7 @@ static bool is800x480(int w, int h) {
     return (w == 800 && h == 480) || (w == 480 && h == 800);
 }
 
-// Small display: suitable for either window (driver also accepts 800x480)
+// Small display: 1280x400 is the co-pilot panel; 800x480 is the driver panel.
 static bool isSmallDisplay(int w, int h) {
     return is1280x400(w, h) || is800x480(w, h);
 }
@@ -412,7 +412,6 @@ int main(int argc, char* argv[]) {
             }
             if (single) {
                 app_data.singleDisplayMode = true;
-                app_data.driverCompactMode = true;
                 std::cout << "Single-display mode: co-pilot window only "
                           << "with embedded driver gauge" << std::endl;
             }
@@ -461,13 +460,13 @@ int main(int argc, char* argv[]) {
             std::cout << std::endl;
         }
 
-        // Driver takes the highest-priority remaining small display (1280x400 or 800x480)
+        // Driver takes the highest-priority remaining 800x480 display.
+        // A 1280x400 panel is only for the co-pilot.
         size_t driver_slot = SIZE_MAX;
         for (size_t s = 0; s < small_displays.size(); s++) {
-            if (s != copilot_slot) {
-                driver_slot = s;
-                break;
-            }
+            if (s == copilot_slot || small_displays[s].copilot_capable) continue;
+            driver_slot = s;
+            break;
         }
         bool driver_fullscreen = (driver_slot != SIZE_MAX);
         if (driver_fullscreen) {
@@ -499,19 +498,25 @@ int main(int argc, char* argv[]) {
         if (app_data.singleDisplayMode) {
             std::cout << "Single-display mode: driver window not shown" << std::endl;
         } else if (driver_fullscreen) {
-            // A small display remains for the driver: fullscreen on it
+            // An 800x480 display remains for the driver: fullscreen on it
             GdkRectangle mon_geometry;
             gdk_monitor_get_geometry(driver_monitor, &mon_geometry);
-            std::cout << "Driver fullscreen on small display, monitor " << driver_monitor_index
+            std::cout << "Driver fullscreen on 800x480 display, monitor " << driver_monitor_index
                       << " at (" << mon_geometry.x << "," << mon_geometry.y << ")" << std::endl;
             gtk_window_set_default_size(GTK_WINDOW(app_data.driverWindow),
                                         mon_geometry.width, mon_geometry.height);
             gtk_window_move(GTK_WINDOW(app_data.driverWindow), mon_geometry.x, mon_geometry.y);
         } else {
-            // No small display remains: restore saved size and monitor
-            std::cout << "Restoring driver window: size "
+            // No 800x480 display remains. A saved wide window from the old
+            // 1280x400 driver layout is discarded.
+            if (state.driver_window_height <= 0 ||
+                static_cast<double>(state.driver_window_width) / state.driver_window_height >= 2.2) {
+                state.driver_window_width = 800;
+                state.driver_window_height = 480;
+            }
+            std::cout << "No 800x480 driver display; opening "
                       << state.driver_window_width << "x" << state.driver_window_height
-                      << " on monitor " << state.driver_window_monitor << std::endl;
+                      << " driver window on monitor " << state.driver_window_monitor << std::endl;
 
             gtk_window_set_default_size(GTK_WINDOW(app_data.driverWindow),
                                         state.driver_window_width, state.driver_window_height);

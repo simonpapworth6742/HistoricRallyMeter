@@ -64,12 +64,8 @@ struct AppData {
     double segmentProgress = 0.0;     // fraction (0..1) of the current segment driven
     bool inSegment = false;           // true while within the current segment's distance
     
-    // Compact (800x480-style) driver layout: values drawn inside the gauge
-    GtkWidget* driverSpeedsBox = nullptr;  // left pane, hidden in compact mode
-    bool driverCompactMode = false;
-
     // Single-display mode: one 1280x400 monitor only; driver window hidden,
-    // compact driver display embedded in the TwinMaster right panel
+    // driver gauge embedded in the TwinMaster right panel
     bool singleDisplayMode = false;
     GtkWidget* copilotGaugeArea = nullptr;
     

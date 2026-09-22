@@ -94,16 +94,12 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
     gtk_widget_get_allocation(widget, &alloc);
     double width = alloc.width;
     double height = alloc.height;
-    // Compact layout: gauge fills the panel width (bezel ~18px + small margin);
-    // the arc top may overlap the target text, which is drawn on top of it.
-    // The hub sits low, leaving just enough room for the readout box + footer.
-    // Wide layout keeps larger margins for the scale labels alongside the
-    // left speeds pane.
-    double radius = data->driverCompactMode
-        ? std::min(width / 2 - 25, height - 95)
-        : (std::min(width / 2, height) - 25) * 0.8;
-    double centerX = data->driverCompactMode ? width / 2 : width - radius - 20;
-    double centerY = data->driverCompactMode ? height - 75 : (height + radius) / 2;
+    // The gauge fills the panel. The arc top may overlap the target text,
+    // which is drawn on top of it. The hub sits low, leaving room for the
+    // readout box and the footer.
+    double radius = std::min(width / 2 - 25, height - 95);
+    double centerX = width / 2;
+    double centerY = height - 75;
 
     updateGaugeScale(data);
     GaugeScaleInfo si = getGaugeScaleInfo(data->gaugeScale);
@@ -365,10 +361,10 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER);
     }
 
-    // Compact layout: draw the speed values inside the gauge area.
-    // Fonts match the wide layout at full size and shrink with the gauge.
-    if (data->driverCompactMode) {
-        constexpr double REF_RADIUS = 256.0;  // gauge radius in the 1280x400 layout
+    // Speed values are drawn inside the gauge. Fonts are full size at a
+    // 256px radius and shrink when the panel is smaller.
+    {
+        constexpr double REF_RADIUS = 256.0;  // full-scale gauge radius
         double fscale = std::min(1.0, radius / REF_RADIUS);
 
         cairo_select_font_face(cr, "monospace", CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_BOLD);
@@ -454,24 +450,6 @@ void updateDriverDisplay(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
     auto tenth_poll = data->poller->get10th();
     auto current_time_ms = getRallyTime_ms(*data->state);
-    
-    // Switch to compact layout (values drawn inside the gauge) when the
-    // window is closer to 4:3 (e.g. 800x480) than wide-and-shallow 1280x400.
-    // In single-display mode the gauge is embedded in the co-pilot window and
-    // compact mode is forced on at startup, so skip the aspect-ratio toggle.
-    if (!data->singleDisplayMode && data->driverWindow && data->driverSpeedsBox) {
-        int win_w = 0, win_h = 0;
-        gtk_window_get_size(GTK_WINDOW(data->driverWindow), &win_w, &win_h);
-        bool compact = (win_h > 0) && (static_cast<double>(win_w) / win_h) < 2.2;
-        if (compact != data->driverCompactMode) {
-            data->driverCompactMode = compact;
-            if (compact) {
-                gtk_widget_hide(data->driverSpeedsBox);
-            } else {
-                gtk_widget_show_all(data->driverSpeedsBox);
-            }
-        }
-    }
     
     // Current speed (from rolling average, then EMA-smoothed for display)
     double current_speed = calculateCurrentSpeed(*data->state, current_poll, tenth_poll);
@@ -774,16 +752,7 @@ static void applyDriverCSS(G_GNUC_UNUSED GtkWidget* widget) {
     gtk_css_provider_load_from_data(provider,
         "window, .background { background-color: #000000; }"
         "label { color: #FFFFFF; font-weight: bold; }"
-        "button { background-color: #333333; color: #FFFFFF; font-weight: bold; }"
-        ".speed-header { font-size: 28px; }"
-        ".speed-value { font-size: 64px; font-family: monospace; }"
-        ".speed-value-xl { font-size: 80px; font-family: monospace; }"
-        ".speed-value-target { font-size: 45px; font-family: monospace; }"
-        ".target-info { font-size: 22px; }"
-        ".ahead-behind { font-size: 28px; font-family: monospace; }"
-        ".next-info { font-size: 18px; }"
-        ".footer-info { font-size: 14px; }"
-        ".speed-arrows { font-size: 28px; }",
+        "button { background-color: #333333; color: #FFFFFF; font-weight: bold; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -795,7 +764,7 @@ static void applyDriverCSS(G_GNUC_UNUSED GtkWidget* widget) {
 GtkWidget* createDriverWindow(AppData* data) {
     GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "Driver Display");
-    gtk_window_set_default_size(GTK_WINDOW(window), 1280, 400);
+    gtk_window_set_default_size(GTK_WINDOW(window), 800, 480);
     
     applyDriverCSS(window);
     
@@ -803,132 +772,40 @@ GtkWidget* createDriverWindow(AppData* data) {
     data->countdownOverlay = gtk_overlay_new();
     gtk_container_add(GTK_CONTAINER(window), data->countdownOverlay);
     
-    GtkWidget* mainBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_container_set_border_width(GTK_CONTAINER(mainBox), 2);
-    gtk_container_add(GTK_CONTAINER(data->countdownOverlay), mainBox);
-    
-    // Main content: left side speeds + footer, right side gauge (full height)
-    GtkWidget* contentBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(mainBox), contentBox, TRUE, TRUE, 0);
-    
-    // Left side: vertical box holding speed columns on top, footer on bottom (~40% width)
-    GtkWidget* speedsBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_widget_set_size_request(speedsBox, 580, -1);
-    gtk_box_pack_start(GTK_BOX(contentBox), speedsBox, FALSE, TRUE, 0);
-    data->driverSpeedsBox = speedsBox;
-    
-    // Two-column speed display row
-    GtkWidget* speedColsBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_box_pack_start(GTK_BOX(speedsBox), speedColsBox, TRUE, TRUE, 0);
-    
-    // Left column: Current speed + arrows, Target speed
-    GtkWidget* leftCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_box_pack_start(GTK_BOX(speedColsBox), leftCol, TRUE, TRUE, 0);
-    
-    // Current header with arrows beside it
-    GtkWidget* currentHeaderRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
-    gtk_widget_set_halign(currentHeaderRow, GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(leftCol), currentHeaderRow, FALSE, FALSE, 0);
-    
-    GtkWidget* currentHeader = gtk_label_new("Current");
-    gtk_style_context_add_class(gtk_widget_get_style_context(currentHeader), "speed-header");
-    gtk_box_pack_start(GTK_BOX(currentHeaderRow), currentHeader, FALSE, FALSE, 0);
-    
-    data->speedAdjustArrowsLabel = GTK_LABEL(gtk_label_new(""));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->speedAdjustArrowsLabel)), "speed-arrows");
-    gtk_widget_set_valign(GTK_WIDGET(data->speedAdjustArrowsLabel), GTK_ALIGN_END);
-    gtk_label_set_width_chars(data->speedAdjustArrowsLabel, 3);
-    gtk_box_pack_start(GTK_BOX(currentHeaderRow), GTK_WIDGET(data->speedAdjustArrowsLabel), FALSE, FALSE, 0);
-    
-    // Current speed value (fixed width, right-aligned so decimal stays put)
-    data->currentSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->currentSpeedLabel)), "speed-value-xl");
-    gtk_label_set_width_chars(data->currentSpeedLabel, 6);
-    gtk_label_set_xalign(data->currentSpeedLabel, 1.0);
-    gtk_widget_set_halign(GTK_WIDGET(data->currentSpeedLabel), GTK_ALIGN_CENTER);
-    gtk_widget_set_valign(GTK_WIDGET(data->currentSpeedLabel), GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(leftCol), GTK_WIDGET(data->currentSpeedLabel), TRUE, TRUE, 0);
-    
-    // Target speed
-    GtkWidget* targetHeader = gtk_label_new("Target");
-    gtk_style_context_add_class(gtk_widget_get_style_context(targetHeader), "speed-header");
-    gtk_widget_set_halign(targetHeader, GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(leftCol), targetHeader, FALSE, FALSE, 0);
-    
-    data->targetSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->targetSpeedLabel)), "speed-value-target");
-    gtk_label_set_width_chars(data->targetSpeedLabel, 6);
-    gtk_label_set_xalign(data->targetSpeedLabel, 1.0);
-    gtk_widget_set_halign(GTK_WIDGET(data->targetSpeedLabel), GTK_ALIGN_CENTER);
-    gtk_widget_set_valign(GTK_WIDGET(data->targetSpeedLabel), GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(leftCol), GTK_WIDGET(data->targetSpeedLabel), TRUE, TRUE, 0);
-    
-    // Right column: Total + Trip (vertically aligned)
-    GtkWidget* rightCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    gtk_box_pack_start(GTK_BOX(speedColsBox), rightCol, TRUE, TRUE, 0);
-    
-    GtkWidget* totalHeader = gtk_label_new("Total");
-    gtk_style_context_add_class(gtk_widget_get_style_context(totalHeader), "speed-header");
-    gtk_widget_set_halign(totalHeader, GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(rightCol), totalHeader, FALSE, FALSE, 0);
-    
-    data->totalSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalSpeedLabel)), "speed-value");
-    gtk_label_set_width_chars(data->totalSpeedLabel, 6);
-    gtk_label_set_xalign(data->totalSpeedLabel, 1.0);
-    gtk_widget_set_halign(GTK_WIDGET(data->totalSpeedLabel), GTK_ALIGN_CENTER);
-    gtk_widget_set_valign(GTK_WIDGET(data->totalSpeedLabel), GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(rightCol), GTK_WIDGET(data->totalSpeedLabel), TRUE, TRUE, 0);
-    
-    GtkWidget* tripHeader = gtk_label_new("Trip");
-    gtk_style_context_add_class(gtk_widget_get_style_context(tripHeader), "speed-header");
-    gtk_widget_set_halign(tripHeader, GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(rightCol), tripHeader, FALSE, FALSE, 0);
-    
-    data->tripSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripSpeedLabel)), "speed-value");
-    gtk_label_set_width_chars(data->tripSpeedLabel, 6);
-    gtk_label_set_xalign(data->tripSpeedLabel, 1.0);
-    gtk_widget_set_halign(GTK_WIDGET(data->tripSpeedLabel), GTK_ALIGN_CENTER);
-    gtk_widget_set_valign(GTK_WIDGET(data->tripSpeedLabel), GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(rightCol), GTK_WIDGET(data->tripSpeedLabel), TRUE, TRUE, 0);
-    
-    // Footer row at bottom of LEFT side only (under speeds)
-    GtkWidget* footerBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_end(GTK_BOX(speedsBox), footerBox, FALSE, FALSE, 5);
-    
-    data->updatesPerSecLabel = GTK_LABEL(gtk_label_new("fps: 0"));
-    data->cpuTempLabel = GTK_LABEL(gtk_label_new(readCpuTemp().c_str()));
-    data->nextSegLabel = GTK_LABEL(gtk_label_new(""));
-    
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->updatesPerSecLabel)), "footer-info");
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->cpuTempLabel)), "footer-info");
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextSegLabel)), "next-info");
-    
-    gtk_box_pack_start(GTK_BOX(footerBox), GTK_WIDGET(data->updatesPerSecLabel), FALSE, FALSE, 10);
-    gtk_box_pack_start(GTK_BOX(footerBox), GTK_WIDGET(data->cpuTempLabel), FALSE, FALSE, 10);
-    gtk_box_pack_start(GTK_BOX(footerBox), GTK_WIDGET(data->nextSegLabel), TRUE, TRUE, 0);
-    
-    // Right side: Rally gauge fills full height. The unit (KPH/MPH) toggle lives on
-    // the co-pilot Date/Time setup screen, not here.
-    GtkWidget* gaugeOverlay = gtk_overlay_new();
-    gtk_widget_set_vexpand(gaugeOverlay, TRUE);
-    gtk_widget_set_hexpand(gaugeOverlay, TRUE);
-    gtk_box_pack_end(GTK_BOX(contentBox), gaugeOverlay, TRUE, TRUE, 0);
-    
+    // The gauge fills the window. Speed text is kept in labels so the draw
+    // function and the update loop can share it; those labels are not shown.
     data->rallyGaugeDrawingArea = gtk_drawing_area_new();
     gtk_widget_set_hexpand(data->rallyGaugeDrawingArea, TRUE);
     gtk_widget_set_vexpand(data->rallyGaugeDrawingArea, TRUE);
     g_signal_connect(data->rallyGaugeDrawingArea, "draw", G_CALLBACK(on_gauge_draw), data);
-    gtk_container_add(GTK_CONTAINER(gaugeOverlay), data->rallyGaugeDrawingArea);
-    
-    // Units label (hidden, kept for update logic compatibility)
+    gtk_container_add(GTK_CONTAINER(data->countdownOverlay), data->rallyGaugeDrawingArea);
+
+    auto holdLabel = [&](GtkWidget* label) {
+        gtk_widget_set_no_show_all(label, TRUE);
+        gtk_overlay_add_overlay(GTK_OVERLAY(data->countdownOverlay), label);
+    };
+
+    data->currentSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
+    data->targetSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
+    data->totalSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
+    data->tripSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
+    data->speedAdjustArrowsLabel = GTK_LABEL(gtk_label_new(""));
+    data->updatesPerSecLabel = GTK_LABEL(gtk_label_new("fps: 0"));
+    data->cpuTempLabel = GTK_LABEL(gtk_label_new(readCpuTemp().c_str()));
+    data->nextSegLabel = GTK_LABEL(gtk_label_new(""));
     data->unitsLabel = GTK_LABEL(gtk_label_new(data->state->units ? "(MPH)" : "(KPH)"));
-    
-    // Hidden labels still needed by update logic
     data->aheadBehindLabel = GTK_LABEL(gtk_label_new(""));
     data->gaugeTargetLabel = GTK_LABEL(gtk_label_new(""));
-    
+    for (GtkWidget* label : {
+            GTK_WIDGET(data->currentSpeedLabel), GTK_WIDGET(data->targetSpeedLabel),
+            GTK_WIDGET(data->totalSpeedLabel), GTK_WIDGET(data->tripSpeedLabel),
+            GTK_WIDGET(data->speedAdjustArrowsLabel), GTK_WIDGET(data->updatesPerSecLabel),
+            GTK_WIDGET(data->cpuTempLabel), GTK_WIDGET(data->nextSegLabel),
+            GTK_WIDGET(data->unitsLabel), GTK_WIDGET(data->aheadBehindLabel),
+            GTK_WIDGET(data->gaugeTargetLabel)}) {
+        holdLabel(label);
+    }
+
     // Countdown overlay label in an event box for background styling
     data->countdownLabel = GTK_LABEL(gtk_label_new("T- 00:00:00"));
     gtk_widget_set_margin_start(GTK_WIDGET(data->countdownLabel), 30);

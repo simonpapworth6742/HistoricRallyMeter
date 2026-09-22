@@ -11,11 +11,12 @@ The application presents two windows, each intended for its own in-car display p
 | Window | Purpose | Required resolution |
 |---|---|---|
 | **Co-pilot display** | TwinMaster, segment setup, calibration, date/time screens | Exactly 1280x400 (or 400x1280 rotated) |
-| **Driver display** | Speed gauge and stage readouts | 1280x400 **or** 800x480 (or their rotated equivalents). Uses the compact layout on 800x480 (see "Driver Display - Compact Layout") |
+| **Driver display** | Speed gauge and stage readouts | Exactly 800x480 (or 480x800 rotated). Never a 1280x400 or 400x1280 panel |
 
 Definitions used throughout this section:
 - **Small display**: a monitor whose resolution is exactly 1280x400, 400x1280, 800x480, or 480x800.
 - **Co-pilot-capable display**: a small display of exactly 1280x400 (or 400x1280). The co-pilot window never uses an 800x480 panel.
+- **Driver display**: a small display of exactly 800x480 (or 480x800). The driver window never uses a 1280x400 or 400x1280 panel.
 - **Development setup**: an HDMI 2K/4K desktop monitor plus one or two small displays. When two small displays are attached the application must use them for the two windows and leave the desktop monitor free.
 
 ### Display Detection
@@ -31,8 +32,8 @@ Assignment happens at startup, in this order:
 0. **Single-display mode**: if exactly one monitor exists and it is 1280x400, only the co-pilot window is shown, fullscreen on that monitor. The driver window is not shown at all. In this mode the TwinMaster screen's right-hand alarm panel is replaced by the embedded compact driver display (see "TwinMaster Screen - Single-Display Mode"). The remaining rules do not apply.
 1. **Co-pilot window** takes the highest-priority **co-pilot-capable** display and opens fullscreen on it.
    - Fallback: if no co-pilot-capable display exists, it opens as a normal 1280x400 window (typically on the desktop monitor during development).
-2. **Driver window** takes the highest-priority remaining small display (1280x400 or 800x480, never the one assigned to the co-pilot) and opens fullscreen on it.
-   - Fallback: if no small display remains, it opens as a window using the size remembered from the previous run (default 1280x400), centered on the remembered monitor. If the remembered monitor no longer exists or is the co-pilot's monitor, the first other available monitor is used.
+2. **Driver window** takes the highest-priority remaining 800x480 (or 480x800) display, never a 1280x400 or 400x1280 panel and never the one assigned to the co-pilot, and opens fullscreen on it.
+   - Fallback: if no 800x480 display remains, it opens as an 800x480 window using the size remembered from the previous run (default 800x480), centered on the remembered monitor. A remembered size from the old wide layout (1280x400 or 400x1280, or any window at least 2.2 times as wide as it is tall) is discarded and 800x480 is used instead. If the remembered monitor no longer exists or is the co-pilot's monitor, the first other available monitor is used.
 
 ### Window Persistence (driver window fallback only)
 
@@ -159,9 +160,9 @@ calculation of current speed, with too little time passed since a start any spee
 
 when any button is pressed make a "soft beep" sound for feedback
 
-**_Drivers display Window (1280 x 400) - dark theme only_**
+**_Drivers display Window (800 x 480) - dark theme only_**
 
-The drivers display window is wide (1280px) and shallow (400px). It shows the average speed since the last reset of the Total, the current speed calculated from approximately the last 10 seconds of driving, the average speed since the last Trip reset, and the average speed since the start of the current segment. The target speed for the current segment and how many seconds ahead or behind target average speed by calculating how many counts difference there is between the actual count now and the count that it should be based upon the time since stage start taking account of the differing speeds in segments already completed and the target speed for the current segment, there is also an ahead_behind_zero_offset_ms value which is a simple addtion to the actual ahead/behind value. Along with the ETA = remaining segment distance / (last-10s average speed) to the next segment. If there is no current segment defined or more than 1000m past end of the last segment, then display "--.--" for Seg. For the next segment line of the display hide it if there is no next segment and if last-10s speed = 0: '--.--'; negative remaining: 'Over by xx:xx:xx'.
+The drivers display window is 800x480 (or 480x800 when the panel is rotated). It is never placed on a 1280x400 or 400x1280 panel. It shows the average speed since the last reset of the Total, the current speed calculated from approximately the last 10 seconds of driving, the average speed since the last Trip reset, and the average speed since the start of the current segment. The target speed for the current segment and how many seconds ahead or behind target average speed by calculating how many counts difference there is between the actual count now and the count that it should be based upon the time since stage start taking account of the differing speeds in segments already completed and the target speed for the current segment, there is also an ahead_behind_zero_offset_ms value which is a simple addtion to the actual ahead/behind value. Along with the ETA = remaining segment distance / (last-10s average speed) to the next segment. If there is no current segment defined or more than 1000m past end of the last segment, then display "--.--" for Seg. For the next segment line of the display hide it if there is no next segment and if last-10s speed = 0: '--.--'; negative remaining: 'Over by xx:xx:xx'.
 
 Seconds ahead/behind formula (high precision): ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_h; diff = actual - ideal; seconds = diff / (target_counts_h / 3600.0). positive numbers means travelling too fast. All target speed and ETA calculations use high precision (double) floating point arithmetic throughout. If more than +- 0.1 ahead/behind then after the seconds ahead/behind value calculate the increase in speed needed (acceleration/deceleration) to exactly match the target in the next 500 meters. Use up to 3 green up arrows to indicate the requirement to speed up, and up to 3 red down arrows to show the requirement to slow down next to the Current Speed. If speed adjustment needed is less than 3 kph show one arrow, between 3 and 10 show two arrows, and more than 10 show 3 arrows. 
 
@@ -190,30 +191,7 @@ look at the example guage in gaugepilot-rallymaster-display.png
 - The gauge provides an intuitive visual indication - needle pointing right means slow down, needle pointing left means speed up
 
 
-``` Layout notes For display/windows for 1280x400 and larger (wide, shallow display):
-+----------------------------------------------------------------------------------------------------------+
-|   Current↑↑↑↓↓↓         Total                       |                      RALLY GAUGE                   |
-|    xx.x                 xx.x                        |            -10s ←───┬───→ +10s                     |
-|                                                     |                 ╱   │   ╲                          |
-|   Target                Trip                        |               ╱     ▲    ╲                         |
-|    xx.x                 xx.x                        |             ╱       ●     ╲                        |
-|                                                     |            ╱    [±ss.s]     ╲                      |
-|   fps: xxx  cpu: xxC   next: xx.xx in xxxm - mm:ss  |           ╱                   ╲                    |
-+----------------------------------------------------------------------------------------------------------+
-```
-
-
-- Left side: Four speed values Current, Target, Trip, Total. Trip, Total with large fonts, Current with extra large font and target 70% of the size of Trip.
-- Right side: Rally gauge with semicircular dial, target speed, and timing info
-- Bottom row: Updates counter (fps) and cpu temperature on the left, next segment info in the center. The driver display has no unit (KPH/MPH) toggle button.
-- The rally gauge should be prominently displayed as a graphical element
-- Use large fonts for speed values as they are primary information for driver
-- All elements arranged to maximize visibility for the driver
-- Total and Trip should vertially align
-- The speed up /slow down arrows should not effect the Total label position and should not effect the Current label position
-- The number of digits displayed for any of the values should not effect their position the decimal point should remain the in same place.
-
-``` Layout notes For display/windows for 800x480 (small 4:3 display):
+``` Layout notes for the driver display (800x480, or 480x800 rotated):
 +-----------------------------------------+
 |  {target}                               |
 |         -10s ←───┬───→ +10s             |
@@ -225,13 +203,12 @@ look at the example guage in gaugepilot-rallymaster-display.png
 |  fps:xxx       [±ss.s]           cpu:xxC|
 +-----------------------------------------+
 ```
-With less display area everything is compacted.
-The gauge is identical in style to the wide layout above, and is reactive to the screen size.
-Now the values displayed in the left pane of the wide layout are fitted within the gauge area:
+The gauge fills the window and is reactive to the screen size.
+Current, target, total and trip are drawn inside the gauge area:
 - {current} is the current speed, top-left with no label; it is right-aligned to a fixed anchor wide enough for "###.#" so the digits never shift as the value changes.
 - {tot} and {trip} are the values without labels.
 - {target} sits left of the hub with a very small "Target" label above it, left-aligned with the value.
-- Target, total and trip share the same font size (56px at full scale); current is slightly smaller (50px). All shrink with the gauge (scaled by gauge radius relative to the wide layout's 256px reference radius).
+- Target, total and trip share the same font size (56px at full scale); current is slightly smaller (50px). All shrink with the gauge (scaled by gauge radius relative to a 256px full-scale radius). The driver display has no unit (KPH/MPH) toggle button.
 - The ahead/behind readout box auto-sizes to its text (minimum 130px wide); the font stays at full size for sunlight legibility.
 - The needle hub has a white ring matching the needle for contrast.
 
@@ -247,7 +224,7 @@ The number of digits displayed for any of the values should not affect their pos
 
 **_Co-Pilots display window (1280 x 400) - dark theme only_**
 
-The co-pilot display window is wide (1280px) and shallow (400px), same as the driver display. It has four screens:
+The co-pilot display window is wide (1280px) and shallow (400px). It has four screens:
 1) Stage setup
 2) Calibration
 3) TwinMaster display (default)

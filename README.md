@@ -12,7 +12,7 @@ When only one 1280×400 monitor is available (or when forced via config), **sing
 
 ## Features
 
-- **Dual displays** — driver and co-pilot windows on 1280×400 (or 800×480 driver) panels; auto-detected and fullscreened on matching monitors
+- **Dual displays** — co-pilot window on a 1280×400 panel and driver window on an 800×480 panel; auto-detected and fullscreened on matching monitors
 - **Single-display mode** — one 1280×400 co-pilot screen with embedded compact driver gauge (configurable via `force_single_display`)
 - **Rally gauge** — semicircular ahead/behind timing indicator with auto-scaling (green/yellow/red) and needle
 - **Real-time speed calculation** — rolling 10-second average from hardware counters polled at up to 200 Hz
@@ -60,7 +60,7 @@ Run the binary from the project directory so it can find `webclient/` and `rally
 
 - **Raspberry Pi 5** (4GB+ recommended)
 - **LSI ls7866c 32-bit counters** — two devices on I2C bus 1 at addresses 0x70 and 0x71
-- **Displays** — co-pilot: 1280×400; driver: 1280×400 or 800×480 (or single 1280×400 in single-display mode); the app also works with a standard monitor during development
+- **Displays** — co-pilot: 1280×400; driver: 800×480 (or single 1280×400 in single-display mode, with the driver gauge embedded in the co-pilot window); the app also works with a standard monitor during development
 - **Audio output** — for speed adjustment tone feedback (ALSA default device)
 - **Network** (optional) — WiFi or Ethernet for phone web access
 

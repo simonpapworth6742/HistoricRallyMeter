@@ -60,8 +60,8 @@ public:
     // Driver window position/size (remembered across sessions)
     int driver_window_x = -1;      // -1 = not set
     int driver_window_y = -1;
-    int driver_window_width = 1280;
-    int driver_window_height = 400;
+    int driver_window_width = 800;
+    int driver_window_height = 480;
     int driver_window_monitor = 0;
     
     RallyState();
