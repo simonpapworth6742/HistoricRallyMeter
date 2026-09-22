@@ -14,6 +14,8 @@
 #include <ctime>
 #include <cstring>
 #include <cstdlib>
+#include <cstdio>
+#include <cctype>
 #include <chrono>
 #include <functional>
 
@@ -164,6 +166,125 @@ void on_tone_mute_toggle(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     data->tonesMuted = !data->tonesMuted;
     if (data->tonesMuted && data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
     refreshToneMuteButton(data);
+}
+
+static std::string readCommand(const char* cmd) {
+    std::string out;
+    FILE* fp = popen(cmd, "r");
+    if (!fp) return out;
+    char buf[512];
+    while (fgets(buf, sizeof(buf), fp)) out += buf;
+    pclose(fp);
+    return out;
+}
+
+static std::string trimCopy(std::string s) {
+    while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' ')) s.pop_back();
+    size_t start = 0;
+    while (start < s.size() && s[start] == ' ') start++;
+    return s.substr(start);
+}
+
+// bluez_output.88_FA_7F_13_20_EA.1 -> 88:FA:7F:13:20:EA
+static bool bluetoothAddressFromSink(const std::string& sink, std::string& address) {
+    const std::string prefix = "bluez_output.";
+    size_t pos = sink.find(prefix);
+    if (pos == std::string::npos) return false;
+    std::string rest = trimCopy(sink.substr(pos + prefix.size()));
+    size_t dot = rest.rfind('.');
+    if (dot != std::string::npos) {
+        bool digits = dot + 1 < rest.size();
+        for (size_t i = dot + 1; digits && i < rest.size(); i++) {
+            if (!std::isdigit(static_cast<unsigned char>(rest[i]))) digits = false;
+        }
+        if (digits) rest = rest.substr(0, dot);
+    }
+    if (rest.size() != 17) return false;
+    for (size_t i = 0; i < rest.size(); i++) {
+        if (i % 3 == 2) {
+            if (rest[i] != '_') return false;
+            rest[i] = ':';
+        } else if (!std::isxdigit(static_cast<unsigned char>(rest[i]))) {
+            return false;
+        }
+    }
+    address = rest;
+    return true;
+}
+
+static std::string bluetoothDeviceName(const std::string& address) {
+    std::string info = readCommand(("bluetoothctl info " + address + " 2>/dev/null").c_str());
+    std::string alias, name;
+    std::istringstream lines(info);
+    std::string line;
+    while (std::getline(lines, line)) {
+        auto take = [&](const char* key, std::string& dest) {
+            std::string prefix = std::string(key) + ":";
+            size_t at = line.find(prefix);
+            if (at == std::string::npos) return;
+            dest = trimCopy(line.substr(at + prefix.size()));
+        };
+        take("Alias", alias);
+        take("Name", name);
+    }
+    if (!alias.empty()) return alias;
+    if (!name.empty()) return name;
+    return address;
+}
+
+static void showRememberedBluetooth(AppData* data) {
+    if (!data->bluetoothAudioLabel) return;
+    const std::string& shown = !data->state->bluetooth_audio_name.empty()
+        ? data->state->bluetooth_audio_name
+        : data->state->bluetooth_audio_address;
+    gtk_label_set_text(data->bluetoothAudioLabel, shown.c_str());
+}
+
+void refreshConnectSpeakerButton(AppData* data) {
+    if (!data || !data->connectSpeakerBtn) return;
+    if (data->state->bluetooth_audio_address.empty()) gtk_widget_hide(data->connectSpeakerBtn);
+    else gtk_widget_show(data->connectSpeakerBtn);
+}
+
+void on_remember_bluetooth_audio(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    std::string sink = trimCopy(readCommand("pactl get-default-sink 2>/dev/null"));
+    std::string address;
+    if (bluetoothAddressFromSink(sink, address)) {
+        data->state->bluetooth_audio_address = address;
+        data->state->bluetooth_audio_name = bluetoothDeviceName(address);
+    } else {
+        data->state->bluetooth_audio_address.clear();
+        data->state->bluetooth_audio_name.clear();
+    }
+    ConfigFile::save(*data->state);
+    showRememberedBluetooth(data);
+    refreshConnectSpeakerButton(data);
+}
+
+void on_connect_speaker(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    const std::string& address = data->state->bluetooth_audio_address;
+    if (address.size() != 17) return;
+    for (size_t i = 0; i < address.size(); i++) {
+        unsigned char c = static_cast<unsigned char>(address[i]);
+        if (i % 3 == 2) {
+            if (address[i] != ':') return;
+        } else if (!std::isxdigit(c)) {
+            return;
+        }
+    }
+    std::string underscored = address;
+    for (char& c : underscored) if (c == ':') c = '_';
+    std::string script =
+        "bluetoothctl connect '" + address + "' >/dev/null 2>&1; "
+        "sink='bluez_output." + underscored + ".1'; "
+        "for i in 1 2 3 4 5 6 7 8; do "
+        "if pactl list short sinks 2>/dev/null | grep -q \"$sink\"; then "
+        "pactl set-default-sink \"$sink\"; exit 0; fi; sleep 0.5; done";
+    gchar* argv[] = { (gchar*)"bash", (gchar*)"-c", const_cast<gchar*>(script.c_str()), nullptr };
+    g_spawn_async(nullptr, argv, nullptr, G_SPAWN_SEARCH_PATH,
+                  nullptr, nullptr, nullptr, nullptr);
 }
 
 static const int RESPONSE_AUTO_START = 99;

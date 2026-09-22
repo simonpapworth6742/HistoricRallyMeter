@@ -95,7 +95,9 @@ static void applyCopilotCSS() {
         "scrollbar trough { min-width: 24px; }"
         "button.memory-populated { background-image: none; background-color: #FFFFFF; color: #000000; }"
         "button.cal-workflow-next { background-image: none; background-color: #FFFFFF; color: #000000; }"
-        "button.tone-mute { padding: 0; border: none; background: none; min-width: 30px; min-height: 30px; color: #FFFFFF; }",
+        "button.tone-mute { padding: 0; border: none; background: none; min-width: 30px; min-height: 30px; color: #FFFFFF; }"
+        "button.connect-speaker { font-size: 11px; font-family: monospace; padding: 0; min-width: 44px; min-height: 44px; }"
+        "button.connect-speaker label { font-size: 11px; font-family: monospace; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -220,6 +222,7 @@ void updateCopilotDisplay(AppData* data) {
         gtk_button_set_label(GTK_BUTTON(data->stageGoBtn), in_stage ? "abort stage" : "stage go");
     }
     refreshToneMuteButton(data);
+    refreshConnectSpeakerButton(data);
     
     // Next segment info: distance remaining in current segment + speed of next segment
     if (data->state->segment_current_number >= 0 &&
@@ -405,6 +408,22 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     g_signal_connect(data->toneMuteBtn, "clicked", G_CALLBACK(on_tone_mute_toggle), data);
 
     if (data->singleDisplayMode) {
+        data->connectSpeakerBtn = gtk_button_new_with_label("cnet\nspkr");
+        gtk_style_context_add_class(gtk_widget_get_style_context(data->connectSpeakerBtn), "connect-speaker");
+        GtkWidget* connectLabel = gtk_bin_get_child(GTK_BIN(data->connectSpeakerBtn));
+        gtk_label_set_justify(GTK_LABEL(connectLabel), GTK_JUSTIFY_CENTER);
+        gtk_label_set_xalign(GTK_LABEL(connectLabel), 0.5);
+        gtk_widget_set_size_request(data->connectSpeakerBtn, 44, 44);
+        gtk_widget_set_halign(data->connectSpeakerBtn, GTK_ALIGN_CENTER);
+        gtk_widget_set_valign(data->connectSpeakerBtn, GTK_ALIGN_START);
+    } else {
+        data->connectSpeakerBtn = gtk_button_new_with_label("Connect speaker");
+        gtk_widget_set_valign(data->connectSpeakerBtn, GTK_ALIGN_CENTER);
+    }
+    gtk_widget_set_no_show_all(data->connectSpeakerBtn, TRUE);
+    g_signal_connect(data->connectSpeakerBtn, "clicked", G_CALLBACK(on_connect_speaker), data);
+
+    if (data->singleDisplayMode) {
         data->copilotGaugeArea = gtk_drawing_area_new();
         gtk_widget_set_hexpand(data->copilotGaugeArea, TRUE);
         gtk_widget_set_vexpand(data->copilotGaugeArea, TRUE);
@@ -416,12 +435,15 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
         gtk_widget_set_halign(data->toneMuteBtn, GTK_ALIGN_END);
         gtk_widget_set_valign(data->toneMuteBtn, GTK_ALIGN_START);
         gtk_widget_set_margin_end(data->toneMuteBtn, 150);
+        gtk_overlay_add_overlay(GTK_OVERLAY(overlay), data->connectSpeakerBtn);
+        gtk_widget_set_halign(data->connectSpeakerBtn, GTK_ALIGN_END);
+        gtk_widget_set_valign(data->connectSpeakerBtn, GTK_ALIGN_START);
         gtk_box_pack_start(GTK_BOX(rightPanel), overlay, TRUE, TRUE, 0);
 
         data->alarmCountdownLabel = nullptr;
         data->alarmClearBtn = nullptr;
     } else {
-    // Top row: rally clock, mute button immediately to its left
+    // Top row: Connect speaker, mute, rally clock
     GtkWidget* topRightRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_pack_start(GTK_BOX(rightPanel), topRightRow, FALSE, FALSE, 0);
 
@@ -429,6 +451,7 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_label_set_xalign(data->copilotRallyClockLabel, 1.0);
     gtk_box_pack_end(GTK_BOX(topRightRow), GTK_WIDGET(data->copilotRallyClockLabel), FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(topRightRow), data->toneMuteBtn, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(topRightRow), data->connectSpeakerBtn, FALSE, FALSE, 0);
     
     // Alarm buttons: 3 rows of 4
     GtkWidget* alarmBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
@@ -913,6 +936,20 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(unitsRow), unitsRowLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(unitsRow), GTK_WIDGET(data->unitToggleBtn), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(leftBox), unitsRow, FALSE, FALSE, 0);
+
+    GtkWidget* btRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+    GtkWidget* rememberBtBtn = gtk_button_new_with_label("Remember bluetooth audio");
+    gtk_widget_set_valign(rememberBtBtn, GTK_ALIGN_CENTER);
+    g_signal_connect(rememberBtBtn, "clicked", G_CALLBACK(on_remember_bluetooth_audio), data);
+    const std::string& remembered = !data->state->bluetooth_audio_name.empty()
+        ? data->state->bluetooth_audio_name
+        : data->state->bluetooth_audio_address;
+    data->bluetoothAudioLabel = GTK_LABEL(gtk_label_new(remembered.c_str()));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->bluetoothAudioLabel)), "clock-label");
+    gtk_label_set_xalign(data->bluetoothAudioLabel, 0.0);
+    gtk_box_pack_start(GTK_BOX(btRow), rememberBtBtn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(btRow), GTK_WIDGET(data->bluetoothAudioLabel), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(leftBox), btRow, FALSE, FALSE, 0);
 
     // Middle column: phone web access (URL + QR) placed in the open space to the
     // right of the clock rows (top-aligned, URL level with the System Clock row),

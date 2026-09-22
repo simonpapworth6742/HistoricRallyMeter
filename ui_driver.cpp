@@ -400,8 +400,10 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
                   cur_right, cur_baseline_top, cur_top_size);
 
         // {target}: left of the hub, slightly smaller than before so it stays
-        // clear of the scale numbers; small label above, aligned to the value
-        double val_size = 56 * fscale;
+        // clear of the scale numbers; small label above, aligned to the value.
+        // Combined single display uses a slightly smaller size for target,
+        // total and trip so they fit the narrower gauge panel.
+        double val_size = (data->singleDisplayMode ? 48.0 : 56.0) * fscale;
         double cur_baseline = centerY - 10;
         double tgt_right = centerX - 36 * fscale;
         double tgt_left = drawValue(gtk_label_get_text(data->targetSpeedLabel),
@@ -440,6 +442,20 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
             // visible right edge sits flush with the panel edge
             cairo_move_to(cr, width - (te.x_bearing + te.width), clock_size);
             cairo_show_text(cr, clock_text);
+
+            // Centre the square speaker button under the clock. Only write
+            // the margins when they change, so the draw does not requeue itself.
+            if (data->connectSpeakerBtn && gtk_widget_get_visible(data->connectSpeakerBtn)) {
+                int btn_w = gtk_widget_get_allocated_width(data->connectSpeakerBtn);
+                if (btn_w > 1) {
+                    int margin_end = static_cast<int>(std::max(0.0, (te.x_bearing + te.width - btn_w) / 2.0));
+                    int margin_top = static_cast<int>(clock_size + 6);
+                    if (gtk_widget_get_margin_end(data->connectSpeakerBtn) != margin_end)
+                        gtk_widget_set_margin_end(data->connectSpeakerBtn, margin_end);
+                    if (gtk_widget_get_margin_top(data->connectSpeakerBtn) != margin_top)
+                        gtk_widget_set_margin_top(data->connectSpeakerBtn, margin_top);
+                }
+            }
         }
     }
 
@@ -477,7 +493,7 @@ void updateDriverDisplay(AppData* data) {
     double trip_speed = calculateAverageSpeed(*data->state,
         data->state->trip_start_time_ms, current_time_ms, trip_count_diff);
     ss.str("");
-    ss << std::fixed << std::setprecision(1) << trip_speed;
+    ss << std::fixed << std::setprecision(2) << trip_speed;
     gtk_label_set_text(data->tripSpeedLabel, ss.str().c_str());
     
     // Total average speed
@@ -488,7 +504,7 @@ void updateDriverDisplay(AppData* data) {
     double total_speed = calculateAverageSpeed(*data->state,
         data->state->total_start_time_ms, current_time_ms, total_count_diff);
     ss.str("");
-    ss << std::fixed << std::setprecision(1) << total_speed;
+    ss << std::fixed << std::setprecision(2) << total_speed;
     gtk_label_set_text(data->totalSpeedLabel, ss.str().c_str());
     
     // Target speed and ahead/behind
@@ -787,8 +803,8 @@ GtkWidget* createDriverWindow(AppData* data) {
 
     data->currentSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
     data->targetSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
-    data->totalSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
-    data->tripSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
+    data->totalSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
+    data->tripSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
     data->speedAdjustArrowsLabel = GTK_LABEL(gtk_label_new(""));
     data->updatesPerSecLabel = GTK_LABEL(gtk_label_new("fps: 0"));
     data->cpuTempLabel = GTK_LABEL(gtk_label_new(readCpuTemp().c_str()));

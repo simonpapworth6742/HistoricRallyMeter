@@ -89,6 +89,8 @@ struct AppData {
     GtkWidget* nextPrevBtn;
     GtkWidget* stageGoBtn = nullptr;
     GtkWidget* toneMuteBtn = nullptr;
+    GtkWidget* connectSpeakerBtn = nullptr;
+    GtkLabel* bluetoothAudioLabel = nullptr;
     bool tonesMuted = false;          // ahead/behind tones only; not saved
     GtkWidget* adjZeroBtn;
     GtkLabel* alarmCountdownLabel;

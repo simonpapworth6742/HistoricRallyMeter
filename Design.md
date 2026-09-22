@@ -120,6 +120,8 @@ time segment_start_time – the time to at least the nearest ms that the last se
 long segment_current_number – the current segment of the stage so defining the current target average speed displayed. On startup/empty segments, segment_current_number defaults to -1; blank Seg/target/±/ETA/next line on drivers display.
  
 long rallyTimeOffset – ms offset of rally time to operating system time, defaults to 0
+string bluetooth_audio_name – display name of the remembered Bluetooth speaker, empty when none is remembered
+string bluetooth_audio_address – Bluetooth address of that speaker, empty when none is remembered. Pressing Remember bluetooth audio fills both from the Pi's current audio output when that output is a Bluetooth device, and clears both when it is not.
 long ahead_behind_zero_offset_ms - ms offset (+ or -) of the drivers ahead/behind caculation,defaults to zero and on stage-go. Set in the twinmaster display.
 ulong auto_start_stage_at_rally_time - the date time in munites the stage should automatially be started in rally time, stored as an offset from 1/1/2020.
 structure segment[]  - Stage segments contain target speed over distance segments of the stage, and if manual or automatic progression to the next segment is required. Defaults to no segments.
@@ -206,9 +208,9 @@ look at the example guage in gaugepilot-rallymaster-display.png
 The gauge fills the window and is reactive to the screen size.
 Current, target, total and trip are drawn inside the gauge area:
 - {current} is the current speed, top-left with no label; it is right-aligned to a fixed anchor wide enough for "###.#" so the digits never shift as the value changes.
-- {tot} and {trip} are the values without labels.
+- {tot} and {trip} are the values without labels, shown to two decimal places. Current and target stay at one decimal place.
 - {target} sits left of the hub with a very small "Target" label above it, left-aligned with the value.
-- Target, total and trip share the same font size (56px at full scale); current is slightly smaller (50px). All shrink with the gauge (scaled by gauge radius relative to a 256px full-scale radius). The driver display has no unit (KPH/MPH) toggle button.
+- Target, total and trip share the same font size (56px at full scale); current is slightly smaller (50px). All shrink with the gauge (scaled by gauge radius relative to a 256px full-scale radius). On the combined single display those three values are drawn a little smaller (48px at full scale); current stays at 50px. The driver display has no unit (KPH/MPH) toggle button.
 - The ahead/behind readout box auto-sizes to its text (minimum 130px wide); the font stays at full size for sunlight legibility.
 - The needle hub has a white ring matching the needle for contrast.
 
@@ -314,7 +316,7 @@ Two-column layout with bottom navigation row:
 ```
 +-------------------------------------------------------------------+--------------------------------------+
 | LEFT PANEL (70%)                                                  | RIGHT PANEL (30%)                    |
-|                                                                   |                  [mute]   hh:mm:ss   |
+|                                                                   | [Connect speaker] [mute] hh:mm:ss    |
 |  [Total]  xxx,xxx  m  mmm:ss                                      |  Alarm in [2] [3] [4]                |
 |                                                                   |           [5] [6] [7]                |
 |  [Trip]   xxx,xxx  m  mmm:ss                                      |           [8] [9] [10]               |
@@ -346,6 +348,7 @@ Layout:
 - Right panel:
   - Rally clock (hh:mm:ss) at top, right-aligned (30px bold, minimum 8 chars wide)
   - Mute button immediately to the left of the clock, shown only while a current segment is selected. It is the same height as the 30px clock and uses the standard unmuted icon (audio-volume-high) or muted icon (audio-volume-muted). Pressing it toggles. The choice is not saved. Stage go sets it back to unmuted. While muted, the ahead/behind tones do not sound; button beeps and the distance alarm still sound.
+  - [Connect speaker] is a single-line button on the top row, immediately to the left of the mute button. It is shown only when bluetooth_audio_address in the config is not empty. Pressing it reconnects that remembered Bluetooth speaker and makes it the audio output. When the config entry is empty the button is not shown.
   - Alarm buttons in four rows with 4px vertical gap — "Alarm in" label (20px) + [2]-[4] on first row, [5]-[7] on second row, [8]-[10] on third row, [11]-[13] on fourth row (22px font, 62x47px buttons)
   - Alarm countdown ("x,xxx m to alarm") and [clear] button below alarm buttons (28px white font #FFFFFF)
 
@@ -377,8 +380,8 @@ Layout:
 When the application is in single-display mode (exactly one monitor, 1280x400 - see "Display Assignment"), the right-hand alarm panel is replaced by the compact driver display:
 
 - The right panel is widened to 430px (from 360px) so the gauge is height-limited rather than width-limited; the left panel gives up its fixed 870px minimum width and takes whatever width remains.
-- The right panel contains the compact driver gauge layout, identical to the 800x480 driver layout: the gauge with needle and digital readout, with target, current, total and trip values drawn inside the gauge area, fonts scaled down with the gauge size, and the same compact gauge geometry (gauge fills the panel width, arc top may cut into the target line, fps/cpu in line with the readout box bottom).
-- The rally clock (hh:mm:ss) is kept, drawn in the top-right corner of the gauge area at 28px scaled with the gauge (minimum 20px).
+- The right panel contains the compact driver gauge layout, identical to the 800x480 driver layout: the gauge with needle and digital readout, with target, current, total and trip values drawn inside the gauge area, fonts scaled down with the gauge size, and the same compact gauge geometry (gauge fills the panel width, arc top may cut into the target line, fps/cpu in line with the readout box bottom). Target, total and trip are drawn a little smaller than on the standalone driver gauge (48px at full scale instead of 56px); current stays at 50px.
+- The rally clock (hh:mm:ss) is kept, drawn in the top-right corner of the gauge area at 28px scaled with the gauge (minimum 20px). The connect speaker control, when a speaker is remembered, is the same small square ("cnet" / "spkr") centred under that clock. The mute button stays to the left of the clock.
 - Alarm buttons are unavailable in this mode, so new alarms cannot be set. An alarm persisted in the config from a previous run still fires: alarm.wav is played when the target is reached and the alarm auto-clears after 5 seconds; no countdown or [clear] button is shown.
 - The left panel has the total/trip times hidden and the next target speed hidden inorder to allow the gauage to be bigger, bottom navigation row are unchanged.
 
@@ -404,6 +407,7 @@ All fonts to be 20px
 |  Options:                                       |  QR code   |                                            |
 |  force single display mode        ( o)          |  132x132   |                                            |
 |  speed units          [ KPH ]                   +------------+                                            |
+|  [Remember bluetooth audio]  device name                                                       |
 +----------------------------------------------------------------------------------------------------------+
 |                                [set and save]                          [back]                            |
 +----------------------------------------------------------------------------------------------------------+
@@ -417,6 +421,8 @@ on it, but no ";" and ".".
     force single display mode is a toggle button that sets a config value in the json file, and forces the use of single display only mode even if mutiple screens exist
 
     speed units is a button showing the current unit ("KPH" or "MPH"); pressing it toggles the `units` config value between KPH and MPH and saves it. This is the only place the units are changed (the driver display no longer has a unit toggle). All speed displays across the driver, co-pilot and web client follow this setting.
+
+    [Remember bluetooth audio] looks at the Pi's current audio output. If that output is a Bluetooth device, its name and address are written to bluetooth_audio_name and bluetooth_audio_address and the name is shown beside the button. If the Pi is not using a Bluetooth speaker, both config entries are saved empty and the name beside the button is blank. The TwinMaster [connect speaker] button is shown only while an address is stored.
 
 - **Phone web access** (shown only when `web_enabled` is true in the config):
     - Displays the full URL to the web client (scheme `http://`, host from mDNS name `historicrallymeter.local` with fallback to the device's current LAN IP address, port from `web_port`).

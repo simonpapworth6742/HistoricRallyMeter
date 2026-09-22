@@ -33,6 +33,38 @@ static bool extractBool(const std::string& line) {
     return line.find("true") != std::string::npos;
 }
 
+static std::string extractString(const std::string& line) {
+    size_t colon = line.find(':');
+    if (colon == std::string::npos) return "";
+    size_t q1 = line.find('"', colon + 1);
+    if (q1 == std::string::npos) return "";
+    size_t q2 = q1 + 1;
+    while (q2 < line.size()) {
+        if (line[q2] == '"' && line[q2 - 1] != '\\') break;
+        q2++;
+    }
+    if (q2 >= line.size()) return "";
+    std::string raw = line.substr(q1 + 1, q2 - q1 - 1);
+    std::string out;
+    for (size_t i = 0; i < raw.size(); i++) {
+        if (raw[i] == '\\' && i + 1 < raw.size()) {
+            out.push_back(raw[++i]);
+        } else {
+            out.push_back(raw[i]);
+        }
+    }
+    return out;
+}
+
+static std::string jsonEscape(const std::string& s) {
+    std::string out;
+    for (char c : s) {
+        if (c == '\\' || c == '"') out.push_back('\\');
+        out.push_back(c);
+    }
+    return out;
+}
+
 static void parseSegmentArray(std::istringstream& stream, std::vector<Segment>& out, long calibration) {
     out.clear();
     std::string line;
@@ -173,6 +205,10 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.web_enabled = extractBool(line);
         } else if (line.find("\"web_port\"") != std::string::npos) {
             state.web_port = static_cast<int>(extractLong(line));
+        } else if (line.find("\"bluetooth_audio_name\"") != std::string::npos) {
+            state.bluetooth_audio_name = extractString(line);
+        } else if (line.find("\"bluetooth_audio_address\"") != std::string::npos) {
+            state.bluetooth_audio_address = extractString(line);
         }
     }
 }
@@ -240,6 +276,8 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"force_single_display\": " << (state.force_single_display ? "true" : "false") << ",\n";
     file << "  \"web_enabled\": " << (state.web_enabled ? "true" : "false") << ",\n";
     file << "  \"web_port\": " << state.web_port << ",\n";
+    file << "  \"bluetooth_audio_name\": \"" << jsonEscape(state.bluetooth_audio_name) << "\",\n";
+    file << "  \"bluetooth_audio_address\": \"" << jsonEscape(state.bluetooth_audio_address) << "\",\n";
     
     // Check if any memory slots are populated
     bool has_memory = false;

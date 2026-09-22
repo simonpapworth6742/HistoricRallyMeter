@@ -2,6 +2,7 @@
 #define RALLY_STATE_H
 
 #include <cstdint>
+#include <string>
 #include <vector>
 #include "rally_types.h"
 
@@ -56,6 +57,10 @@ public:
     // Embedded web server for phone browsers
     bool web_enabled = true;
     int web_port = 8080;
+
+    // Remembered Bluetooth speaker. Both empty when none is remembered.
+    std::string bluetooth_audio_name;
+    std::string bluetooth_audio_address;
     
     // Driver window position/size (remembered across sessions)
     int driver_window_x = -1;      // -1 = not set
