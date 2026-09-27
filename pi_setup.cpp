@@ -477,3 +477,102 @@ std::string wifiStatusLine() {
     if (wifi.empty()) return "Wi-Fi is not connected";
     return "Wi-Fi: " + wifi;
 }
+
+static const char* kKeyboardOutputFile = "/usr/share/squeekboard/output";
+static const char* kKeyboardAutostart = "/etc/xdg/autostart/squeekboard.desktop";
+static const char* kKeyboardGreeter = "/etc/xdg/labwc-greeter/autostart";
+
+static std::string preferredKeyboardOutput() {
+    std::string text = readTextFile(kKeyboardOutputFile);
+    const std::string key = "SQUEEKBOARD_PREFERRED_OUTPUT=";
+    size_t pos = text.find(key);
+    if (pos == std::string::npos) return {};
+    std::string rest = text.substr(pos + key.size());
+    size_t end = rest.find_first_of("\r\n ");
+    if (end != std::string::npos) rest = rest.substr(0, end);
+    return trim(rest);
+}
+
+static bool keyboardAutostartOn() {
+    std::ifstream in(kKeyboardAutostart);
+    return static_cast<bool>(in);
+}
+
+bool keyboardOnOutput(const std::string& output) {
+    return keyboardAutostartOn() && preferredKeyboardOutput() == output;
+}
+
+static std::string waylandKeyboardLaunch(bool show) {
+    const char* wl = std::getenv("WAYLAND_DISPLAY");
+    if (!wl || !*wl) wl = "wayland-0";
+    const char* runtime = std::getenv("XDG_RUNTIME_DIR");
+    std::string runtimeDir = (runtime && *runtime) ? runtime : "/run/user/" + std::to_string(getuid());
+    const char* bus = std::getenv("DBUS_SESSION_BUS_ADDRESS");
+    std::string script =
+        "pkill -x squeekboard >/dev/null 2>&1 || true\n"
+        "sleep 0.3\n";
+    if (!show) return script;
+    script += "env -u DISPLAY WAYLAND_DISPLAY=" + std::string(wl) +
+              " GDK_BACKEND=wayland XDG_RUNTIME_DIR=" + runtimeDir;
+    if (bus && *bus) script += " DBUS_SESSION_BUS_ADDRESS=" + std::string(bus);
+    script +=
+        " setsid /usr/bin/sbout >/tmp/squeekboard-hrm.log 2>&1 </dev/null &\n"
+        "set +e\n"
+        "shown=0\n"
+        "for i in 1 2 3 4 5 6 7 8; do\n"
+        "  if busctl --user call sm.puri.OSK0 /sm/puri/OSK0 sm.puri.OSK0 SetVisible b true; then\n"
+        "    shown=1\n"
+        "    break\n"
+        "  fi\n"
+        "  sleep 0.3\n"
+        "done\n"
+        "if [ \"$shown\" != 1 ]; then\n"
+        "  echo 'Keyboard did not appear' >&2\n"
+        "  exit 1\n"
+        "fi\n";
+    return script;
+}
+
+bool setOnScreenKeyboard(const std::string& output, bool enable, std::string& error) {
+    if (!safeToken(output)) {
+        error = "Display name cannot be used for the keyboard";
+        return false;
+    }
+    std::string script = "set -e\n";
+    if (enable) {
+        script +=
+            "printf '%s\\n' '#!/bin/sh' 'export SQUEEKBOARD_PREFERRED_OUTPUT=" + output +
+            "' | sudo -n tee " + std::string(kKeyboardOutputFile) + " >/dev/null\n"
+            "sudo -n chmod a+x " + std::string(kKeyboardOutputFile) + "\n"
+            "sudo -n tee " + std::string(kKeyboardAutostart) + " >/dev/null <<EOF\n"
+            "[Desktop Entry]\n"
+            "Name=Squeekboard\n"
+            "Comment=Launch the on-screen keyboard\n"
+            "Exec=/usr/bin/sbout\n"
+            "Terminal=false\n"
+            "Type=Application\n"
+            "NoDisplay=true\n"
+            "EOF\n"
+            "if [ -f " + std::string(kKeyboardGreeter) + " ]; then\n"
+            "  sudo -n sed -i '\\|/usr/bin/sbtest|d' " + std::string(kKeyboardGreeter) + "\n"
+            "  grep -q '/usr/bin/sbout' " + std::string(kKeyboardGreeter) +
+            " || echo '/usr/bin/sbout &' | sudo -n tee -a " + std::string(kKeyboardGreeter) + " >/dev/null\n"
+            "fi\n";
+        script += waylandKeyboardLaunch(true);
+    } else {
+        script +=
+            "pkill -x squeekboard >/dev/null 2>&1 || true\n"
+            "sudo -n rm -f " + std::string(kKeyboardAutostart) + "\n"
+            "if [ -f " + std::string(kKeyboardGreeter) + " ]; then\n"
+            "  sudo -n sed -i '\\|/usr/bin/sbout|d;\\|/usr/bin/sbtest|d' " + std::string(kKeyboardGreeter) + "\n"
+            "fi\n";
+    }
+    int rc = runShell(script, error);
+    error = trim(error);
+    if (rc != 0) {
+        if (error.empty()) error = enable ? "Could not enable the keyboard" : "Could not disable the keyboard";
+        return false;
+    }
+    error.clear();
+    return true;
+}

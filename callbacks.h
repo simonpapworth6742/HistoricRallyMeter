@@ -19,6 +19,7 @@ void bluetoothAutoconnectOnStartup(AppData* data);
 void on_show_setup(GtkWidget* widget, gpointer user_data);
 void on_setup_reset_layout(GtkWidget* widget, gpointer user_data);
 void on_setup_rotate(GtkWidget* widget, gpointer user_data);
+void on_setup_keyboard(GtkWidget* widget, gpointer user_data);
 void on_setup_bt_connect(GtkWidget* widget, gpointer user_data);
 void on_setup_bt_disconnect(GtkWidget* widget, gpointer user_data);
 void on_setup_hotspot(GtkWidget* widget, gpointer user_data);

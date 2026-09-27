@@ -650,6 +650,20 @@ void on_setup_rotate(GtkWidget* widget, gpointer user_data) {
     rebuildSetupDisplays(data);
 }
 
+void on_setup_keyboard(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    const char* name = static_cast<const char*>(g_object_get_data(G_OBJECT(widget), "output-name"));
+    if (!name) return;
+    bool enable = !keyboardOnOutput(name);
+    setSetupStatus(data, enable ? std::string("Enabling keyboard on ") + name
+                                : std::string("Disabling keyboard"));
+    pumpUi();
+    std::string err;
+    if (!setOnScreenKeyboard(name, enable, err)) setSetupStatus(data, err);
+    else setSetupStatus(data, enable ? std::string("Keyboard on ") + name : "Keyboard off");
+    rebuildSetupDisplays(data);
+}
+
 void on_setup_bt_connect(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     if (!bluetoothAddressOk(data->state->bluetooth_audio_address)) return;

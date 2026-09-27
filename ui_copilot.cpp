@@ -101,7 +101,9 @@ static void applyCopilotCSS() {
         "button.connect-speaker { font-size: 11px; font-family: monospace; padding: 0; min-width: 44px; min-height: 44px; }"
         "button.connect-speaker label { font-size: 11px; font-family: monospace; }"
         ".setup-label { font-size: 16px; }"
-        "button.setup-rotate { padding: 0; min-width: 36px; min-height: 36px; }",
+        "button.setup-rotate { padding: 0; min-width: 36px; min-height: 36px; }"
+        "button.setup-kb { font-size: 14px; padding: 2px 6px; min-height: 36px; }"
+        "button.setup-kb label { font-size: 14px; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -840,17 +842,10 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(screen), "datetime-screen");
     gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
     
-    // Title row with exit button
-    GtkWidget* titleRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
-    gtk_box_pack_start(GTK_BOX(screen), titleRow, FALSE, FALSE, 0);
-    
     GtkWidget* titleLabel = gtk_label_new("DATE/TIME SETUP");
     gtk_style_context_add_class(gtk_widget_get_style_context(titleLabel), "title-label");
-    gtk_box_pack_start(GTK_BOX(titleRow), titleLabel, TRUE, TRUE, 0);
-    
-    GtkWidget* exitBtn = gtk_button_new_with_label("exit app");
-    g_signal_connect(exitBtn, "clicked", G_CALLBACK(on_exit_app), data);
-    gtk_box_pack_end(GTK_BOX(titleRow), exitBtn, FALSE, FALSE, 0);
+    gtk_widget_set_halign(titleLabel, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(screen), titleLabel, FALSE, FALSE, 0);
     
     // Main horizontal container: left side for content, right side for keypad
     GtkWidget* mainBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
@@ -1083,7 +1078,19 @@ void rebuildSetupDisplays(AppData* data) {
         gtk_widget_set_halign(rotateBtn, GTK_ALIGN_START);
         g_object_set_data_full(G_OBJECT(rotateBtn), "output-name", g_strdup(out.name.c_str()), g_free);
         g_signal_connect(rotateBtn, "clicked", G_CALLBACK(on_setup_rotate), data);
-        gtk_box_pack_start(GTK_BOX(card), rotateBtn, FALSE, FALSE, 0);
+
+        bool kbOn = keyboardOnOutput(out.name);
+        std::string kbLabel = (kbOn ? "Disable KB on " : "Enable KB on ") + out.name;
+        GtkWidget* kbBtn = gtk_button_new_with_label(kbLabel.c_str());
+        gtk_style_context_add_class(gtk_widget_get_style_context(kbBtn), "setup-kb");
+        gtk_widget_set_valign(kbBtn, GTK_ALIGN_CENTER);
+        g_object_set_data_full(G_OBJECT(kbBtn), "output-name", g_strdup(out.name.c_str()), g_free);
+        g_signal_connect(kbBtn, "clicked", G_CALLBACK(on_setup_keyboard), data);
+
+        GtkWidget* btnRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+        gtk_box_pack_start(GTK_BOX(btnRow), rotateBtn, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(btnRow), kbBtn, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(card), btnRow, FALSE, FALSE, 0);
         gtk_box_pack_start(GTK_BOX(data->setupDisplayRow), card, FALSE, FALSE, 0);
     }
     gtk_widget_show_all(data->setupDisplayRow);
@@ -1169,6 +1176,12 @@ static GtkWidget* createSetupScreen(AppData* data) {
     gtk_widget_set_halign(navRow, GTK_ALIGN_END);
     gtk_box_pack_end(GTK_BOX(screen), navRow, FALSE, FALSE, 0);
 
+    GtkWidget* exitBtn = gtk_button_new_with_label("exit app");
+    gtk_style_context_add_class(gtk_widget_get_style_context(exitBtn), "nav-button");
+    gtk_widget_set_size_request(exitBtn, -1, 43);
+    gtk_widget_set_hexpand(exitBtn, FALSE);
+    g_signal_connect(exitBtn, "clicked", G_CALLBACK(on_exit_app), data);
+
     GtkWidget* updateBtn = gtk_button_new_with_label("Exit & Check for updates");
     gtk_style_context_add_class(gtk_widget_get_style_context(updateBtn), "nav-button");
     gtk_widget_set_size_request(updateBtn, -1, 43);
@@ -1184,6 +1197,7 @@ static GtkWidget* createSetupScreen(AppData* data) {
 
     gtk_box_pack_end(GTK_BOX(navRow), backBtn, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(navRow), updateBtn, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(navRow), exitBtn, FALSE, FALSE, 0);
 
     rebuildSetupDisplays(data);
     refreshSetupAudio(data);

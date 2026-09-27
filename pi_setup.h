@@ -42,4 +42,9 @@ bool startWifiHotspot(std::string& detail);
 bool joinWifiClient(std::string& detail);
 std::string wifiStatusLine();
 
+// True when the on-screen keyboard is enabled and pinned to this output.
+bool keyboardOnOutput(const std::string& output);
+// enable pins squeekboard to output and starts it. Otherwise the keyboard is turned off.
+bool setOnScreenKeyboard(const std::string& output, bool enable, std::string& error);
+
 #endif

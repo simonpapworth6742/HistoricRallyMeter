@@ -400,7 +400,7 @@ On entry pre fill the date and time entry box's with the current date and time.
 All fonts to be 20px
 
 +----------------------------------------------------------------------------------------------------------+
-|  DATE/TIME SETUP                                                                            [exit app]    |
+|  DATE/TIME SETUP                                                                                        |
 +----------------------------------------------------------------------------------------------------------+
 |  System Clock:  yyyy/mm/dd  hh:mm:ss                                                                      |
 |                                          historicrallymeter.local:8080          7    8    9               |
@@ -418,8 +418,6 @@ All fonts to be 20px
 Display a numeric keypad for entry on the right, it is a different keypad to other screens as it has "/" and ":" 
 on it, but no ";" and ".".
 
-- The [Exit app] button closes the application
-
 - Display options, remembered Bluetooth audio, and Wi-Fi are on the Setup screen.
 
 - **Phone web access** (shown only when `web_enabled` is true in the config):
@@ -434,7 +432,7 @@ On entry, if an auto start time is saved and still in the future, prefill the ti
 All fonts to be 20px
 
 +----------------------------------------------------------------------------------------------------------+
-|                                       DATE/TIME SETUP                                   [exit app]       |
+|  AUTO START SETUP                                                                                       |
 +----------------------------------------------------------------------------------------------------------+
 |   Rally  Clock:  yyyy/mm/dd  hh:mm:ss        30px                                                        |
 |                                                                                                          |
@@ -455,7 +453,7 @@ Set - sets the auto start time in the config file etc. recording the offeset as 
 
 **6) Setup Screen**
 
-Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16px so the screen fits the 400px height. [back] is the same 20px, 43px-tall navigation button as on the other screens, sized to its label, and sits at the right. [Exit & Check for updates] sits immediately to its left. [back] returns to TwinMaster. [Exit & Check for updates] saves, closes the meter, and opens a terminal in the project directory running the `update` script. The terminal stays open until Enter is pressed so the result can be read.
+Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16px so the screen fits the 400px height. [back] is the same 20px, 43px-tall navigation button as on the other screens, sized to its label, and sits at the right. [Exit & Check for updates] sits immediately to its left, and [exit app] sits immediately to the left of that. [back] returns to TwinMaster. [exit app] saves and closes the application. [Exit & Check for updates] saves, closes the meter, and opens a terminal in the project directory running the `update` script. The terminal stays open until Enter is pressed so the result can be read.
 
 ```
 +----------------------------------------------------------------------------------------------------------+
@@ -463,13 +461,13 @@ Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16
 |  [DSI-2]          0 px          [HDMI-A-2]         0 px         [HDMI-A-1]                               |
 |  1280x400                         800x480                         2560x1440                               |
 |  left                             normal                          normal                                  |
-|  [rotate]                         [rotate]                        [rotate]                                |
+|  [rotate] [Enable KB on DSI-2]    [rotate] [Enable KB on HDMI-A-2] [rotate] [Enable KB on HDMI-A-1]       |
 |  [Reset layout]                                                                                          |
 |  force single display mode   ( o)          speed units  [ KPH ]                                          |
 |  [Remember bluetooth audio]  device name   [Connect]  [Disconnect]                                       |
 |  [Hotspot: hostname]   [Join WiFi4hostname]                                                              |
 |  status line                                                                                             |
-|                                              [Exit & Check for updates]  [back]                          |
+|                                [exit app]  [Exit & Check for updates]  [back]                          |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
@@ -477,7 +475,7 @@ Displays attached to the Pi are read from `wlr-randr`. Each connected output is 
 
 [Reset layout] places the co-pilot panel on the left when one is attached. That panel is the output whose modes include 400×1280 or 1280×400. Its mode is set to 400×1280 when that mode exists, with the left orientation (transform 90), which makes the logical size 1280×400. If it only has a 1280×400 mode, that mode is used in the normal orientation so the logical size stays 1280×400. The driver panel, the output whose modes include 800×480 or 480×800 and which is not the co-pilot panel, is placed immediately to its right in the normal orientation using the 800×480 mode when that mode exists. Every other attached screen keeps its current mode and orientation and is placed further right. Every gap is 0 px and every screen is top-aligned. The layout is applied immediately with `wlr-randr` and written into the kanshi profile (`~/.config/kanshi/config`) whose outputs are exactly the screens attached now. That profile is placed first so it is the one kanshi applies on the next login. Other profiles are left as they are.
 
-Under each display, a small button with the rotate-right icon cycles orientation indefinitely: normal → left → inverted → right → normal. Only that output's orientation changes; positions are left as they are, then the same kanshi profile is updated.
+Under each display, a small button with the rotate-right icon cycles orientation indefinitely: normal → left → inverted → right → normal. Only that output's orientation changes; positions are left as they are, then the same kanshi profile is updated. Beside that rotate button is the on-screen keyboard control for that display. It reads "Enable KB on DSI-2" when the keyboard is off or pinned to another display, and "Disable KB on DSI-2" when squeekboard is enabled on that display. Enable writes `SQUEEKBOARD_PREFERRED_OUTPUT` to the display name, turns the keyboard on for the next login, and starts squeekboard as a Wayland client on that output so the keyboard is actually shown there. An X11 copy of squeekboard ignores the output name, which is why Desktop Preferences can show a blank location. Disable turns it off. The choice is kept for the next login.
 
 The app places its windows from the monitor list it read at startup, so a layout change is on the desktop immediately but the meter windows follow it after the app is started again. The status line says so after a successful change.
 
@@ -812,10 +810,12 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 
 ### Setup Screen Tests
 - Cog button on TwinMaster opens the Setup screen; back is on the right and returns to TwinMaster
+- [exit app], to the left of Exit & Check for updates, saves and closes the application
 - Exit & Check for updates, to the left of back, closes the app and runs the update script in a terminal
 - Attached displays show logical pixel size, orientation, and the gap to the next display
 - Reset layout puts a 400×1280 panel on the left in the left orientation and an 800×480 panel to its right in the normal orientation, with other panels further right and no gaps, and writes that kanshi profile
 - Rotate cycles normal, left, inverted, right
+- Enable KB on a display pins squeekboard to that output, starts it on Wayland, and shows the keyboard there; Disable KB turns it off. The label follows the current display
 - Force single display, speed units, and Remember bluetooth audio behave as they did on Date/Time and are no longer on that screen
 - Connect and Disconnect appear only when a Bluetooth address is saved; Connect sets autoconnect, Disconnect clears it and keeps the address
 - Hotspot uses the hostname as an open SSID; Join uses WiFi4 plus the hostname; the chosen NetworkManager connection autoconnects and the other Wi-Fi connections do not
