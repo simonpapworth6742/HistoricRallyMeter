@@ -5,6 +5,7 @@
 #include "rally_state.h"
 #include "counter_poller.h"
 #include "callbacks.h"
+#include "pi_setup.h"
 #include "config_file.h"
 #include "webserver/qr_display.h"
 #include "calculations.h"
@@ -13,6 +14,7 @@
 #include <iomanip>
 #include <ctime>
 #include <string>
+#include <algorithm>
 
 static std::string formatDistance(long meters, int width = 7) {
     bool negative = meters < 0;
@@ -97,7 +99,9 @@ static void applyCopilotCSS() {
         "button.cal-workflow-next { background-image: none; background-color: #FFFFFF; color: #000000; }"
         "button.tone-mute { padding: 0; border: none; background: none; min-width: 30px; min-height: 30px; color: #FFFFFF; }"
         "button.connect-speaker { font-size: 11px; font-family: monospace; padding: 0; min-width: 44px; min-height: 44px; }"
-        "button.connect-speaker label { font-size: 11px; font-family: monospace; }",
+        "button.connect-speaker label { font-size: 11px; font-family: monospace; }"
+        ".setup-label { font-size: 16px; }"
+        "button.setup-rotate { padding: 0; min-width: 36px; min-height: 36px; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -520,6 +524,14 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
         gtk_box_pack_start(GTK_BOX(buttonBox), btn, TRUE, TRUE, 0);
     }
 
+    GtkWidget* setupBtn = gtk_button_new();
+    GtkWidget* cog = gtk_image_new_from_icon_name("preferences-system-symbolic", GTK_ICON_SIZE_BUTTON);
+    gtk_image_set_pixel_size(GTK_IMAGE(cog), 24);
+    gtk_button_set_image(GTK_BUTTON(setupBtn), cog);
+    gtk_widget_set_size_request(setupBtn, 43, 43);
+    gtk_box_pack_start(GTK_BOX(buttonBox), setupBtn, FALSE, FALSE, 0);
+    g_signal_connect(setupBtn, "clicked", G_CALLBACK(on_show_setup), data);
+
     g_signal_connect(data->stageGoBtn, "clicked", G_CALLBACK(on_stage_go), data);
     g_signal_connect(segmentsBtn, "clicked", G_CALLBACK(on_show_segments), data);
     g_signal_connect(data->adjZeroBtn, "clicked", G_CALLBACK(on_adj_driver_zero), data);
@@ -906,50 +918,6 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->timeEntry)), "clock-label");
     g_signal_connect(data->timeEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->timeEntry), 2, 2, 1, 1);
-    
-    // Options section
-    GtkWidget* optionsLabel = gtk_label_new("Options:");
-    gtk_style_context_add_class(gtk_widget_get_style_context(optionsLabel), "clock-label");
-    gtk_widget_set_halign(optionsLabel, GTK_ALIGN_START);
-    gtk_widget_set_margin_top(optionsLabel, 10);
-    gtk_box_pack_start(GTK_BOX(leftBox), optionsLabel, FALSE, FALSE, 0);
-    
-    GtkWidget* forceSingleRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
-    GtkWidget* forceSingleLabel = gtk_label_new("force single display mode");
-    gtk_style_context_add_class(gtk_widget_get_style_context(forceSingleLabel), "clock-label");
-    GtkWidget* forceSingleSwitch = gtk_switch_new();
-    gtk_switch_set_active(GTK_SWITCH(forceSingleSwitch), data->state->force_single_display);
-    gtk_widget_set_valign(forceSingleSwitch, GTK_ALIGN_CENTER);
-    g_signal_connect(forceSingleSwitch, "state-set",
-                     G_CALLBACK(on_force_single_display_toggle), data);
-    gtk_box_pack_start(GTK_BOX(forceSingleRow), forceSingleLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(forceSingleRow), forceSingleSwitch, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(leftBox), forceSingleRow, FALSE, FALSE, 0);
-
-    // Speed units (KPH/MPH) toggle — moved here from the driver display. The button
-    // caption shows the current unit; pressing it flips KPH <-> MPH (on_unit_toggle).
-    GtkWidget* unitsRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
-    GtkWidget* unitsRowLabel = gtk_label_new("speed units");
-    gtk_style_context_add_class(gtk_widget_get_style_context(unitsRowLabel), "clock-label");
-    data->unitToggleBtn = GTK_BUTTON(gtk_button_new_with_label(data->state->units ? "MPH" : "KPH"));
-    gtk_widget_set_valign(GTK_WIDGET(data->unitToggleBtn), GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(unitsRow), unitsRowLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(unitsRow), GTK_WIDGET(data->unitToggleBtn), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(leftBox), unitsRow, FALSE, FALSE, 0);
-
-    GtkWidget* btRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
-    GtkWidget* rememberBtBtn = gtk_button_new_with_label("Remember bluetooth audio");
-    gtk_widget_set_valign(rememberBtBtn, GTK_ALIGN_CENTER);
-    g_signal_connect(rememberBtBtn, "clicked", G_CALLBACK(on_remember_bluetooth_audio), data);
-    const std::string& remembered = !data->state->bluetooth_audio_name.empty()
-        ? data->state->bluetooth_audio_name
-        : data->state->bluetooth_audio_address;
-    data->bluetoothAudioLabel = GTK_LABEL(gtk_label_new(remembered.c_str()));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->bluetoothAudioLabel)), "clock-label");
-    gtk_label_set_xalign(data->bluetoothAudioLabel, 0.0);
-    gtk_box_pack_start(GTK_BOX(btRow), rememberBtBtn, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(btRow), GTK_WIDGET(data->bluetoothAudioLabel), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(leftBox), btRow, FALSE, FALSE, 0);
 
     // Middle column: phone web access (URL + QR) placed in the open space to the
     // right of the clock rows (top-aligned, URL level with the System Clock row),
@@ -1068,6 +1036,160 @@ GtkWidget* createAutoStartScreen(AppData* data) {
     return screen;
 }
 
+static GtkWidget* setupText(const std::string& text) {
+    GtkWidget* label = gtk_label_new(text.c_str());
+    gtk_style_context_add_class(gtk_widget_get_style_context(label), "setup-label");
+    gtk_label_set_xalign(GTK_LABEL(label), 0.0);
+    return label;
+}
+
+void rebuildSetupDisplays(AppData* data) {
+    if (!data || !data->setupDisplayRow) return;
+    GList* children = gtk_container_get_children(GTK_CONTAINER(data->setupDisplayRow));
+    for (GList* c = children; c != nullptr; c = c->next)
+        gtk_widget_destroy(GTK_WIDGET(c->data));
+    g_list_free(children);
+
+    std::vector<PiOutput> outputs = readPiOutputs();
+    std::sort(outputs.begin(), outputs.end(), [](const PiOutput& a, const PiOutput& b) {
+        if (a.x != b.x) return a.x < b.x;
+        return a.name < b.name;
+    });
+
+    if (outputs.empty()) {
+        gtk_box_pack_start(GTK_BOX(data->setupDisplayRow), setupText("No displays found"), FALSE, FALSE, 0);
+    }
+
+    for (size_t i = 0; i < outputs.size(); i++) {
+        if (i > 0) {
+            int gap = outputs[i].x - (outputs[i - 1].x + outputs[i - 1].logicalW());
+            GtkWidget* gapLabel = setupText(std::to_string(gap) + " px");
+            gtk_widget_set_valign(gapLabel, GTK_ALIGN_CENTER);
+            gtk_box_pack_start(GTK_BOX(data->setupDisplayRow), gapLabel, FALSE, FALSE, 12);
+        }
+        const PiOutput& out = outputs[i];
+        GtkWidget* card = gtk_box_new(GTK_ORIENTATION_VERTICAL, 1);
+        gtk_box_pack_start(GTK_BOX(card), setupText(out.name), FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(card),
+            setupText(std::to_string(out.logicalW()) + "x" + std::to_string(out.logicalH())),
+            FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(card), setupText(out.orientationName()), FALSE, FALSE, 0);
+
+        GtkWidget* rotateBtn = gtk_button_new();
+        GtkWidget* icon = gtk_image_new_from_icon_name("object-rotate-right-symbolic", GTK_ICON_SIZE_BUTTON);
+        gtk_image_set_pixel_size(GTK_IMAGE(icon), 20);
+        gtk_button_set_image(GTK_BUTTON(rotateBtn), icon);
+        gtk_style_context_add_class(gtk_widget_get_style_context(rotateBtn), "setup-rotate");
+        gtk_widget_set_halign(rotateBtn, GTK_ALIGN_START);
+        g_object_set_data_full(G_OBJECT(rotateBtn), "output-name", g_strdup(out.name.c_str()), g_free);
+        g_signal_connect(rotateBtn, "clicked", G_CALLBACK(on_setup_rotate), data);
+        gtk_box_pack_start(GTK_BOX(card), rotateBtn, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(data->setupDisplayRow), card, FALSE, FALSE, 0);
+    }
+    gtk_widget_show_all(data->setupDisplayRow);
+}
+
+static GtkWidget* createSetupScreen(AppData* data) {
+    GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
+
+    GtkWidget* titleLabel = gtk_label_new("SETUP");
+    gtk_style_context_add_class(gtk_widget_get_style_context(titleLabel), "title-label");
+    gtk_widget_set_halign(titleLabel, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(screen), titleLabel, FALSE, FALSE, 0);
+
+    data->setupDisplayRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+    gtk_box_pack_start(GTK_BOX(screen), data->setupDisplayRow, FALSE, FALSE, 0);
+
+    GtkWidget* resetBtn = gtk_button_new_with_label("Reset layout");
+    gtk_widget_set_halign(resetBtn, GTK_ALIGN_START);
+    g_signal_connect(resetBtn, "clicked", G_CALLBACK(on_setup_reset_layout), data);
+    gtk_box_pack_start(GTK_BOX(screen), resetBtn, FALSE, FALSE, 0);
+
+    GtkWidget* optRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 18);
+    GtkWidget* forceLabel = setupText("force single display mode");
+    gtk_widget_set_valign(forceLabel, GTK_ALIGN_CENTER);
+    GtkWidget* forceSwitch = gtk_switch_new();
+    gtk_switch_set_active(GTK_SWITCH(forceSwitch), data->state->force_single_display);
+    gtk_widget_set_valign(forceSwitch, GTK_ALIGN_CENTER);
+    g_signal_connect(forceSwitch, "state-set", G_CALLBACK(on_force_single_display_toggle), data);
+    gtk_box_pack_start(GTK_BOX(optRow), forceLabel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(optRow), forceSwitch, FALSE, FALSE, 0);
+
+    GtkWidget* unitsLabel = setupText("speed units");
+    gtk_widget_set_valign(unitsLabel, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_start(unitsLabel, 12);
+    data->unitToggleBtn = GTK_BUTTON(gtk_button_new_with_label(data->state->units ? "MPH" : "KPH"));
+    gtk_widget_set_valign(GTK_WIDGET(data->unitToggleBtn), GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(optRow), unitsLabel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(optRow), GTK_WIDGET(data->unitToggleBtn), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(screen), optRow, FALSE, FALSE, 0);
+
+    GtkWidget* btRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget* rememberBtn = gtk_button_new_with_label("Remember bluetooth audio");
+    g_signal_connect(rememberBtn, "clicked", G_CALLBACK(on_remember_bluetooth_audio), data);
+    const std::string& remembered = !data->state->bluetooth_audio_name.empty()
+        ? data->state->bluetooth_audio_name
+        : data->state->bluetooth_audio_address;
+    data->bluetoothAudioLabel = GTK_LABEL(gtk_label_new(remembered.c_str()));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->bluetoothAudioLabel)), "setup-label");
+    gtk_label_set_xalign(data->bluetoothAudioLabel, 0.0);
+    gtk_widget_set_valign(GTK_WIDGET(data->bluetoothAudioLabel), GTK_ALIGN_CENTER);
+    data->setupBtConnectBtn = gtk_button_new_with_label("Connect");
+    data->setupBtDisconnectBtn = gtk_button_new_with_label("Disconnect");
+    gtk_widget_set_no_show_all(data->setupBtConnectBtn, TRUE);
+    gtk_widget_set_no_show_all(data->setupBtDisconnectBtn, TRUE);
+    g_signal_connect(data->setupBtConnectBtn, "clicked", G_CALLBACK(on_setup_bt_connect), data);
+    g_signal_connect(data->setupBtDisconnectBtn, "clicked", G_CALLBACK(on_setup_bt_disconnect), data);
+    gtk_box_pack_start(GTK_BOX(btRow), rememberBtn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(btRow), GTK_WIDGET(data->bluetoothAudioLabel), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(btRow), data->setupBtConnectBtn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(btRow), data->setupBtDisconnectBtn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(screen), btRow, FALSE, FALSE, 0);
+
+    GtkWidget* wifiRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    std::string host = piHostname();
+    GtkWidget* hotspotBtn = gtk_button_new_with_label(("Hotspot: " + host).c_str());
+    GtkWidget* joinBtn = gtk_button_new_with_label(("Join " + wifiClientSsid()).c_str());
+    g_signal_connect(hotspotBtn, "clicked", G_CALLBACK(on_setup_hotspot), data);
+    g_signal_connect(joinBtn, "clicked", G_CALLBACK(on_setup_join_wifi), data);
+    gtk_box_pack_start(GTK_BOX(wifiRow), hotspotBtn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(wifiRow), joinBtn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(screen), wifiRow, FALSE, FALSE, 0);
+
+    data->setupStatusLabel = GTK_LABEL(gtk_label_new(wifiStatusLine().c_str()));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->setupStatusLabel)), "setup-label");
+    gtk_label_set_xalign(data->setupStatusLabel, 0.0);
+    gtk_label_set_line_wrap(data->setupStatusLabel, TRUE);
+    gtk_label_set_max_width_chars(data->setupStatusLabel, 90);
+    gtk_widget_set_halign(GTK_WIDGET(data->setupStatusLabel), GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(screen), GTK_WIDGET(data->setupStatusLabel), FALSE, FALSE, 0);
+
+    GtkWidget* navRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+    gtk_widget_set_halign(navRow, GTK_ALIGN_END);
+    gtk_box_pack_end(GTK_BOX(screen), navRow, FALSE, FALSE, 0);
+
+    GtkWidget* updateBtn = gtk_button_new_with_label("Exit & Check for updates");
+    gtk_style_context_add_class(gtk_widget_get_style_context(updateBtn), "nav-button");
+    gtk_widget_set_size_request(updateBtn, -1, 43);
+    gtk_widget_set_hexpand(updateBtn, FALSE);
+    g_signal_connect(updateBtn, "clicked", G_CALLBACK(on_exit_and_update), data);
+
+    GtkWidget* backBtn = gtk_button_new_with_label("back");
+    gtk_style_context_add_class(gtk_widget_get_style_context(backBtn), "nav-button");
+    gtk_widget_set_size_request(backBtn, -1, 43);
+    gtk_widget_set_hexpand(backBtn, FALSE);
+    gtk_widget_set_halign(backBtn, GTK_ALIGN_END);
+    g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
+
+    gtk_box_pack_end(GTK_BOX(navRow), backBtn, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(navRow), updateBtn, FALSE, FALSE, 0);
+
+    rebuildSetupDisplays(data);
+    refreshSetupAudio(data);
+    return screen;
+}
+
 GtkWidget* createCopilotWindow(AppData* data) {
     GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "Co-Pilot Display");
@@ -1095,6 +1217,7 @@ GtkWidget* createCopilotWindow(AppData* data) {
     data->calibrationScreen = createCalibrationScreen(data);
     data->dateTimeScreen = createDateTimeScreen(data);
     data->autoStartScreen = createAutoStartScreen(data);
+    data->setupScreen = createSetupScreen(data);
     
     // Add screens to stack
     gtk_stack_add_named(data->copilotStack, data->twinMasterScreen, "twinmaster");
@@ -1102,6 +1225,7 @@ GtkWidget* createCopilotWindow(AppData* data) {
     gtk_stack_add_named(data->copilotStack, data->calibrationScreen, "calibration");
     gtk_stack_add_named(data->copilotStack, data->dateTimeScreen, "datetime");
     gtk_stack_add_named(data->copilotStack, data->autoStartScreen, "autostart");
+    gtk_stack_add_named(data->copilotStack, data->setupScreen, "setup");
     
     // Show TwinMaster by default
     gtk_stack_set_visible_child_name(data->copilotStack, "twinmaster");

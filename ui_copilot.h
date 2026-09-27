@@ -6,5 +6,6 @@
 
 void updateCopilotDisplay(AppData* data);
 GtkWidget* createCopilotWindow(AppData* data);
+void rebuildSetupDisplays(AppData* data);
 
 #endif // UI_COPILOT_H

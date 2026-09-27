@@ -594,6 +594,8 @@ int main(int argc, char* argv[]) {
         }
         gtk_widget_show_all(app_data.copilotWindow);
         std::cerr << "[DEBUG] Step 11b: Copilot window shown" << std::endl;
+        refreshSetupAudio(&app_data);
+        bluetoothAutoconnectOnStartup(&app_data);
 
         // Fullscreen co-pilot on its monitor AFTER showing (required for Wayland)
         if (copilot_monitor && copilot_index >= 0) {

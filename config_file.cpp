@@ -209,6 +209,8 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.bluetooth_audio_name = extractString(line);
         } else if (line.find("\"bluetooth_audio_address\"") != std::string::npos) {
             state.bluetooth_audio_address = extractString(line);
+        } else if (line.find("\"bluetooth_audio_autoconnect\"") != std::string::npos) {
+            state.bluetooth_audio_autoconnect = extractBool(line);
         }
     }
 }
@@ -278,6 +280,7 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"web_port\": " << state.web_port << ",\n";
     file << "  \"bluetooth_audio_name\": \"" << jsonEscape(state.bluetooth_audio_name) << "\",\n";
     file << "  \"bluetooth_audio_address\": \"" << jsonEscape(state.bluetooth_audio_address) << "\",\n";
+    file << "  \"bluetooth_audio_autoconnect\": " << (state.bluetooth_audio_autoconnect ? "true" : "false") << ",\n";
     
     // Check if any memory slots are populated
     bool has_memory = false;

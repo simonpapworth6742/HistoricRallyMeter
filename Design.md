@@ -226,11 +226,13 @@ The number of digits displayed for any of the values should not affect their pos
 
 **_Co-Pilots display window (1280 x 400) - dark theme only_**
 
-The co-pilot display window is wide (1280px) and shallow (400px). It has four screens:
+The co-pilot display window is wide (1280px) and shallow (400px). It has six screens:
 1) Stage setup
 2) Calibration
 3) TwinMaster display (default)
 4) Date and Time setup
+5) Auto Start setup
+6) Setup
 
 Layout notes for 1280x400 (wide, shallow display):
 - All layouts use horizontal arrangement to maximize width
@@ -323,7 +325,7 @@ Two-column layout with bottom navigation row:
 |                                                                   |          [11] [12] [13]              |
 |  [Next/prev]   xxx,xxx  m   xxx kph                               |  x,xxx m to alarm  [clear]           |
 +-------------------------------------------------------------------+--------------------------------------+
-|   [stage go / abort stage]  [segments]   [Adj. driver Zero (xx.xxs)]   [calibration]     [date/time]     |
+|   [stage go / abort stage]  [segments]   [Adj. driver Zero (xx.xxs)]   [calibration]     [date/time]  [cog] |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
@@ -366,6 +368,8 @@ Layout:
  
 - date/time: goes to Date/Time Setup screen
 
+- setup: a cog button (the standard preferences-system icon) immediately to the right of date/time. It stays a fixed 43px square while the other navigation buttons share the remaining width. Opens the Setup screen.
+
 - Reset buttons: [Total] / [Trip]  are reset buttons and reset their respective counters and start time only
 
 - [next/prev] button is only active when within 500m of the begining of a segment or the end of the segment, when it is within 500m of the end of a segement 
@@ -404,10 +408,9 @@ All fonts to be 20px
 |                                                                                 1    2    3               |
 |  Set Rally Clk: [yyyy/mm/dd] [hh:mm:ss]         +------------+                  /    0    :               |
 |                                                 |            |                 [C]  [   <--   ]           |
-|  Options:                                       |  QR code   |                                            |
-|  force single display mode        ( o)          |  132x132   |                                            |
-|  speed units          [ KPH ]                   +------------+                                            |
-|  [Remember bluetooth audio]  device name                                                       |
+|                                                 |  QR code   |                                            |
+|                                                 |  132x132   |                                            |
+|                                                 +------------+                                            |
 +----------------------------------------------------------------------------------------------------------+
 |                                [set and save]                          [back]                            |
 +----------------------------------------------------------------------------------------------------------+
@@ -417,12 +420,7 @@ on it, but no ";" and ".".
 
 - The [Exit app] button closes the application
 
-- the Options menu
-    force single display mode is a toggle button that sets a config value in the json file, and forces the use of single display only mode even if mutiple screens exist
-
-    speed units is a button showing the current unit ("KPH" or "MPH"); pressing it toggles the `units` config value between KPH and MPH and saves it. This is the only place the units are changed (the driver display no longer has a unit toggle). All speed displays across the driver, co-pilot and web client follow this setting.
-
-    [Remember bluetooth audio] looks at the Pi's current audio output. If that output is a Bluetooth device, its name and address are written to bluetooth_audio_name and bluetooth_audio_address and the name is shown beside the button. If the Pi is not using a Bluetooth speaker, both config entries are saved empty and the name beside the button is blank. The TwinMaster [connect speaker] button is shown only while an address is stored.
+- Display options, remembered Bluetooth audio, and Wi-Fi are on the Setup screen.
 
 - **Phone web access** (shown only when `web_enabled` is true in the config):
     - Displays the full URL to the web client (scheme `http://`, host from mDNS name `historicrallymeter.local` with fallback to the device's current LAN IP address, port from `web_port`).
@@ -454,6 +452,44 @@ Only allow time to be entered in the 24 hour clock, display an error and don't a
 
 Clear - sets the auto_start time to 0, making it in the past and therefor it has no further effect. The time entry is then filled with the soonest whole minute at least 30 seconds ahead, the same as a blank entry on opening the screen.
 Set - sets the auto start time in the config file etc. recording the offeset as defined, the screen is updated to show the new values.
+
+**6) Setup Screen**
+
+Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16px so the screen fits the 400px height. [back] is the same 20px, 43px-tall navigation button as on the other screens, sized to its label, and sits at the right. [Exit & Check for updates] sits immediately to its left. [back] returns to TwinMaster. [Exit & Check for updates] saves, closes the meter, and opens a terminal in the project directory running the `update` script. The terminal stays open until Enter is pressed so the result can be read.
+
+```
++----------------------------------------------------------------------------------------------------------+
+|  SETUP                                                                                                   |
+|  [DSI-2]          0 px          [HDMI-A-2]         0 px         [HDMI-A-1]                               |
+|  1280x400                         800x480                         2560x1440                               |
+|  left                             normal                          normal                                  |
+|  [rotate]                         [rotate]                        [rotate]                                |
+|  [Reset layout]                                                                                          |
+|  force single display mode   ( o)          speed units  [ KPH ]                                          |
+|  [Remember bluetooth audio]  device name   [Connect]  [Disconnect]                                       |
+|  [Hotspot: hostname]   [Join WiFi4hostname]                                                              |
+|  status line                                                                                             |
+|                                              [Exit & Check for updates]  [back]                          |
++----------------------------------------------------------------------------------------------------------+
+```
+
+Displays attached to the Pi are read from `wlr-randr`. Each connected output is shown in left-to-right order with its logical size in pixels (width and height swap for left, right, and the matching flipped orientations), its orientation (normal, left, inverted, right), and the horizontal gap in pixels to the next display (`next x − (x + width)`).
+
+[Reset layout] places the co-pilot panel on the left when one is attached. That panel is the output whose modes include 400×1280 or 1280×400. Its mode is set to 400×1280 when that mode exists, with the left orientation (transform 90), which makes the logical size 1280×400. If it only has a 1280×400 mode, that mode is used in the normal orientation so the logical size stays 1280×400. The driver panel, the output whose modes include 800×480 or 480×800 and which is not the co-pilot panel, is placed immediately to its right in the normal orientation using the 800×480 mode when that mode exists. Every other attached screen keeps its current mode and orientation and is placed further right. Every gap is 0 px and every screen is top-aligned. The layout is applied immediately with `wlr-randr` and written into the kanshi profile (`~/.config/kanshi/config`) whose outputs are exactly the screens attached now. That profile is placed first so it is the one kanshi applies on the next login. Other profiles are left as they are.
+
+Under each display, a small button with the rotate-right icon cycles orientation indefinitely: normal → left → inverted → right → normal. Only that output's orientation changes; positions are left as they are, then the same kanshi profile is updated.
+
+The app places its windows from the monitor list it read at startup, so a layout change is on the desktop immediately but the meter windows follow it after the app is started again. The status line says so after a successful change.
+
+Options moved here from Date/Time:
+
+- force single display mode is a toggle that sets `force_single_display` in the rally config and forces single-display mode even when more than one screen exists. It takes effect the next time the app starts.
+- speed units is a button showing the current unit ("KPH" or "MPH"). Pressing it toggles `units` and saves. This is the only place the units are changed. Driver, co-pilot, and web speeds follow it.
+- [Remember bluetooth audio] looks at the Pi's current audio output. If that output is a Bluetooth device, its name and address are written to `bluetooth_audio_name` and `bluetooth_audio_address` and the name is shown beside the button. If the Pi is not using a Bluetooth speaker, both entries are saved empty, the name is blank, and `bluetooth_audio_autoconnect` is cleared. The TwinMaster connect-speaker control is shown only while an address is stored.
+
+[Connect] and [Disconnect] are shown only when a Bluetooth address is recorded. Connect reconnects that speaker, makes it the audio output, trusts it in BlueZ, and sets `bluetooth_audio_autoconnect` so the app connects it again on startup. Disconnect disconnects it, moves the default output off that speaker, untrusts it so BlueZ does not reconnect it at login, and clears `bluetooth_audio_autoconnect`. The remembered name and address stay, so the buttons remain. The TwinMaster connect-speaker control still connects immediately and does not change the saved autoconnect choice.
+
+Wi-Fi uses NetworkManager on `wlan0`. [Hotspot: hostname] starts an open access point whose SSID is the Pi's hostname, with no password, shared IPv4, and autoconnect on. [Join WiFi4hostname] joins the open network whose SSID is `WiFi4` followed by the hostname (for hostname `raspberrypi`, `WiFi4raspberrypi`). The chosen connection is set to autoconnect and other Wi-Fi connections are set not to autoconnect, so the choice is what NetworkManager brings up after reboot. The status line shows the result.
 
 ## Remote Web Access (mobile phones)
 
@@ -773,6 +809,16 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Calculate rallyTimeOffset = input_rally_time_ms - system_time_ms
 - Set and save button stores offset and returns to TwinMaster
 - Back button returns without saving changes
+
+### Setup Screen Tests
+- Cog button on TwinMaster opens the Setup screen; back is on the right and returns to TwinMaster
+- Exit & Check for updates, to the left of back, closes the app and runs the update script in a terminal
+- Attached displays show logical pixel size, orientation, and the gap to the next display
+- Reset layout puts a 400×1280 panel on the left in the left orientation and an 800×480 panel to its right in the normal orientation, with other panels further right and no gaps, and writes that kanshi profile
+- Rotate cycles normal, left, inverted, right
+- Force single display, speed units, and Remember bluetooth audio behave as they did on Date/Time and are no longer on that screen
+- Connect and Disconnect appear only when a Bluetooth address is saved; Connect sets autoconnect, Disconnect clears it and keeps the address
+- Hotspot uses the hostname as an open SSID; Join uses WiFi4 plus the hostname; the chosen NetworkManager connection autoconnects and the other Wi-Fi connections do not
 
 ### Remote Web Access Tests
 - WebSocket telemetry includes `next_prev_label` and `next_prev_enabled` consistent with TwinMaster button state

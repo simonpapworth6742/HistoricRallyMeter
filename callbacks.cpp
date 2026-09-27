@@ -8,6 +8,7 @@
 #include "ui_copilot.h"
 #include "counter_poller.h"
 #include "tone_generator.h"
+#include "pi_setup.h"
 #include <cmath>
 #include <sstream>
 #include <iomanip>
@@ -16,6 +17,8 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cctype>
+#include <unistd.h>
+#include <vector>
 #include <chrono>
 #include <functional>
 
@@ -246,6 +249,19 @@ void refreshConnectSpeakerButton(AppData* data) {
     else gtk_widget_show(data->connectSpeakerBtn);
 }
 
+void refreshSetupAudio(AppData* data) {
+    if (!data) return;
+    bool on = !data->state->bluetooth_audio_address.empty();
+    if (data->setupBtConnectBtn) {
+        if (on) gtk_widget_show(data->setupBtConnectBtn);
+        else gtk_widget_hide(data->setupBtConnectBtn);
+    }
+    if (data->setupBtDisconnectBtn) {
+        if (on) gtk_widget_show(data->setupBtDisconnectBtn);
+        else gtk_widget_hide(data->setupBtDisconnectBtn);
+    }
+}
+
 void on_remember_bluetooth_audio(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     std::string sink = trimCopy(readCommand("pactl get-default-sink 2>/dev/null"));
@@ -256,27 +272,33 @@ void on_remember_bluetooth_audio(G_GNUC_UNUSED GtkWidget* widget, gpointer user_
     } else {
         data->state->bluetooth_audio_address.clear();
         data->state->bluetooth_audio_name.clear();
+        data->state->bluetooth_audio_autoconnect = false;
     }
     ConfigFile::save(*data->state);
     showRememberedBluetooth(data);
     refreshConnectSpeakerButton(data);
+    refreshSetupAudio(data);
 }
 
-void on_connect_speaker(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    const std::string& address = data->state->bluetooth_audio_address;
-    if (address.size() != 17) return;
+static bool bluetoothAddressOk(const std::string& address) {
+    if (address.size() != 17) return false;
     for (size_t i = 0; i < address.size(); i++) {
         unsigned char c = static_cast<unsigned char>(address[i]);
         if (i % 3 == 2) {
-            if (address[i] != ':') return;
+            if (address[i] != ':') return false;
         } else if (!std::isxdigit(c)) {
-            return;
+            return false;
         }
     }
+    return true;
+}
+
+static void spawnBluetoothConnect(const std::string& address, bool trust) {
     std::string underscored = address;
     for (char& c : underscored) if (c == ':') c = '_';
-    std::string script =
+    std::string script;
+    if (trust) script += "bluetoothctl trust '" + address + "' >/dev/null 2>&1; ";
+    script +=
         "bluetoothctl connect '" + address + "' >/dev/null 2>&1; "
         "sink='bluez_output." + underscored + ".1'; "
         "for i in 1 2 3 4 5 6 7 8; do "
@@ -285,6 +307,19 @@ void on_connect_speaker(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     gchar* argv[] = { (gchar*)"bash", (gchar*)"-c", const_cast<gchar*>(script.c_str()), nullptr };
     g_spawn_async(nullptr, argv, nullptr, G_SPAWN_SEARCH_PATH,
                   nullptr, nullptr, nullptr, nullptr);
+}
+
+void on_connect_speaker(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    const std::string& address = data->state->bluetooth_audio_address;
+    if (!bluetoothAddressOk(address)) return;
+    spawnBluetoothConnect(address, false);
+}
+
+void bluetoothAutoconnectOnStartup(AppData* data) {
+    if (!data || !data->state->bluetooth_audio_autoconnect) return;
+    if (!bluetoothAddressOk(data->state->bluetooth_audio_address)) return;
+    spawnBluetoothConnect(data->state->bluetooth_audio_address, true);
 }
 
 static const int RESPONSE_AUTO_START = 99;
@@ -574,6 +609,91 @@ void on_show_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 void on_show_twinmaster(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     gtk_stack_set_visible_child_name(data->copilotStack, "twinmaster");
+}
+
+static void pumpUi() {
+    while (gtk_events_pending()) gtk_main_iteration();
+}
+
+static void setSetupStatus(AppData* data, const std::string& text) {
+    if (data && data->setupStatusLabel)
+        gtk_label_set_text(data->setupStatusLabel, text.c_str());
+}
+
+void on_show_setup(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    gtk_stack_set_visible_child_name(data->copilotStack, "setup");
+    rebuildSetupDisplays(data);
+    refreshSetupAudio(data);
+    setSetupStatus(data, wifiStatusLine());
+}
+
+void on_setup_reset_layout(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    setSetupStatus(data, "Resetting layout...");
+    pumpUi();
+    std::string err;
+    if (!resetPiLayout(err)) setSetupStatus(data, err);
+    else setSetupStatus(data, "Layout saved. Restart the app so its windows follow the displays.");
+    rebuildSetupDisplays(data);
+}
+
+void on_setup_rotate(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    const char* name = static_cast<const char*>(g_object_get_data(G_OBJECT(widget), "output-name"));
+    if (!name) return;
+    setSetupStatus(data, "Turning display...");
+    pumpUi();
+    std::string err;
+    if (!rotatePiOutput(name, err)) setSetupStatus(data, err);
+    else setSetupStatus(data, "Layout saved. Restart the app so its windows follow the displays.");
+    rebuildSetupDisplays(data);
+}
+
+void on_setup_bt_connect(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (!bluetoothAddressOk(data->state->bluetooth_audio_address)) return;
+    data->state->bluetooth_audio_autoconnect = true;
+    ConfigFile::save(*data->state);
+    spawnBluetoothConnect(data->state->bluetooth_audio_address, true);
+    setSetupStatus(data, "Connecting remembered speaker");
+}
+
+void on_setup_bt_disconnect(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    const std::string& address = data->state->bluetooth_audio_address;
+    if (!bluetoothAddressOk(address)) return;
+    data->state->bluetooth_audio_autoconnect = false;
+    ConfigFile::save(*data->state);
+    std::string script =
+        "bluetoothctl disconnect '" + address + "' >/dev/null 2>&1; "
+        "bluetoothctl untrust '" + address + "' >/dev/null 2>&1; "
+        "sink=$(pactl get-default-sink 2>/dev/null); "
+        "case \"$sink\" in bluez_output.*) "
+        "alt=$(pactl list short sinks 2>/dev/null | awk '!/bluez_output/ {print $2; exit}'); "
+        "[ -n \"$alt\" ] && pactl set-default-sink \"$alt\" ;; esac";
+    gchar* argv[] = { (gchar*)"bash", (gchar*)"-c", const_cast<gchar*>(script.c_str()), nullptr };
+    g_spawn_async(nullptr, argv, nullptr, G_SPAWN_SEARCH_PATH,
+                  nullptr, nullptr, nullptr, nullptr);
+    setSetupStatus(data, "Disconnecting remembered speaker");
+}
+
+void on_setup_hotspot(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    setSetupStatus(data, "Starting hotspot...");
+    pumpUi();
+    std::string detail;
+    startWifiHotspot(detail);
+    setSetupStatus(data, detail);
+}
+
+void on_setup_join_wifi(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    setSetupStatus(data, "Joining " + wifiClientSsid() + "...");
+    pumpUi();
+    std::string detail;
+    joinWifiClient(detail);
+    setSetupStatus(data, detail);
 }
 
 void on_show_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
@@ -1354,6 +1474,69 @@ void on_alarm_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 void on_exit_app(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     ConfigFile::save(*data->state);
+    gtk_main_quit();
+}
+
+static std::string shellQuote(const std::string& s) {
+    std::string out = "'";
+    for (char c : s) {
+        if (c == '\'') out += "'\\''";
+        else out += c;
+    }
+    out += "'";
+    return out;
+}
+
+static std::string appDirectory() {
+    char buf[4096];
+    ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (n <= 0) return ".";
+    buf[n] = '\0';
+    std::string path(buf);
+    auto slash = path.rfind('/');
+    if (slash == std::string::npos) return ".";
+    return path.substr(0, slash);
+}
+
+void on_exit_and_update(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    ConfigFile::save(*data->state);
+
+    std::string dir = appDirectory();
+    std::string script = "cd " + shellQuote(dir) +
+        " && ./update; echo; echo 'Press Enter to close'; read -r";
+
+    std::vector<std::string> args = {
+        "systemd-run", "--user", "--collect",
+        "--working-directory=" + dir
+    };
+    auto addEnv = [&](const char* name) {
+        const char* value = std::getenv(name);
+        if (value && *value) args.push_back(std::string("--setenv=") + name + "=" + value);
+    };
+    addEnv("WAYLAND_DISPLAY");
+    addEnv("DISPLAY");
+    addEnv("XDG_RUNTIME_DIR");
+    addEnv("XDG_SESSION_TYPE");
+    addEnv("HOME");
+    args.push_back("lxterminal");
+    args.push_back("--working-directory=" + dir);
+    args.push_back("-e");
+    args.push_back("bash -lc " + shellQuote(script));
+
+    std::vector<char*> argv;
+    argv.reserve(args.size() + 1);
+    for (auto& a : args) argv.push_back(a.data());
+    argv.push_back(nullptr);
+
+    GError* error = nullptr;
+    if (!g_spawn_async(dir.c_str(), argv.data(), nullptr, G_SPAWN_SEARCH_PATH,
+                       nullptr, nullptr, nullptr, &error)) {
+        std::string message = error ? error->message : "Could not open a terminal";
+        if (error) g_error_free(error);
+        setSetupStatus(data, message);
+        return;
+    }
     gtk_main_quit();
 }
 

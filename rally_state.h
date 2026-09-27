@@ -61,6 +61,8 @@ public:
     // Remembered Bluetooth speaker. Both empty when none is remembered.
     std::string bluetooth_audio_name;
     std::string bluetooth_audio_address;
+    // When set, the app reconnects that speaker on startup. BlueZ trust follows it.
+    bool bluetooth_audio_autoconnect = false;
     
     // Driver window position/size (remembered across sessions)
     int driver_window_x = -1;      // -1 = not set

@@ -155,6 +155,13 @@ struct AppData {
     GtkLabel* autoStartTimeLabel;
     GtkEntry* autoStartTimeEntry;
     GtkWidget* autoStartKeypad;
+
+    // Setup screen
+    GtkWidget* setupScreen = nullptr;
+    GtkWidget* setupDisplayRow = nullptr;
+    GtkLabel* setupStatusLabel = nullptr;
+    GtkWidget* setupBtConnectBtn = nullptr;
+    GtkWidget* setupBtDisconnectBtn = nullptr;
     
     // Driver countdown overlay
     GtkWidget* countdownOverlay;
