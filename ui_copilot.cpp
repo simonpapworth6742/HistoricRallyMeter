@@ -1145,10 +1145,21 @@ static GtkWidget* createSetupScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(displays), titleLabel, FALSE, FALSE, 0);
     data->setupDisplayRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
     gtk_box_pack_start(GTK_BOX(displays), data->setupDisplayRow, FALSE, FALSE, 0);
+    GtkWidget* resetRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_set_halign(resetRow, GTK_ALIGN_START);
     GtkWidget* resetBtn = gtk_button_new_with_label("Reset layout");
-    gtk_widget_set_halign(resetBtn, GTK_ALIGN_START);
     g_signal_connect(resetBtn, "clicked", G_CALLBACK(on_setup_reset_layout), data);
-    gtk_box_pack_start(GTK_BOX(displays), resetBtn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(resetRow), resetBtn, FALSE, FALSE, 0);
+    GtkWidget* forceLabel = setupText("force single display mode");
+    gtk_widget_set_valign(forceLabel, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_start(forceLabel, 8);
+    GtkWidget* forceSwitch = gtk_switch_new();
+    gtk_switch_set_active(GTK_SWITCH(forceSwitch), data->state->force_single_display);
+    gtk_widget_set_valign(forceSwitch, GTK_ALIGN_CENTER);
+    g_signal_connect(forceSwitch, "state-set", G_CALLBACK(on_force_single_display_toggle), data);
+    gtk_box_pack_start(GTK_BOX(resetRow), forceLabel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(resetRow), forceSwitch, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(displays), resetRow, FALSE, FALSE, 0);
     gtk_grid_attach(GTK_GRID(top), displays, 0, 0, 2, 1);
 
     GtkWidget* webBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
@@ -1178,18 +1189,8 @@ static GtkWidget* createSetupScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(screen), rules, FALSE, FALSE, 0);
 
     GtkWidget* optRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 18);
-    GtkWidget* forceLabel = setupText("force single display mode");
-    gtk_widget_set_valign(forceLabel, GTK_ALIGN_CENTER);
-    GtkWidget* forceSwitch = gtk_switch_new();
-    gtk_switch_set_active(GTK_SWITCH(forceSwitch), data->state->force_single_display);
-    gtk_widget_set_valign(forceSwitch, GTK_ALIGN_CENTER);
-    g_signal_connect(forceSwitch, "state-set", G_CALLBACK(on_force_single_display_toggle), data);
-    gtk_box_pack_start(GTK_BOX(optRow), forceLabel, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(optRow), forceSwitch, FALSE, FALSE, 0);
-
     GtkWidget* unitsLabel = setupText("speed units");
     gtk_widget_set_valign(unitsLabel, GTK_ALIGN_CENTER);
-    gtk_widget_set_margin_start(unitsLabel, 12);
     data->unitToggleBtn = GTK_BUTTON(gtk_button_new_with_label(data->state->units ? "MPH" : "KPH"));
     gtk_widget_set_valign(GTK_WIDGET(data->unitToggleBtn), GTK_ALIGN_CENTER);
     gtk_box_pack_start(GTK_BOX(optRow), unitsLabel, FALSE, FALSE, 0);

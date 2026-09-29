@@ -450,7 +450,7 @@ Set - sets the auto start time in the config file etc. recording the offeset as 
 
 **6) Setup Screen**
 
-Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16px so the screen fits the 400px height. The display section at the top is split two thirds / one third. The left two thirds start with the SETUP title, then the attached displays, then [Reset layout]. The right third shows the phone web address above its QR code. The address is 24px and wraps onto more than one line when it is wider than that third. The QR code is centered in the third. Two thin horizontal lines run under that section so the split is visible. [back] is the same 20px, 43px-tall navigation button as on the other screens, sized to its label, and sits at the right. [Exit & Check for updates] sits immediately to its left, and [exit app] sits immediately to the left of that. [back] returns to TwinMaster. [exit app] saves and closes the application. [Exit & Check for updates] saves, closes the meter, and opens a terminal in the project directory running the `update` script. The terminal stays open until Enter is pressed so the result can be read.
+Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16px so the screen fits the 400px height. The display section at the top is split two thirds / one third. The left two thirds start with the SETUP title, then the attached displays, then [Reset layout] with force single display mode immediately to its right. The right third shows the phone web address above its QR code. The address is 24px and wraps onto more than one line when it is wider than that third. The QR code is centered in the third. Two thin horizontal lines run under that section so the split is visible. [back] is the same 20px, 43px-tall navigation button as on the other screens, sized to its label, and sits at the right. [Exit & Check for updates] sits immediately to its left, and [exit app] sits immediately to the left of that. [back] returns to TwinMaster. [exit app] saves and closes the application. [Exit & Check for updates] saves, closes the meter, and opens a terminal in the project directory running the `update` script. The terminal stays open until Enter is pressed so the result can be read.
 
 ```
 +----------------------------------------------------------------------------------------------------------+
@@ -459,10 +459,10 @@ Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16
 |  1280x400              800x480              2560x1440  |  [QR]                               |
 |  left                  normal               normal     |                                     |
 |  [rotate] [KB]         [rotate] [KB]        [rotate] [KB] |                                  |
-|  [Reset layout]                                    |                                     |
+|  [Reset layout]   force single display mode ( o)  |                                     |
 |----------------------------------------------------------------------------------------------------------|
 |----------------------------------------------------------------------------------------------------------|
-|  force single display mode   ( o)          speed units  [ KPH ]                                          |
+|  speed units  [ KPH ]                                                                                     |
 |  [Remember bluetooth audio]  device name   [Connect]  [Disconnect]                                       |
 |  [Hotspot: hostname]   [Join WiFi4hostname]                                                              |
 |  status line                                                                                             |
@@ -470,7 +470,7 @@ Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16
 +----------------------------------------------------------------------------------------------------------+
 ```
 
-The phone address sits above the QR code and wraps onto further lines when it does not fit the right third. Both are shown only when `web_enabled` is true. The address is the web client URL without the `http://` scheme (host `historicrallymeter.local`, or the device's LAN address if mDNS is unavailable, and the port from `web_port`). The QR code encodes the full URL. Both are omitted, and the right third says the web server is disabled, when `web_enabled` is false. [Reset layout] is in the display section, under the attached screens and above the dividing lines.
+The phone address sits above the QR code and wraps onto further lines when it does not fit the right third. Both are shown only when `web_enabled` is true. The address is the web client URL without the `http://` scheme (host `historicrallymeter.local`, or the device's LAN address if mDNS is unavailable, and the port from `web_port`). The QR code encodes the full URL. Both are omitted, and the right third says the web server is disabled, when `web_enabled` is false. [Reset layout] is in the display section, under the attached screens and above the dividing lines. Force single display mode sits immediately to its right.
 
 Displays attached to the Pi are read from `wlr-randr`. Each connected output is shown in left-to-right order with its logical size in pixels (width and height swap for left, right, and the matching flipped orientations), its orientation (normal, left, inverted, right), and the horizontal gap in pixels to the next display (`next x − (x + width)`).
 
@@ -815,7 +815,7 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Cog button on TwinMaster opens the Setup screen; back is on the right and returns to TwinMaster
 - [exit app], to the left of Exit & Check for updates, saves and closes the application
 - Exit & Check for updates, to the left of back, closes the app and runs the update script in a terminal
-- The display section shows SETUP, the attached screens, and Reset layout on the left two thirds, and the web address above the QR code on the right third, with two thin lines under that section
+- The display section shows SETUP, the attached screens, and Reset layout with force single display mode to its right on the left two thirds, and the web address above the QR code on the right third, with two thin lines under that section
 - When `web_enabled` is true, the right third shows the web client address and a QR code for that URL; both are omitted when `web_enabled` is false
 - Attached displays show logical pixel size, orientation, and the gap to the next display
 - Reset layout puts a 400×1280 panel on the left in the left orientation and an 800×480 panel to its right in the normal orientation, with other panels further right and no gaps, and writes that kanshi profile
