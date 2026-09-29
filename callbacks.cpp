@@ -21,6 +21,9 @@
 #include <vector>
 #include <chrono>
 #include <functional>
+#include <thread>
+#include <atomic>
+#include <sys/wait.h>
 
 static void writeCalRunEntries(AppData* data, long metres, long calibration);
 
@@ -667,6 +670,7 @@ void on_show_setup(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     gtk_stack_set_visible_child_name(data->copilotStack, "setup");
     rebuildSetupDisplays(data);
     refreshSetupAudio(data);
+    refreshWebAccess(data);
     setSetupStatus(data, wifiStatusLine());
 }
 
@@ -752,11 +756,7 @@ void on_setup_join_wifi(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     setSetupStatus(data, detail);
 }
 
-void on_show_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
-    AppData* data = static_cast<AppData*>(user_data);
-    gtk_stack_set_visible_child_name(data->copilotStack, "datetime");
-    updateDateTimeDisplay(data);
-
+static void fillRallyClockEntries(AppData* data) {
     int64_t rally_ms = getRallyTime_ms(*data->state);
     time_t rally_seconds = rally_ms / 1000;
     struct tm* rally_tm = localtime(&rally_seconds);
@@ -767,6 +767,13 @@ void on_show_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     snprintf(buf, sizeof(buf), "%02d:%02d:%02d",
              rally_tm->tm_hour, rally_tm->tm_min, rally_tm->tm_sec);
     gtk_entry_set_text(data->timeEntry, buf);
+}
+
+void on_show_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    gtk_stack_set_visible_child_name(data->copilotStack, "datetime");
+    updateDateTimeDisplay(data);
+    fillRallyClockEntries(data);
 }
 
 // Create numeric keypad widget
@@ -1154,6 +1161,8 @@ void updateCalibrationDisplay(AppData* data) {
     refreshCalWorkflow(data);
 }
 
+static void refreshNtpSyncButton(AppData* data);
+
 // Helper function to update date/time display
 void updateDateTimeDisplay(AppData* data) {
     // System clock
@@ -1182,9 +1191,14 @@ void updateDateTimeDisplay(AppData* data) {
              rally_tm->tm_hour, rally_tm->tm_min, rally_tm->tm_sec);
     if (data->rallyTimeLabel) gtk_label_set_text(data->rallyTimeLabel, buf);
 
-    if (data->webUrlLabel && data->webServer && data->state->web_enabled) {
+    refreshWebAccess(data);
+    refreshNtpSyncButton(data);
+}
+
+void refreshWebAccess(AppData* data) {
+    if (!data->webUrlLabel) return;
+    if (data->webServer && data->state->web_enabled) {
         std::string url = data->webServer->getWebUrl();
-        // Drop the scheme ("http://") to keep the on-screen address compact.
         const std::string scheme = "http://";
         if (url.rfind(scheme, 0) == 0) url = url.substr(scheme.size());
         gtk_label_set_text(data->webUrlLabel, url.c_str());
@@ -1193,10 +1207,55 @@ void updateDateTimeDisplay(AppData* data) {
             gtk_widget_queue_draw(data->webQrArea);
         }
         gtk_widget_show(GTK_WIDGET(data->webUrlLabel));
-    } else if (data->webUrlLabel) {
+    } else {
         gtk_label_set_text(data->webUrlLabel, "(web server disabled)");
         if (data->webQrArea) gtk_widget_hide(data->webQrArea);
     }
+}
+
+static void refreshNtpSyncButton(AppData* data) {
+    if (!data->ntpSyncBtn) return;
+    static std::atomic<bool> running{false};
+    static std::atomic<gint64> lastUs{0};
+    gint64 now = g_get_monotonic_time();
+    if (running.load() || now - lastUs.load() < 2 * G_USEC_PER_SEC) return;
+    running = true;
+    lastUs = now;
+    std::thread([data] {
+        bool full = false;
+        FILE* fp = popen("nmcli -w 3 networking connectivity check 2>/dev/null", "r");
+        if (fp) {
+            char buf[64] = {};
+            if (fgets(buf, sizeof(buf), fp)) {
+                std::string text(buf);
+                while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back())))
+                    text.pop_back();
+                int status = pclose(fp);
+                full = WIFEXITED(status) && WEXITSTATUS(status) == 0 && text == "full";
+            } else {
+                pclose(fp);
+            }
+        }
+        auto* apply = new std::pair<AppData*, bool>(data, full);
+        g_idle_add(+[](gpointer p) -> gboolean {
+            auto* result = static_cast<std::pair<AppData*, bool>*>(p);
+            if (result->first->ntpSyncBtn)
+                gtk_widget_set_sensitive(result->first->ntpSyncBtn, result->second);
+            delete result;
+            return G_SOURCE_REMOVE;
+        }, apply);
+        running = false;
+    }).detach();
+}
+
+void on_ntp_time_sync(GtkWidget* widget, G_GNUC_UNUSED gpointer user_data) {
+    if (!gtk_widget_get_sensitive(widget)) return;
+    gchar* argv[] = {
+        (gchar*)"sudo", (gchar*)"-n", (gchar*)"systemctl",
+        (gchar*)"restart", (gchar*)"systemd-timesyncd", nullptr
+    };
+    g_spawn_async(nullptr, argv, nullptr, G_SPAWN_SEARCH_PATH,
+                  nullptr, nullptr, nullptr, nullptr);
 }
 
 void on_add_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
@@ -1663,6 +1722,18 @@ void on_save_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
             updateDateTimeDisplay(data);
         }
     }
+}
+
+void on_rally_clock_nudge(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "nudge-zero")))
+        data->state->rallyTimeOffset_ms = 0;
+    else
+        data->state->rallyTimeOffset_ms +=
+            GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "nudge-ms"));
+    ConfigFile::save(*data->state);
+    updateDateTimeDisplay(data);
+    fillRallyClockEntries(data);
 }
 
 // Epoch for auto_start: 2020-01-01 00:00:00 local time

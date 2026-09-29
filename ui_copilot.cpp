@@ -101,9 +101,13 @@ static void applyCopilotCSS() {
         "button.connect-speaker { font-size: 11px; font-family: monospace; padding: 0; min-width: 44px; min-height: 44px; }"
         "button.connect-speaker label { font-size: 11px; font-family: monospace; }"
         ".setup-label { font-size: 16px; }"
+        ".setup-url { font-size: 24px; }"
         "button.setup-rotate { padding: 0; min-width: 36px; min-height: 36px; }"
         "button.setup-kb { font-size: 14px; padding: 2px 6px; min-height: 36px; }"
-        "button.setup-kb label { font-size: 14px; }",
+        "button.setup-kb label { font-size: 14px; }"
+        "button.rally-nudge { font-size: 16px; padding: 2px 4px; min-height: 36px; }"
+        "button.rally-nudge label { font-size: 16px; }"
+        "separator.setup-rule { background-color: #FFFFFF; min-height: 1px; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
         gdk_screen_get_default(),
@@ -176,6 +180,11 @@ void updateCopilotDisplay(AppData* data) {
     // Update auto-start screen if visible
     if (visible_child == data->autoStartScreen) {
         updateAutoStartDisplay(data);
+        return;
+    }
+
+    if (visible_child == data->setupScreen) {
+        refreshWebAccess(data);
         return;
     }
     
@@ -891,12 +900,34 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_label_set_xalign(data->rallyTimeLabel, 0.0);
     gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->rallyTimeLabel), 2, 1, 1, 1);
 
-    // Row 2: Set rally clock — date box under the date column, time box under time
+    // Row 2: nudge the rally clock offset. Spans the clock columns so the
+    // eleven buttons sit on the line immediately under Rally Clock.
+    GtkWidget* nudgeRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+    gtk_widget_set_hexpand(nudgeRow, TRUE);
+    struct Nudge { const char* label; int delta_ms; int zero; };
+    const Nudge nudges[] = {
+        {"+1h", 3600000, 0}, {"+10m", 600000, 0}, {"+1m", 60000, 0},
+        {"+10s", 10000, 0}, {"+1s", 1000, 0}, {"+10ms", 10, 0}, {"Zero", 0, 1},
+        {"-10ms", -10, 0}, {"-1s", -1000, 0}, {"-10s", -10000, 0}, {"-1m", -60000, 0},
+        {"-10m", -600000, 0}, {"-1h", -3600000, 0},
+    };
+    for (const Nudge& nudge : nudges) {
+        GtkWidget* btn = gtk_button_new_with_label(nudge.label);
+        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "rally-nudge");
+        gtk_widget_set_hexpand(btn, TRUE);
+        g_object_set_data(G_OBJECT(btn), "nudge-ms", GINT_TO_POINTER(nudge.delta_ms));
+        g_object_set_data(G_OBJECT(btn), "nudge-zero", GINT_TO_POINTER(nudge.zero));
+        g_signal_connect(btn, "clicked", G_CALLBACK(on_rally_clock_nudge), data);
+        gtk_box_pack_start(GTK_BOX(nudgeRow), btn, TRUE, TRUE, 0);
+    }
+    gtk_grid_attach(GTK_GRID(clockGrid), nudgeRow, 0, 2, 4, 1);
+
+    // Row 3: Set rally clock — date box under the date column, time box under time
     GtkWidget* setLabel = gtk_label_new("Set Rally Clk:");
     gtk_style_context_add_class(gtk_widget_get_style_context(setLabel), "clock-label");
     gtk_widget_set_halign(setLabel, GTK_ALIGN_START);
     gtk_widget_set_margin_top(setLabel, 6);
-    gtk_grid_attach(GTK_GRID(clockGrid), setLabel, 0, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(clockGrid), setLabel, 0, 3, 1, 1);
 
     data->dateEntry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_placeholder_text(data->dateEntry, "yyyy/mm/dd");
@@ -904,7 +935,7 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_widget_set_margin_top(GTK_WIDGET(data->dateEntry), 6);
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->dateEntry)), "clock-label");
     g_signal_connect(data->dateEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
-    gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->dateEntry), 1, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->dateEntry), 1, 3, 1, 1);
 
     data->timeEntry = GTK_ENTRY(gtk_entry_new());
     gtk_entry_set_placeholder_text(data->timeEntry, "hh:mm:ss");
@@ -912,45 +943,37 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_widget_set_margin_top(GTK_WIDGET(data->timeEntry), 6);
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->timeEntry)), "clock-label");
     g_signal_connect(data->timeEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
-    gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->timeEntry), 2, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->timeEntry), 2, 3, 1, 1);
 
-    // Middle column: phone web access (URL + QR) placed in the open space to the
-    // right of the clock rows (top-aligned, URL level with the System Clock row),
-    // between the narrowed left column and the keypad, so it neither overflows the
-    // left column nor pushes the keypad off-screen.
-    GtkWidget* webBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-    gtk_widget_set_valign(webBox, GTK_ALIGN_START);
-    gtk_widget_set_halign(webBox, GTK_ALIGN_CENTER);
-    gtk_box_pack_start(GTK_BOX(mainBox), webBox, TRUE, TRUE, 0);
-
-    data->webUrlLabel = GTK_LABEL(gtk_label_new(""));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->webUrlLabel)), "clock-label");
-    gtk_label_set_selectable(data->webUrlLabel, TRUE);
-    gtk_box_pack_start(GTK_BOX(webBox), GTK_WIDGET(data->webUrlLabel), FALSE, FALSE, 0);
-
-    data->webQrArea = gtk_drawing_area_new();
-    gtk_widget_set_size_request(data->webQrArea, 132, 132);
-    gtk_widget_set_halign(data->webQrArea, GTK_ALIGN_CENTER);
-    gtk_widget_set_margin_top(data->webQrArea, 6);
-    g_signal_connect(data->webQrArea, "draw", G_CALLBACK(on_qr_draw), data);
-    gtk_box_pack_start(GTK_BOX(webBox), data->webQrArea, FALSE, FALSE, 0);
+    GtkWidget* saveBtn = gtk_button_new_with_label("Set");
+    gtk_style_context_add_class(gtk_widget_get_style_context(saveBtn), "nav-button");
+    gtk_widget_set_size_request(saveBtn, -1, 43);
+    gtk_widget_set_halign(saveBtn, GTK_ALIGN_START);
+    gtk_widget_set_valign(saveBtn, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_top(saveBtn, 6);
+    g_signal_connect(saveBtn, "clicked", G_CALLBACK(on_save_datetime), data);
+    gtk_grid_attach(GTK_GRID(clockGrid), saveBtn, 3, 3, 1, 1);
 
     // Right side: datetime keypad
     data->datetimeKeypad = createDateTimeKeypad(data);
     gtk_box_pack_end(GTK_BOX(mainBox), data->datetimeKeypad, FALSE, FALSE, 10);
     
-    // Bottom: navigation buttons
-    GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 20);
-    gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 5);
+    // Bottom row matches TwinMaster: 20px nav font, 43px tall, sharing the width.
+    GtkWidget* buttonBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
+    gtk_box_pack_end(GTK_BOX(screen), buttonBox, FALSE, FALSE, 0);
     
-    GtkWidget* saveBtn = gtk_button_new_with_label("set and save");
+    data->ntpSyncBtn = gtk_button_new_with_label("NTP time sync");
+    gtk_widget_set_sensitive(data->ntpSyncBtn, FALSE);
     GtkWidget* backBtn = gtk_button_new_with_label("back");
-    
-    g_signal_connect(saveBtn, "clicked", G_CALLBACK(on_save_datetime), data);
+
+    g_signal_connect(data->ntpSyncBtn, "clicked", G_CALLBACK(on_ntp_time_sync), data);
     g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
-    
-    gtk_box_pack_start(GTK_BOX(buttonBox), saveBtn, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(buttonBox), backBtn, TRUE, TRUE, 0);
+
+    for (GtkWidget* btn : {data->ntpSyncBtn, backBtn}) {
+        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "nav-button");
+        gtk_widget_set_size_request(btn, -1, 43);
+        gtk_box_pack_start(GTK_BOX(buttonBox), btn, TRUE, TRUE, 0);
+    }
     
     return screen;
 }
@@ -1096,22 +1119,63 @@ void rebuildSetupDisplays(AppData* data) {
     gtk_widget_show_all(data->setupDisplayRow);
 }
 
+static GtkWidget* setupRule() {
+    GtkWidget* line = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_style_context_add_class(gtk_widget_get_style_context(line), "setup-rule");
+    gtk_widget_set_hexpand(line, TRUE);
+    return line;
+}
+
 static GtkWidget* createSetupScreen(AppData* data) {
     GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
 
+    // Display section: left two thirds are the screens, right third is the web address above the QR code.
+    GtkWidget* top = gtk_grid_new();
+    gtk_grid_set_column_homogeneous(GTK_GRID(top), TRUE);
+    gtk_grid_set_column_spacing(GTK_GRID(top), 8);
+    gtk_widget_set_hexpand(top, TRUE);
+    gtk_widget_set_valign(top, GTK_ALIGN_START);
+
+    GtkWidget* displays = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_valign(displays, GTK_ALIGN_START);
     GtkWidget* titleLabel = gtk_label_new("SETUP");
     gtk_style_context_add_class(gtk_widget_get_style_context(titleLabel), "title-label");
     gtk_widget_set_halign(titleLabel, GTK_ALIGN_START);
-    gtk_box_pack_start(GTK_BOX(screen), titleLabel, FALSE, FALSE, 0);
-
+    gtk_box_pack_start(GTK_BOX(displays), titleLabel, FALSE, FALSE, 0);
     data->setupDisplayRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
-    gtk_box_pack_start(GTK_BOX(screen), data->setupDisplayRow, FALSE, FALSE, 0);
-
+    gtk_box_pack_start(GTK_BOX(displays), data->setupDisplayRow, FALSE, FALSE, 0);
     GtkWidget* resetBtn = gtk_button_new_with_label("Reset layout");
     gtk_widget_set_halign(resetBtn, GTK_ALIGN_START);
     g_signal_connect(resetBtn, "clicked", G_CALLBACK(on_setup_reset_layout), data);
-    gtk_box_pack_start(GTK_BOX(screen), resetBtn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(displays), resetBtn, FALSE, FALSE, 0);
+    gtk_grid_attach(GTK_GRID(top), displays, 0, 0, 2, 1);
+
+    GtkWidget* webBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_valign(webBox, GTK_ALIGN_START);
+    gtk_widget_set_halign(webBox, GTK_ALIGN_FILL);
+    gtk_widget_set_hexpand(webBox, TRUE);
+    data->webUrlLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->webUrlLabel)), "setup-url");
+    gtk_label_set_xalign(data->webUrlLabel, 0.0);
+    gtk_label_set_line_wrap(data->webUrlLabel, TRUE);
+    gtk_label_set_line_wrap_mode(data->webUrlLabel, PANGO_WRAP_WORD_CHAR);
+    gtk_label_set_max_width_chars(data->webUrlLabel, 18);
+    gtk_widget_set_halign(GTK_WIDGET(data->webUrlLabel), GTK_ALIGN_START);
+    data->webQrArea = gtk_drawing_area_new();
+    gtk_widget_set_size_request(data->webQrArea, 110, 110);
+    gtk_widget_set_halign(data->webQrArea, GTK_ALIGN_CENTER);
+    g_signal_connect(data->webQrArea, "draw", G_CALLBACK(on_qr_draw), data);
+    gtk_box_pack_start(GTK_BOX(webBox), GTK_WIDGET(data->webUrlLabel), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(webBox), data->webQrArea, FALSE, FALSE, 0);
+    gtk_grid_attach(GTK_GRID(top), webBox, 2, 0, 1, 1);
+    gtk_box_pack_start(GTK_BOX(screen), top, FALSE, FALSE, 0);
+
+    GtkWidget* rules = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_widget_set_hexpand(rules, TRUE);
+    gtk_box_pack_start(GTK_BOX(rules), setupRule(), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(rules), setupRule(), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(screen), rules, FALSE, FALSE, 0);
 
     GtkWidget* optRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 18);
     GtkWidget* forceLabel = setupText("force single display mode");
@@ -1201,6 +1265,7 @@ static GtkWidget* createSetupScreen(AppData* data) {
 
     rebuildSetupDisplays(data);
     refreshSetupAudio(data);
+    refreshWebAccess(data);
     return screen;
 }
 
@@ -1217,9 +1282,8 @@ GtkWidget* createCopilotWindow(AppData* data) {
     
     // Create stack for screens
     data->copilotStack = GTK_STACK(gtk_stack_new());
-    // Size each screen to its own content, not the tallest child. The Date/Time
-    // screen (with the phone-access QR code) is taller than the 400px window;
-    // with the default vhomogeneous=TRUE it would inflate every screen's minimum
+    // Size each screen to its own content, not the tallest child. A tall screen
+    // with the default vhomogeneous=TRUE would inflate every screen's minimum
     // height and push the TwinMaster nav bar off the bottom of the display.
     gtk_stack_set_vhomogeneous(data->copilotStack, FALSE);
     gtk_stack_set_hhomogeneous(data->copilotStack, FALSE);

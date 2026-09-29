@@ -148,6 +148,7 @@ struct AppData {
     GtkLabel* rallyTimeLabel;
     GtkEntry* dateEntry;
     GtkEntry* timeEntry;
+    GtkWidget* ntpSyncBtn = nullptr;
     
     // Auto Start setup screen
     GtkWidget* autoStartScreen;

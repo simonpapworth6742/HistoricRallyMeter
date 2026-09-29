@@ -402,28 +402,25 @@ All fonts to be 20px
 +----------------------------------------------------------------------------------------------------------+
 |  DATE/TIME SETUP                                                                                        |
 +----------------------------------------------------------------------------------------------------------+
-|  System Clock:  yyyy/mm/dd  hh:mm:ss                                                                      |
-|                                          historicrallymeter.local:8080          7    8    9               |
-|  Rally  Clock:  yyyy/mm/dd  hh:mm:ss      (or device IP if mDNS unavailable)    4    5    6               |
-|                                                                                 1    2    3               |
-|  Set Rally Clk: [yyyy/mm/dd] [hh:mm:ss]         +------------+                  /    0    :               |
-|                                                 |            |                 [C]  [   <--   ]           |
-|                                                 |  QR code   |                                            |
-|                                                 |  132x132   |                                            |
-|                                                 +------------+                                            |
+|  System Clock:  yyyy/mm/dd  hh:mm:ss                                               7    8    9            |
+|  Rally  Clock:  yyyy/mm/dd  hh:mm:ss                                               4    5    6            |
+|  [+1h][+10m][+1m][+10s][+1s][+10ms][Zero][-10ms][-1s][-10s][-1m][-10m][-1h]       1    2    3            |
+|  Set Rally Clk: [yyyy/mm/dd] [hh:mm:ss] [Set]                                      /    0    :            |
+|                                                                                 [C]  [   <--   ]          |
 +----------------------------------------------------------------------------------------------------------+
-|                                [set and save]                          [back]                            |
+|                              [NTP time sync]                              [back]                         |
 +----------------------------------------------------------------------------------------------------------+
 ```
 Display a numeric keypad for entry on the right, it is a different keypad to other screens as it has "/" and ":" 
 on it, but no ";" and ".".
 
-- Display options, remembered Bluetooth audio, and Wi-Fi are on the Setup screen.
+Under Rally Clock, a row of buttons adjusts `rallyTimeOffset_ms` and saves it. [+1h] [+10m] [+1m] [+10s] [+1s] [+10ms] add that much to the offset. [-10ms] [-1s] [-10s] [-1m] [-10m] [-1h] subtract it. [Zero] sets the offset to 0. The rally clock updates immediately.
 
-- **Phone web access** (shown only when `web_enabled` is true in the config):
-    - Displays the full URL to the web client (scheme `http://`, host from mDNS name `historicrallymeter.local` with fallback to the device's current LAN IP address, port from `web_port`).
-    - Renders a QR code encoding that same URL (minimum size ~120×120 px on screen, high contrast for scanning in daylight).
-    - The QR code and URL update if `web_port` changes after save; they are omitted entirely when the web server is disabled.
+[Set] sits immediately to the right of the time entry. It stores the rally clock offset and returns to TwinMaster. The bottom row buttons use the same 20px font and 43px height as the TwinMaster navigation buttons, and share the width of the row.
+
+[NTP time sync] tells the Pi to set the system clock from NTP immediately by restarting systemd-timesyncd. The button is enabled only while NetworkManager reports a full internet connection. It stays disabled when there is no link, or the connection is limited or a captive portal.
+
+- Display options, remembered Bluetooth audio, Wi-Fi, and phone web access are on the Setup screen.
 
 **5) Auto Start Setup Screen**
 
@@ -453,16 +450,18 @@ Set - sets the auto start time in the config file etc. recording the offeset as 
 
 **6) Setup Screen**
 
-Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16px so the screen fits the 400px height. [back] is the same 20px, 43px-tall navigation button as on the other screens, sized to its label, and sits at the right. [Exit & Check for updates] sits immediately to its left, and [exit app] sits immediately to the left of that. [back] returns to TwinMaster. [exit app] saves and closes the application. [Exit & Check for updates] saves, closes the meter, and opens a terminal in the project directory running the `update` script. The terminal stays open until Enter is pressed so the result can be read.
+Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16px so the screen fits the 400px height. The display section at the top is split two thirds / one third. The left two thirds start with the SETUP title, then the attached displays, then [Reset layout]. The right third shows the phone web address above its QR code. The address is 24px and wraps onto more than one line when it is wider than that third. The QR code is centered in the third. Two thin horizontal lines run under that section so the split is visible. [back] is the same 20px, 43px-tall navigation button as on the other screens, sized to its label, and sits at the right. [Exit & Check for updates] sits immediately to its left, and [exit app] sits immediately to the left of that. [back] returns to TwinMaster. [exit app] saves and closes the application. [Exit & Check for updates] saves, closes the meter, and opens a terminal in the project directory running the `update` script. The terminal stays open until Enter is pressed so the result can be read.
 
 ```
 +----------------------------------------------------------------------------------------------------------+
-|  SETUP                                                                                                   |
-|  [DSI-2]          0 px          [HDMI-A-2]         0 px         [HDMI-A-1]                               |
-|  1280x400                         800x480                         2560x1440                               |
-|  left                             normal                          normal                                  |
-|  [rotate] [Enable KB on DSI-2]    [rotate] [Enable KB on HDMI-A-2] [rotate] [Enable KB on HDMI-A-1]       |
-|  [Reset layout]                                                                                          |
+|  SETUP                                             |  historicrallymeter.local:          |
+|  [DSI-2]     0 px    [HDMI-A-2]    0 px    [HDMI-A-1] |  8080                               |
+|  1280x400              800x480              2560x1440  |  [QR]                               |
+|  left                  normal               normal     |                                     |
+|  [rotate] [KB]         [rotate] [KB]        [rotate] [KB] |                                  |
+|  [Reset layout]                                    |                                     |
+|----------------------------------------------------------------------------------------------------------|
+|----------------------------------------------------------------------------------------------------------|
 |  force single display mode   ( o)          speed units  [ KPH ]                                          |
 |  [Remember bluetooth audio]  device name   [Connect]  [Disconnect]                                       |
 |  [Hotspot: hostname]   [Join WiFi4hostname]                                                              |
@@ -470,6 +469,8 @@ Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16
 |                                [exit app]  [Exit & Check for updates]  [back]                          |
 +----------------------------------------------------------------------------------------------------------+
 ```
+
+The phone address sits above the QR code and wraps onto further lines when it does not fit the right third. Both are shown only when `web_enabled` is true. The address is the web client URL without the `http://` scheme (host `historicrallymeter.local`, or the device's LAN address if mDNS is unavailable, and the port from `web_port`). The QR code encodes the full URL. Both are omitted, and the right third says the web server is disabled, when `web_enabled` is false. [Reset layout] is in the display section, under the attached screens and above the dividing lines.
 
 Displays attached to the Pi are read from `wlr-randr`. Each connected output is shown in left-to-right order with its logical size in pixels (width and height swap for left, right, and the matching flipped orientations), its orientation (normal, left, inverted, right), and the horizontal gap in pixels to the next display (`next x − (x + width)`).
 
@@ -802,17 +803,20 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 ### Date/Time Setup Screen Tests
 - Display system clock in yyyy/mm/dd hh:mm:ss format
 - Display RallyClock (with current offset) in yyyy/mm/dd hh:mm:ss format
-- When `web_enabled` is true, display web client URL and QR code encoding that URL; omit both when `web_enabled` is false
-- QR code resolves to a page loadable on a phone on the same subnet
 - Input fields accept valid date and time values
 - Calculate rallyTimeOffset = input_rally_time_ms - system_time_ms
-- Set and save button stores offset and returns to TwinMaster
+- Set, immediately to the right of the time entry, stores the offset and returns to TwinMaster
+- The row under Rally Clock adds or subtracts 1h, 10m, 1m, 10s, 1s, or 10ms from the rally offset and saves it; Zero sets the offset to 0
+- Bottom row buttons are 20px and 43px tall, the same as TwinMaster
+- NTP time sync is enabled only when the internet connection is full, and pressing it syncs the system clock from NTP
 - Back button returns without saving changes
 
 ### Setup Screen Tests
 - Cog button on TwinMaster opens the Setup screen; back is on the right and returns to TwinMaster
 - [exit app], to the left of Exit & Check for updates, saves and closes the application
 - Exit & Check for updates, to the left of back, closes the app and runs the update script in a terminal
+- The display section shows SETUP, the attached screens, and Reset layout on the left two thirds, and the web address above the QR code on the right third, with two thin lines under that section
+- When `web_enabled` is true, the right third shows the web client address and a QR code for that URL; both are omitted when `web_enabled` is false
 - Attached displays show logical pixel size, orientation, and the gap to the next display
 - Reset layout puts a 400×1280 panel on the left in the left orientation and an 800×480 panel to its right in the normal orientation, with other panels further right and no gaps, and writes that kanshi profile
 - Rotate cycles normal, left, inverted, right
