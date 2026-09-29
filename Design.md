@@ -358,7 +358,7 @@ Layout:
 
 - Navigation buttons spread across full-width bottom row (20px font, 43px tall):
 
-- stage go: shown when no current segment is selected (segment_current_number is -1, or does not point at a segment). Conformation dialog (with 30px text and buttons with at least 20px between buttons), with "Auto start" option,  with yes reseting Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green, and zero's the ahead_behind_zero_offset_ms. Yes also clears any auto start time still in the future, so the stage starts immediately and that countdown does not fire later. "Auto start" option should go to the "Auto start setup screen. While a current segment is selected, the same button reads "abort stage". Its conformation dialog asks "Abort stage?"; Yes sets segment_current_number to -1 and saves, No leaves the stage running.
+- stage go: shown when no current segment is selected (segment_current_number is -1, or does not point at a segment). Conformation dialog (with 30px text and buttons with at least 20px between buttons), with "Auto start" option,  with yes reseting Total, Trip, and Segment (counters + start time), sets the driver's display gauge to green, and zero's the ahead_behind_zero_offset_ms. Yes also clears any auto start time still in the future, so the stage starts immediately and that countdown does not fire later. "Auto start" option should go to the "Auto start setup screen. The dialog also has a button labelled with the soonest whole minute (hh:mm) that is at least 10 seconds ahead of rally time. Pressing it stores that minute as the auto start time, the same as Set on the Auto Start screen, and closes the dialog. If that minute is no longer at least 10 seconds ahead, the button is disabled. While a current segment is selected, the same button reads "abort stage". Its conformation dialog asks "Abort stage?"; Yes sets segment_current_number to -1 and saves, No leaves the stage running.
  
 - segments: goes to Stage Setup
 
@@ -797,6 +797,7 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Next segment button advances segment and resets Trip
 - Calibration button navigates to Calibration screen
 - RallyClock displays at top in hh:mm:ss format
+- Stage Go dialog offers the next whole minute at least 10 seconds ahead, labelled hh:mm; pressing it stores that auto start time the same way as Auto Start Set, and the button disables once that minute is under 10 seconds away
 
 ### Date/Time Setup Screen Tests
 - Display system clock in yyyy/mm/dd hh:mm:ss format

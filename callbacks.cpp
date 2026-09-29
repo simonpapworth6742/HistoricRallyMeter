@@ -323,6 +323,25 @@ void bluetoothAutoconnectOnStartup(AppData* data) {
 }
 
 static const int RESPONSE_AUTO_START = 99;
+static const int RESPONSE_QUICK_AUTO_START = 98;
+
+static int64_t getAutoStartEpochMs();
+static bool nextWholeMinuteAtLeast(const RallyState& state, int64_t lead_ms,
+                                   int& hour, int& min, int64_t& target_ms);
+static bool storeAutoStartAt(AppData* data, int64_t target_ms);
+
+struct QuickAutoWatch {
+    AppData* data;
+    GtkWidget* button;
+    int64_t target_ms;
+};
+
+static gboolean refreshQuickAutoButton(gpointer user_data) {
+    auto* watch = static_cast<QuickAutoWatch*>(user_data);
+    int64_t rally_ms = getRallyTime_ms(*watch->data->state);
+    gtk_widget_set_sensitive(watch->button, watch->target_ms >= rally_ms + 10000);
+    return G_SOURCE_CONTINUE;
+}
 
 void on_stage_go(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
@@ -360,14 +379,23 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
         return;
     }
     
+    int quick_hour = 0, quick_min = 0;
+    int64_t quick_target_ms = 0;
+    bool have_quick = nextWholeMinuteAtLeast(*data->state, 10000, quick_hour, quick_min, quick_target_ms);
+    char quick_label[8] = "";
+    if (have_quick) snprintf(quick_label, sizeof(quick_label), "%02d:%02d", quick_hour, quick_min);
+
     GtkWidget* dialog = gtk_dialog_new_with_buttons(
         "Confirm Stage Go",
         GTK_WINDOW(gtk_widget_get_toplevel(widget)),
         GTK_DIALOG_MODAL,
         "Yes", GTK_RESPONSE_YES,
-        "Auto start", RESPONSE_AUTO_START,
-        "No", GTK_RESPONSE_NO,
         nullptr);
+    if (have_quick) {
+        gtk_dialog_add_button(GTK_DIALOG(dialog), quick_label, RESPONSE_QUICK_AUTO_START);
+    }
+    gtk_dialog_add_button(GTK_DIALOG(dialog), "Auto start", RESPONSE_AUTO_START);
+    gtk_dialog_add_button(GTK_DIALOG(dialog), "No", GTK_RESPONSE_NO);
     
     GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     gtk_container_set_border_width(GTK_CONTAINER(content), 20);
@@ -378,8 +406,20 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
     gtk_widget_show(label);
     
     applyDialogStyle(dialog);
+
+    QuickAutoWatch watch{data, nullptr, quick_target_ms};
+    guint quick_timer = 0;
+    if (have_quick) {
+        watch.button = gtk_dialog_get_widget_for_response(GTK_DIALOG(dialog), RESPONSE_QUICK_AUTO_START);
+        if (watch.button) {
+            gtk_widget_set_sensitive(watch.button,
+                quick_target_ms >= getRallyTime_ms(*data->state) + 10000);
+            quick_timer = g_timeout_add(200, refreshQuickAutoButton, &watch);
+        }
+    }
     
     gint response = gtk_dialog_run(GTK_DIALOG(dialog));
+    if (quick_timer != 0) g_source_remove(quick_timer);
     gtk_widget_destroy(dialog);
     
     if (response == GTK_RESPONSE_YES) {
@@ -387,6 +427,8 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
         data->state->auto_start_rally_time_minutes = 0;
         data->autoStartTriggered = false;
         performStageGo(data);
+    } else if (response == RESPONSE_QUICK_AUTO_START) {
+        storeAutoStartAt(data, quick_target_ms);
     } else if (response == RESPONSE_AUTO_START) {
         on_show_autostart(widget, user_data);
     }
@@ -1632,19 +1674,43 @@ static int64_t getAutoStartEpochMs() {
     return static_cast<int64_t>(mktime(&epoch_tm)) * 1000;
 }
 
-// Soonest hh:mm:00 that is at least 30 seconds after the current rally time.
-static std::string suggestedAutoStartEntry(const RallyState& state) {
-    int64_t earliest_ms = getRallyTime_ms(state) + 30000;
-    time_t earliest_s = earliest_ms / 1000;
+// Soonest local hh:mm:00 that is at least lead_ms after rally time.
+static bool nextWholeMinuteAtLeast(const RallyState& state, int64_t lead_ms,
+                                   int& hour, int& min, int64_t& target_ms) {
+    int64_t earliest_ms = getRallyTime_ms(state) + lead_ms;
+    time_t earliest_s = static_cast<time_t>(earliest_ms / 1000);
     int extra_ms = static_cast<int>(earliest_ms % 1000);
     struct tm t = *localtime(&earliest_s);
     if (t.tm_sec != 0 || extra_ms != 0) {
         t.tm_sec = 0;
         t.tm_min += 1;
-        mktime(&t);
     }
+    time_t whole = mktime(&t);
+    if (whole == static_cast<time_t>(-1)) return false;
+    hour = t.tm_hour;
+    min = t.tm_min;
+    target_ms = static_cast<int64_t>(whole) * 1000;
+    return true;
+}
+
+static bool storeAutoStartAt(AppData* data, int64_t target_ms) {
+    int64_t diff_ms = target_ms - getRallyTime_ms(*data->state);
+    if (diff_ms <= 0 || diff_ms > 3LL * 3600 * 1000) return false;
+    data->state->auto_start_rally_time_minutes =
+        static_cast<uint64_t>((target_ms - getAutoStartEpochMs()) / 60000);
+    data->autoStartTriggered = false;
+    ConfigFile::save(*data->state);
+    updateAutoStartDisplay(data);
+    return true;
+}
+
+// Soonest hh:mm:00 that is at least 30 seconds after the current rally time.
+static std::string suggestedAutoStartEntry(const RallyState& state) {
+    int hour = 0, min = 0;
+    int64_t target_ms = 0;
+    if (!nextWholeMinuteAtLeast(state, 30000, hour, min, target_ms)) return "00:00:00";
     char buf[16];
-    snprintf(buf, sizeof(buf), "%02d:%02d:%02d", t.tm_hour, t.tm_min, t.tm_sec);
+    snprintf(buf, sizeof(buf), "%02d:%02d:00", hour, min);
     return buf;
 }
 
@@ -1731,13 +1797,7 @@ void on_autostart_set(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         return;
     }
     
-    int64_t epoch_ms = getAutoStartEpochMs();
-    data->state->auto_start_rally_time_minutes = 
-        static_cast<uint64_t>((target_ms - epoch_ms) / 60000);
-    data->autoStartTriggered = false;
-    
-    ConfigFile::save(*data->state);
-    updateAutoStartDisplay(data);
+    storeAutoStartAt(data, target_ms);
 }
 
 void on_autostart_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
