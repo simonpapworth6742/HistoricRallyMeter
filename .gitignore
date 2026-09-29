@@ -11,3 +11,6 @@ test_rally_config.json
 
 # Config files with runtime data (not secrets, but user-specific)
 rally_config.json
+
+# Release tag written by the update script
+version.txt

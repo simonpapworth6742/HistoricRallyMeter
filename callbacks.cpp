@@ -656,6 +656,11 @@ void on_show_twinmaster(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     gtk_stack_set_visible_child_name(data->copilotStack, "twinmaster");
 }
 
+void on_show_adjust_distance(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    gtk_stack_set_visible_child_name(data->copilotStack, "adjustdistance");
+}
+
 static void pumpUi() {
     while (gtk_events_pending()) gtk_main_iteration();
 }

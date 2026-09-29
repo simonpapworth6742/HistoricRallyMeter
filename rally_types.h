@@ -76,6 +76,7 @@ struct AppData {
     
     // TwinMaster screen
     GtkWidget* twinMasterScreen;
+    GtkWidget* adjustDistanceScreen = nullptr;
     GtkLabel* totalDistLabel;
     GtkLabel* totalUnitLabel;
     GtkLabel* totalTimeLabel;

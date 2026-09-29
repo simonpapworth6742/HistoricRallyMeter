@@ -29,6 +29,7 @@ void on_next_prev_segment(GtkWidget* widget, gpointer user_data);
 void on_show_segments(GtkWidget* widget, gpointer user_data);
 void on_show_calibration(GtkWidget* widget, gpointer user_data);
 void on_show_twinmaster(GtkWidget* widget, gpointer user_data);
+void on_show_adjust_distance(GtkWidget* widget, gpointer user_data);
 void on_show_datetime(GtkWidget* widget, gpointer user_data);
 void on_add_segment(GtkWidget* widget, gpointer user_data);
 void on_delete_segment(GtkWidget* widget, gpointer user_data);

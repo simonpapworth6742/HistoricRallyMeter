@@ -31,6 +31,9 @@ else
     git checkout --quiet "$LATEST_TAG"
 fi
 
+echo "Recording installed version $LATEST_TAG ..."
+printf '%s\n' "$LATEST_TAG" > version.txt
+
 echo "Building ..."
 make clean
 make all

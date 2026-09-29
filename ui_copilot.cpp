@@ -10,6 +10,7 @@
 #include "webserver/qr_display.h"
 #include "calculations.h"
 #include <sstream>
+#include <fstream>
 #include <cstdlib>
 #include <iomanip>
 #include <ctime>
@@ -107,6 +108,8 @@ static void applyCopilotCSS() {
         "button.setup-kb label { font-size: 14px; }"
         "button.rally-nudge { font-size: 16px; padding: 2px 4px; min-height: 36px; }"
         "button.rally-nudge label { font-size: 16px; }"
+        "button.adj-total { padding: 0; min-width: 40px; min-height: 0; }"
+        "button.adj-total label { font-size: 20px; padding: 0; margin: 0; }"
         "separator.setup-rule { background-color: #FFFFFF; min-height: 1px; }",
         -1, NULL);
     gtk_style_context_add_provider_for_screen(
@@ -297,6 +300,47 @@ void updateCopilotDisplay(AppData* data) {
     }
 }
 
+// Small white stopwatch, drawn so the elapsed-time rows do not depend on an icon theme.
+static GtkWidget* stopwatchIcon(int size) {
+    cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, size, size);
+    cairo_t* cr = cairo_create(surface);
+    cairo_set_source_rgba(cr, 1, 1, 1, 1);
+    const double s = size;
+    cairo_set_line_width(cr, s * 0.08);
+    cairo_arc(cr, s * 0.50, s * 0.58, s * 0.30, 0, 6.283185);
+    cairo_stroke(cr);
+    cairo_rectangle(cr, s * 0.40, s * 0.06, s * 0.20, s * 0.12);
+    cairo_fill(cr);
+    cairo_rectangle(cr, s * 0.18, s * 0.16, s * 0.14, s * 0.07);
+    cairo_fill(cr);
+    cairo_rectangle(cr, s * 0.68, s * 0.16, s * 0.14, s * 0.07);
+    cairo_fill(cr);
+    cairo_set_line_width(cr, s * 0.07);
+    cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+    cairo_move_to(cr, s * 0.50, s * 0.58);
+    cairo_line_to(cr, s * 0.50, s * 0.36);
+    cairo_move_to(cr, s * 0.50, s * 0.58);
+    cairo_line_to(cr, s * 0.68, s * 0.64);
+    cairo_stroke(cr);
+    GdkPixbuf* pix = gdk_pixbuf_get_from_surface(surface, 0, 0, size, size);
+    GtkWidget* image = gtk_image_new_from_pixbuf(pix);
+    g_object_unref(pix);
+    cairo_destroy(cr);
+    cairo_surface_destroy(surface);
+    return image;
+}
+
+static GtkWidget* elapsedTimeRow(GtkWidget* timeLabel) {
+    GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_widget_set_halign(row, GTK_ALIGN_START);
+    gtk_widget_set_valign(row, GTK_ALIGN_CENTER);
+    GtkWidget* icon = stopwatchIcon(22);
+    gtk_widget_set_valign(icon, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(row), icon, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(row), timeLabel, FALSE, FALSE, 0);
+    return row;
+}
+
 // Create TwinMaster screen - two-column layout for 1280x400
 GtkWidget* createTwinMasterScreen(AppData* data) {
     GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
@@ -312,65 +356,79 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_size_request(leftPanel, data->singleDisplayMode ? -1 : 870, -1);
     gtk_box_pack_start(GTK_BOX(mainArea), leftPanel, TRUE, TRUE, 0);
     
-    // Grid layout for Total/Trip/Next: columns = heading | value | unit | reset/arrow | time/speed
+    // Grid layout for Total/Trip/Next: columns = heading | value | unit | speed.
+    // Elapsed times sit on the row under the Total and Trip buttons.
     GtkWidget* distGrid = gtk_grid_new();
     gtk_grid_set_column_spacing(GTK_GRID(distGrid), 8);
     gtk_grid_set_row_spacing(GTK_GRID(distGrid), 2);
     gtk_box_pack_start(GTK_BOX(leftPanel), distGrid, FALSE, FALSE, 0);
     
+    // The stopwatch sits in the same cell as its button, directly underneath it,
+    // so the extra line does not add a full grid row and push the nav bar off.
+    auto attachHeading = [&](GtkWidget* button, GtkWidget* timeLabel, int row) {
+        GtkWidget* col = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        gtk_widget_set_valign(col, GTK_ALIGN_CENTER);
+        gtk_box_pack_start(GTK_BOX(col), button, FALSE, FALSE, 0);
+        if (!data->singleDisplayMode)
+            gtk_box_pack_start(GTK_BOX(col), elapsedTimeRow(timeLabel), FALSE, FALSE, 0);
+        gtk_grid_attach(GTK_GRID(distGrid), col, 0, row, 1, 1);
+    };
+
     // Row 0: Total distance — heading "Total" is itself the reset button
     GtkWidget* totalHeadingBtn = gtk_button_new_with_label("Total");
     gtk_style_context_add_class(gtk_widget_get_style_context(totalHeadingBtn), "dist-heading");
     gtk_widget_set_valign(totalHeadingBtn, GTK_ALIGN_CENTER);
     g_signal_connect(totalHeadingBtn, "clicked", G_CALLBACK(on_total_reset), data);
-    gtk_grid_attach(GTK_GRID(distGrid), totalHeadingBtn, 0, 0, 1, 1);
+    data->totalTimeLabel = GTK_LABEL(gtk_label_new("   0:00"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalTimeLabel)), "time-label");
+    gtk_label_set_xalign(data->totalTimeLabel, 0.0);
+    gtk_widget_set_valign(GTK_WIDGET(data->totalTimeLabel), GTK_ALIGN_CENTER);
+    attachHeading(totalHeadingBtn, GTK_WIDGET(data->totalTimeLabel), 0);
     
     data->totalDistLabel = GTK_LABEL(gtk_label_new("0"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalDistLabel)), "dist-value");
     gtk_label_set_xalign(data->totalDistLabel, 1.0);
     gtk_label_set_width_chars(data->totalDistLabel, 7);
+    gtk_widget_set_valign(GTK_WIDGET(data->totalDistLabel), GTK_ALIGN_CENTER);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalDistLabel), 1, 0, 1, 1);
     
     data->totalUnitLabel = GTK_LABEL(gtk_label_new("m"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalUnitLabel)), "dist-unit");
     gtk_widget_set_valign(GTK_WIDGET(data->totalUnitLabel), GTK_ALIGN_END);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalUnitLabel), 2, 0, 1, 1);
-    
-    // Col 3: Total time
-    data->totalTimeLabel = GTK_LABEL(gtk_label_new("   0:00"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->totalTimeLabel)), "time-label");
-    gtk_label_set_xalign(data->totalTimeLabel, 0.0);
-    gtk_widget_set_valign(GTK_WIDGET(data->totalTimeLabel), GTK_ALIGN_CENTER);
-    gtk_widget_set_margin_start(GTK_WIDGET(data->totalTimeLabel), 10);
-    if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
-        gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->totalTimeLabel), 3, 0, 1, 1);
+
+    GtkWidget* adjBtn = gtk_button_new_with_label("A\nd\nj");
+    gtk_style_context_add_class(gtk_widget_get_style_context(adjBtn), "adj-total");
+    GtkWidget* adjLabel = gtk_bin_get_child(GTK_BIN(adjBtn));
+    gtk_label_set_justify(GTK_LABEL(adjLabel), GTK_JUSTIFY_CENTER);
+    gtk_widget_set_halign(adjBtn, GTK_ALIGN_START);
+    gtk_widget_set_valign(adjBtn, GTK_ALIGN_CENTER);
+    gtk_widget_set_size_request(adjBtn, 40, -1);
+    g_signal_connect(adjBtn, "clicked", G_CALLBACK(on_show_adjust_distance), data);
+    gtk_grid_attach(GTK_GRID(distGrid), adjBtn, 3, 0, 1, 1);
     
     // Row 1: Trip distance — heading "Trip" is itself the reset button
     GtkWidget* tripHeadingBtn = gtk_button_new_with_label("Trip");
     gtk_style_context_add_class(gtk_widget_get_style_context(tripHeadingBtn), "dist-heading");
     gtk_widget_set_valign(tripHeadingBtn, GTK_ALIGN_CENTER);
     g_signal_connect(tripHeadingBtn, "clicked", G_CALLBACK(on_trip_reset), data);
-    gtk_grid_attach(GTK_GRID(distGrid), tripHeadingBtn, 0, 1, 1, 1);
+    data->tripTimeLabel = GTK_LABEL(gtk_label_new("   0:00"));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripTimeLabel)), "time-label");
+    gtk_label_set_xalign(data->tripTimeLabel, 0.0);
+    gtk_widget_set_valign(GTK_WIDGET(data->tripTimeLabel), GTK_ALIGN_CENTER);
+    attachHeading(tripHeadingBtn, GTK_WIDGET(data->tripTimeLabel), 1);
     
     data->tripDistLabel = GTK_LABEL(gtk_label_new("0"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripDistLabel)), "dist-value");
     gtk_label_set_xalign(data->tripDistLabel, 1.0);
     gtk_label_set_width_chars(data->tripDistLabel, 7);
+    gtk_widget_set_valign(GTK_WIDGET(data->tripDistLabel), GTK_ALIGN_CENTER);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripDistLabel), 1, 1, 1, 1);
     
     data->tripUnitLabel = GTK_LABEL(gtk_label_new("m"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripUnitLabel)), "dist-unit");
     gtk_widget_set_valign(GTK_WIDGET(data->tripUnitLabel), GTK_ALIGN_END);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripUnitLabel), 2, 1, 1, 1);
-    
-    // Col 3: Trip time
-    data->tripTimeLabel = GTK_LABEL(gtk_label_new("   0:00"));
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->tripTimeLabel)), "time-label");
-    gtk_label_set_xalign(data->tripTimeLabel, 0.0);
-    gtk_widget_set_valign(GTK_WIDGET(data->tripTimeLabel), GTK_ALIGN_CENTER);
-    gtk_widget_set_margin_start(GTK_WIDGET(data->tripTimeLabel), 10);
-    if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
-        gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->tripTimeLabel), 3, 1, 1, 1);
     
     // Row 2: Next segment — heading is the next/prev button
     data->nextPrevBtn = gtk_button_new_with_label("--->");
@@ -473,20 +531,15 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_margin_top(alarmBox, 10);
     gtk_box_pack_start(GTK_BOX(rightPanel), alarmBox, FALSE, FALSE, 0);
     
+    GtkWidget* alarmLabel = gtk_label_new("Alarm in km");
+    gtk_style_context_add_class(gtk_widget_get_style_context(alarmLabel), "alarm-label");
+    gtk_widget_set_halign(alarmLabel, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(alarmBox), alarmLabel, FALSE, FALSE, 0);
+
     // Alarm buttons: 4 rows of 3, 30% larger (62x47)
-    auto addAlarmRow = [&](GtkWidget* parent, int from, int to, bool hasLabel) {
+    auto addAlarmRow = [&](GtkWidget* parent, int from, int to) {
         GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
         gtk_box_pack_start(GTK_BOX(parent), row, FALSE, FALSE, 0);
-        if (hasLabel) {
-            GtkWidget* lbl = gtk_label_new("Alarm in");
-            gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "alarm-label");
-            gtk_box_pack_start(GTK_BOX(row), lbl, FALSE, FALSE, 3);
-        } else {
-            GtkWidget* spacer = gtk_label_new("");
-            gtk_style_context_add_class(gtk_widget_get_style_context(spacer), "alarm-label");
-            gtk_widget_set_size_request(spacer, 70, -1);
-            gtk_box_pack_start(GTK_BOX(row), spacer, FALSE, FALSE, 3);
-        }
         for (int km = from; km <= to; km++) {
             GtkWidget* btn = gtk_button_new_with_label(std::to_string(km).c_str());
             gtk_style_context_add_class(gtk_widget_get_style_context(btn), "alarm-button");
@@ -496,11 +549,11 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
             gtk_box_pack_start(GTK_BOX(row), btn, FALSE, FALSE, 2);
         }
     };
-    
-    addAlarmRow(alarmBox, 2, 4, true);
-    addAlarmRow(alarmBox, 5, 7, false);
-    addAlarmRow(alarmBox, 8, 10, false);
-    addAlarmRow(alarmBox, 11, 13, false);
+
+    addAlarmRow(alarmBox, 2, 4);
+    addAlarmRow(alarmBox, 5, 7);
+    addAlarmRow(alarmBox, 8, 10);
+    addAlarmRow(alarmBox, 11, 13);
     
     // Alarm countdown + clear button
     GtkWidget* countdownRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
@@ -1054,6 +1107,18 @@ GtkWidget* createAutoStartScreen(AppData* data) {
     return screen;
 }
 
+static std::string installedVersion() {
+    std::ifstream in("version.txt");
+    std::string version;
+    if (in && std::getline(in, version)) {
+        auto start = version.find_first_not_of(" \t\r");
+        auto end = version.find_last_not_of(" \t\r");
+        if (start != std::string::npos)
+            return version.substr(start, end - start + 1);
+    }
+    return "unknown";
+}
+
 static GtkWidget* setupText(const std::string& text) {
     GtkWidget* label = gtk_label_new(text.c_str());
     gtk_style_context_add_class(gtk_widget_get_style_context(label), "setup-label");
@@ -1139,10 +1204,21 @@ static GtkWidget* createSetupScreen(AppData* data) {
 
     GtkWidget* displays = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
     gtk_widget_set_valign(displays, GTK_ALIGN_START);
+    GtkWidget* titleRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
+    gtk_widget_set_halign(titleRow, GTK_ALIGN_START);
     GtkWidget* titleLabel = gtk_label_new("SETUP");
     gtk_style_context_add_class(gtk_widget_get_style_context(titleLabel), "title-label");
     gtk_widget_set_halign(titleLabel, GTK_ALIGN_START);
-    gtk_box_pack_start(GTK_BOX(displays), titleLabel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(titleRow), titleLabel, FALSE, FALSE, 0);
+    GtkWidget* versionLabel = gtk_label_new(("version " + installedVersion()).c_str());
+    gtk_style_context_add_class(gtk_widget_get_style_context(versionLabel), "title-label");
+    gtk_widget_set_valign(versionLabel, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(titleRow), versionLabel, FALSE, FALSE, 0);
+    GtkWidget* hostLabel = gtk_label_new(("hostname " + piHostname()).c_str());
+    gtk_style_context_add_class(gtk_widget_get_style_context(hostLabel), "title-label");
+    gtk_widget_set_valign(hostLabel, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(titleRow), hostLabel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(displays), titleRow, FALSE, FALSE, 0);
     data->setupDisplayRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
     gtk_box_pack_start(GTK_BOX(displays), data->setupDisplayRow, FALSE, FALSE, 0);
     GtkWidget* resetRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
@@ -1270,6 +1346,27 @@ static GtkWidget* createSetupScreen(AppData* data) {
     return screen;
 }
 
+static GtkWidget* createAdjustDistanceScreen(AppData* data) {
+    GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+    gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
+    gtk_widget_set_hexpand(screen, TRUE);
+    gtk_widget_set_vexpand(screen, TRUE);
+
+    GtkWidget* titleLabel = gtk_label_new("ADJUST DISTANCE TRAVELED");
+    gtk_style_context_add_class(gtk_widget_get_style_context(titleLabel), "title-label");
+    gtk_widget_set_halign(titleLabel, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(screen), titleLabel, FALSE, FALSE, 0);
+
+    GtkWidget* backBtn = gtk_button_new_with_label("back");
+    gtk_style_context_add_class(gtk_widget_get_style_context(backBtn), "nav-button");
+    gtk_widget_set_size_request(backBtn, -1, 43);
+    gtk_widget_set_hexpand(backBtn, FALSE);
+    gtk_widget_set_halign(backBtn, GTK_ALIGN_END);
+    g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
+    gtk_box_pack_end(GTK_BOX(screen), backBtn, FALSE, FALSE, 0);
+    return screen;
+}
+
 GtkWidget* createCopilotWindow(AppData* data) {
     GtkWidget* window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_title(GTK_WINDOW(window), "Co-Pilot Display");
@@ -1297,6 +1394,7 @@ GtkWidget* createCopilotWindow(AppData* data) {
     data->dateTimeScreen = createDateTimeScreen(data);
     data->autoStartScreen = createAutoStartScreen(data);
     data->setupScreen = createSetupScreen(data);
+    data->adjustDistanceScreen = createAdjustDistanceScreen(data);
     
     // Add screens to stack
     gtk_stack_add_named(data->copilotStack, data->twinMasterScreen, "twinmaster");
@@ -1305,6 +1403,7 @@ GtkWidget* createCopilotWindow(AppData* data) {
     gtk_stack_add_named(data->copilotStack, data->dateTimeScreen, "datetime");
     gtk_stack_add_named(data->copilotStack, data->autoStartScreen, "autostart");
     gtk_stack_add_named(data->copilotStack, data->setupScreen, "setup");
+    gtk_stack_add_named(data->copilotStack, data->adjustDistanceScreen, "adjustdistance");
     
     // Show TwinMaster by default
     gtk_stack_set_visible_child_name(data->copilotStack, "twinmaster");

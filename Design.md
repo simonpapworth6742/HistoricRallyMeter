@@ -226,13 +226,14 @@ The number of digits displayed for any of the values should not affect their pos
 
 **_Co-Pilots display window (1280 x 400) - dark theme only_**
 
-The co-pilot display window is wide (1280px) and shallow (400px). It has six screens:
+The co-pilot display window is wide (1280px) and shallow (400px). It has seven screens:
 1) Stage setup
 2) Calibration
 3) TwinMaster display (default)
 4) Date and Time setup
 5) Auto Start setup
 6) Setup
+7) Adjust Distance Traveled
 
 Layout notes for 1280x400 (wide, shallow display):
 - All layouts use horizontal arrangement to maximize width
@@ -319,18 +320,19 @@ Two-column layout with bottom navigation row:
 +-------------------------------------------------------------------+--------------------------------------+
 | LEFT PANEL (70%)                                                  | RIGHT PANEL (30%)                    |
 |                                                                   | [Connect speaker] [mute] hh:mm:ss    |
-|  [Total]  xxx,xxx  m  mmm:ss                                      |  Alarm in [2] [3] [4]                |
-|                                                                   |           [5] [6] [7]                |
-|  [Trip]   xxx,xxx  m  mmm:ss                                      |           [8] [9] [10]               |
-|                                                                   |          [11] [12] [13]              |
-|  [Next/prev]   xxx,xxx  m   xxx kph                               |  x,xxx m to alarm  [clear]           |
+|  [Total]  xxx,xxx  m [Adj]                                        |  Alarm in km                         |
+|  [stopwatch] mmm:ss                                               |  [2] [3] [4]                         |
+|  [Trip]   xxx,xxx  m                                              |  [5] [6] [7]                         |
+|  [stopwatch] mmm:ss                                               |  [8] [9] [10]                        |
+|  [Next/prev]   xxx,xxx  m   xxx kph                               |  [11] [12] [13]                      |
+|                                                                   |  x,xxx m to alarm  [clear]           |
 +-------------------------------------------------------------------+--------------------------------------+
 |   [stage go / abort stage]  [segments]   [Adj. driver Zero (xx.xxs)]   [calibration]     [date/time]  [cog] |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
 Layout:
-- GtkGrid for Total/Trip rows with aligned columns: heading | value | unit | reset | time
+- GtkGrid for Total/Trip rows with aligned columns: heading | value | unit | speed. The elapsed time is the row under each of the Total and Trip buttons.
 - The number of digits displayed for any of the values should not affect their position, the maximum number of meter to display is 999,999 
   before switching to km.
 - Distances formatted with comma separators and fixed minimum width of 7 characters (e.g., "      0", "  1,234", "999,999")
@@ -344,14 +346,16 @@ Layout:
     - Col 0: heading buttons "Total" / "Trip" / "Next" (48px bold monospace)
     - Col 1: distance value, right-aligned, 7-char width (88px bold monospace)
     - Col 2: unit "m" (48px bold monospace), bottom-aligned
-    - Col 3: elapsed time mmm:ss (36px monospace, light grey #CCCCCC) or the speed of the next segment, vertically centred
+    - Under the Total button, and under the Trip button, the elapsed time mmm:ss (36px monospace, light grey #CCCCCC) with a small white stopwatch icon to its left
+    - Col 3 of the Total row: a thin vertical [Adj] button. The letters run downward (A, then d, then j). The button is twice as wide as the letter A and its border. It opens Adjust Distance Traveled.
+    - Col 3 of the Next row: speed of the next segment, vertically centred
 - Segment info on the third line "Next" showing the distance to the next segment in meters and the speed of the next segment, if there are no segments the next line shows ---.--- and the speed shows ---. If past the end of the of the segments then the distance shows the negative meters past the end of the last segment and the speed shows "END". Next rounds up to the nearest meter so that Total/Trip are in sync to it as they round down.
   
 - Right panel:
   - Rally clock (hh:mm:ss) at top, right-aligned (30px bold, minimum 8 chars wide)
   - Mute button immediately to the left of the clock, shown only while a current segment is selected. It is the same height as the 30px clock and uses the standard unmuted icon (audio-volume-high) or muted icon (audio-volume-muted). Pressing it toggles. The choice is not saved. Stage go sets it back to unmuted. While muted, the ahead/behind tones do not sound; button beeps and the distance alarm still sound.
   - [Connect speaker] is a single-line button on the top row, immediately to the left of the mute button. It is shown only when bluetooth_audio_address in the config is not empty. Pressing it reconnects that remembered Bluetooth speaker and makes it the audio output. When the config entry is empty the button is not shown.
-  - Alarm buttons in four rows with 4px vertical gap — "Alarm in" label (20px) + [2]-[4] on first row, [5]-[7] on second row, [8]-[10] on third row, [11]-[13] on fourth row (22px font, 62x47px buttons)
+  - "Alarm in km" (20px) sits above the keypad. The buttons are four rows of three with a 4px vertical gap: [2]-[4], [5]-[7], [8]-[10], [11]-[13] (22px font, 62x47px buttons)
   - Alarm countdown ("x,xxx m to alarm") and [clear] button below alarm buttons (28px white font #FFFFFF)
 
 
@@ -450,11 +454,11 @@ Set - sets the auto start time in the config file etc. recording the offeset as 
 
 **6) Setup Screen**
 
-Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16px so the screen fits the 400px height. The display section at the top is split two thirds / one third. The left two thirds start with the SETUP title, then the attached displays, then [Reset layout] with force single display mode immediately to its right. The right third shows the phone web address above its QR code. The address is 24px and wraps onto more than one line when it is wider than that third. The QR code is centered in the third. Two thin horizontal lines run under that section so the split is visible. [back] is the same 20px, 43px-tall navigation button as on the other screens, sized to its label, and sits at the right. [Exit & Check for updates] sits immediately to its left, and [exit app] sits immediately to the left of that. [back] returns to TwinMaster. [exit app] saves and closes the application. [Exit & Check for updates] saves, closes the meter, and opens a terminal in the project directory running the `update` script. The terminal stays open until Enter is pressed so the result can be read.
+Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16px so the screen fits the 400px height. The display section at the top is split two thirds / one third. The left two thirds start with the SETUP title, then on the same line "version" and the installed release tag, then "hostname" and the Pi's hostname, all in the same 22px title font. The attached displays follow, then [Reset layout] with force single display mode immediately to its right. The right third shows the phone web address above its QR code. The address is 24px and wraps onto more than one line when it is wider than that third. The QR code is centered in the third. Two thin horizontal lines run under that section so the split is visible. [back] is the same 20px, 43px-tall navigation button as on the other screens, sized to its label, and sits at the right. [Exit & Check for updates] sits immediately to its left, and [exit app] sits immediately to the left of that. [back] returns to TwinMaster. [exit app] saves and closes the application. [Exit & Check for updates] saves, closes the meter, and opens a terminal in the project directory running the `update` script. The terminal stays open until Enter is pressed so the result can be read.
 
 ```
 +----------------------------------------------------------------------------------------------------------+
-|  SETUP                                             |  historicrallymeter.local:          |
+|  SETUP  version v1.2.0  hostname raspberrypi       |  historicrallymeter.local:          |
 |  [DSI-2]     0 px    [HDMI-A-2]    0 px    [HDMI-A-1] |  8080                               |
 |  1280x400              800x480              2560x1440  |  [QR]                               |
 |  left                  normal               normal     |                                     |
@@ -469,6 +473,8 @@ Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16
 |                                [exit app]  [Exit & Check for updates]  [back]                          |
 +----------------------------------------------------------------------------------------------------------+
 ```
+
+The update script writes the checked-out release tag (vX.Y.Z) to `version.txt` in the project directory when it fetches the update. The Setup title reads that file. If the file is missing, the version is shown as unknown. The hostname is the Pi's hostname, without a domain suffix.
 
 The phone address sits above the QR code and wraps onto further lines when it does not fit the right third. Both are shown only when `web_enabled` is true. The address is the web client URL without the `http://` scheme (host `historicrallymeter.local`, or the device's LAN address if mDNS is unavailable, and the port from `web_port`). The QR code encodes the full URL. Both are omitted, and the right third says the web server is disabled, when `web_enabled` is false. [Reset layout] is in the display section, under the attached screens and above the dividing lines. Force single display mode sits immediately to its right.
 
@@ -489,6 +495,19 @@ Options moved here from Date/Time:
 [Connect] and [Disconnect] are shown only when a Bluetooth address is recorded. Connect reconnects that speaker, makes it the audio output, trusts it in BlueZ, and sets `bluetooth_audio_autoconnect` so the app connects it again on startup. Disconnect disconnects it, moves the default output off that speaker, untrusts it so BlueZ does not reconnect it at login, and clears `bluetooth_audio_autoconnect`. The remembered name and address stay, so the buttons remain. The TwinMaster connect-speaker control still connects immediately and does not change the saved autoconnect choice.
 
 Wi-Fi uses NetworkManager on `wlan0`. [Hotspot: hostname] starts an open access point whose SSID is the Pi's hostname, with no password, shared IPv4, and autoconnect on. [Join WiFi4hostname] joins the open network whose SSID is `WiFi4` followed by the hostname (for hostname `raspberrypi`, `WiFi4raspberrypi`). The chosen connection is set to autoconnect and other Wi-Fi connections are set not to autoconnect, so the choice is what NetworkManager brings up after reboot. The status line shows the result.
+
+**7) Adjust Distance Traveled**
+
+Opened from the vertical [Adj] button on the Total row of TwinMaster. For now the screen has no other controls. [back] is the same 20px, 43px-tall navigation button as on the other screens, sized to its label, and sits at the bottom right. It returns to TwinMaster.
+
+```
++----------------------------------------------------------------------------------------------------------+
+|  ADJUST DISTANCE TRAVELED                                                                                |
++----------------------------------------------------------------------------------------------------------+
+|                                                                                                          |
+|                                                                                              [back]      |
++----------------------------------------------------------------------------------------------------------+
+```
 
 ## Remote Web Access (mobile phones)
 
@@ -798,6 +817,7 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Next segment button advances segment and resets Trip
 - Calibration button navigates to Calibration screen
 - RallyClock displays at top in hh:mm:ss format
+- The vertical Adj button on the Total row opens Adjust Distance Traveled; back there returns to TwinMaster
 - Stage Go dialog offers the next whole minute at least 10 seconds ahead, labelled hh:mm; pressing it stores that auto start time the same way as Auto Start Set, and the button disables once that minute is under 10 seconds away
 
 ### Date/Time Setup Screen Tests
@@ -815,7 +835,7 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Cog button on TwinMaster opens the Setup screen; back is on the right and returns to TwinMaster
 - [exit app], to the left of Exit & Check for updates, saves and closes the application
 - Exit & Check for updates, to the left of back, closes the app and runs the update script in a terminal
-- The display section shows SETUP, the attached screens, and Reset layout with force single display mode to its right on the left two thirds, and the web address above the QR code on the right third, with two thin lines under that section
+- The display section shows SETUP, then version and the installed release tag, then hostname and the Pi hostname, the attached screens, and Reset layout with force single display mode to its right on the left two thirds, and the web address above the QR code on the right third, with two thin lines under that section
 - When `web_enabled` is true, the right third shows the web client address and a QR code for that URL; both are omitted when `web_enabled` is false
 - Attached displays show logical pixel size, orientation, and the gap to the next display
 - Reset layout puts a 400×1280 panel on the left in the left orientation and an 800×480 panel to its right in the normal orientation, with other panels further right and no gaps, and writes that kanshi profile
