@@ -153,16 +153,33 @@ public:
             return true;
         });
 
-        suite->addTest("Power loss keeps distance already covered", []() {
+        suite->addTest("Counter power loss restarts total, trip and segment from live counts", []() {
             RallyState state;
-            state.counters = false;
-            uint64_t start = 1000;
-            int64_t carry = 0;
-            continueCountAfterPowerLoss(10, 5000, start, carry);
-            ASSERT_EQ(start, 10u);
-            ASSERT_EQ(carry, 4000);
-            int64_t distance = calculateDistanceCounts(state, 30, 0, start, 0, carry, 0);
-            ASSERT_EQ(distance, 4020);  // 20 new pulses plus the 4000 already covered
+            state.counters = true;
+            state.total_start_cntr1 = 1000; state.total_start_cntr2 = 2000;
+            state.trip_start_cntr1 = 3000;  state.trip_start_cntr2 = 4000;
+            state.segment_start_cntr1 = 5000; state.segment_start_cntr2 = 6000;
+            state.total_start_time_ms = 1; state.trip_start_time_ms = 2; state.segment_start_time_ms = 3;
+            state.segment_current_number = 2;
+            state.alarm_distance_km = 5;
+            state.alarm_target_counts = 99999;
+
+            // The chips restarted from zero and have counted a few pulses since
+            restartDistancesAfterPowerLoss(state, 12, 14, 777000);
+
+            ASSERT_EQ(state.total_start_cntr1, 12u);   ASSERT_EQ(state.total_start_cntr2, 14u);
+            ASSERT_EQ(state.trip_start_cntr1, 12u);    ASSERT_EQ(state.trip_start_cntr2, 14u);
+            ASSERT_EQ(state.segment_start_cntr1, 12u); ASSERT_EQ(state.segment_start_cntr2, 14u);
+            ASSERT_EQ(state.total_start_time_ms, 777000);
+            ASSERT_EQ(state.trip_start_time_ms, 777000);
+            ASSERT_EQ(state.segment_start_time_ms, 777000);
+            ASSERT_EQ(state.segment_current_number, -1);
+            ASSERT_EQ(state.alarm_distance_km, 0);
+            ASSERT_EQ(state.alarm_target_counts, 0);
+
+            // Distance is zero at the restart and counts up from there
+            ASSERT_EQ(calculateDistanceCounts(state, 12, 14, state.total_start_cntr1, state.total_start_cntr2), 0);
+            ASSERT_EQ(calculateDistanceCounts(state, 32, 34, state.total_start_cntr1, state.total_start_cntr2), 20);
             return true;
         });
         

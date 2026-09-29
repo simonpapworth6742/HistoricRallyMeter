@@ -132,17 +132,16 @@ double distance – number of counts for the segment (high precision floating po
 Boolean autoNext – True =  when the distance of this segment has been reached the next segment is started automatically, changing the segment_current value and segment_start counter as well as resetting the trip counter values, false = the next segment button on the co-pilots TwinMaster display must be pressed to advance to the next segment, setting the segment_current, segment_counters and Trip counters
  
 
-The system has two counters available CNTR_1 and CNTR_2, when configured to use one gearbox counter then the distance since total, trip or segment  will be the value of the current CNTR_1 minus the total / trip / segment start_cntr1, plus any count carried for that chip after a power loss. If configured to two wheel then the distance since total, trip or segment will be ( (CNTR_1 - the total / trip / segment start_cntr1 + carried count 1) + (CNTR_2 - the total / trip / segment start_cntr2 + carried count 2) ) then divided by 2. Use integer maths, this caculated counter should be called CNTR_A
+The system has two counters available CNTR_1 and CNTR_2, when configured to use one gearbox counter then the distance since total, trip or segment  will be the value of the current CNTR_1 minus the total / trip / segment start_cntr1. If configured to two wheel then the distance since total, trip or segment will be ( (CNTR_1 - the total / trip / segment start_cntr1) + (CNTR_2 - the total / trip / segment start_cntr2) ) then divided by 2. Use integer maths, this caculated counter should be called CNTR_A
 
 The counter chips are simple pulse counters. The application does not change their count mode.
 
-Each chip has a power-loss flag. The application stores the last count it saw for each chip, and whether it has cleared that flag before. On startup, for each chip on its own:
+The counter chips stay powered for several minutes after the Pi has shut down, so they cannot lose power while the application is running. Each chip has a power-loss flag that is set only when the whole rally meter has been off for longer than that, in which case both counts have gone back to zero and the stored start readings no longer describe them. On startup the application reads the flag on both chips:
 
-- Flag clear: the count is still the one the start readings belong to. Leave the total, trip and segment start readings for that chip unchanged, so distance covered while the Pi was down stays included.
-- Flag set, and this application has cleared it before: that chip's count went back to zero. Add (last stored count − start reading) to the carried count for total, trip and segment on that chip, then set those three start readings to the live count. Later pulses add on. The other chip is left alone.
-- Flag set, and this application has never cleared it: clear the flag and leave the start readings. A flag left over from before this was tracked does not mean the count was just wiped.
+- Neither flag set: the counts are continuous with the stored start readings. Leave total, trip and segment as they are, so distance covered while only the Pi was down stays included.
+- Either flag set: the meter has been off. Set the total, trip and segment start readings on both chips to the live counts, set the three start times to now, set segment_current_number to -1, clear the distance alarm, save the config once, and clear the flag on both chips.
 
-After a set flag is handled, the application clears it. A later start with the flag set again means that chip lost power since the last start. The last count of each chip is written with the config. A Total, Trip or segment reset clears the carried count for that distance.
+The application does not store the last count it saw, and does not write the config file on a timer or while the car is moving. The config is written only when a setting, reset or segment change is made, on the power-loss reset above, and on a clean shutdown. Each write goes to a temporary file in the same directory that is then renamed over rally_config.json, so a Pi power cut during a write cannot leave a truncated config.
 
 Calibration, As the wheels / gearbox rotate and the car moves forward, the amount the car travels in meters per counter increment has to be set via calibration. It is expected that there could be as few as one counter increment per wheel revolution and as many as sixteen. To ensure accuracy the calibration will be stored as the number of millimetres travelled per 1000 counts. Meters travelled = (count_diff * calibration) / 1000 / 1000. Keeping the calibration as a larger number enables integer maths to calculate speeds and distance travelled in centimetres. When updating the calibration new_cal = (input_meters * 1000 * 1000) / total_count_diff (to match mm/1000 counts).
 
@@ -683,6 +682,8 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Verify calibration defaults to 600000 when missing
 - Verify units defaults to false (KPH) when missing
 - Verify segment_current_number defaults to -1 when missing/empty segments
+- Save writes a temporary file and renames it over the config, so the config is either the old or the new content and never partial
+- The config is not written on a timer or from the display update; it is written on settings changes, resets, the power-loss reset and clean shutdown
 
 ### Distance Calculation Tests
 - Single counter mode: distance = CNTR_1 - start_cntr1
@@ -761,6 +762,7 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Next segment resets Trip counters and time
 - Next segment increments segment_current_number
 - Next segment sets segment_start counters and time
+- Counter power-loss flag at startup resets total, trip and segment start counts to the live counts, start times to now, segment_current_number to -1, and clears the alarm; no flag leaves them unchanged
 
 ### Unit Toggle Tests
 - Toggle units from KPH to MPH

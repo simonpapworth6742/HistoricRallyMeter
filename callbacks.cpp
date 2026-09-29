@@ -48,7 +48,6 @@ void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     auto current_poll = data->poller->getMostRecent();
     data->state->total_start_cntr1 = current_poll.cntr1;
     data->state->total_start_cntr2 = current_poll.cntr2;
-    data->state->clearTotalCarry();
     data->state->total_start_time_ms = getRallyTime_ms(*data->state);
     ConfigFile::save(*data->state);
     notifyWebState(data);
@@ -59,7 +58,6 @@ void on_trip_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     auto current_poll = data->poller->getMostRecent();
     data->state->trip_start_cntr1 = current_poll.cntr1;
     data->state->trip_start_cntr2 = current_poll.cntr2;
-    data->state->clearTripCarry();
     data->state->trip_start_time_ms = getRallyTime_ms(*data->state);
     ConfigFile::save(*data->state);
     notifyWebState(data);
@@ -111,9 +109,6 @@ void performStageGo(AppData* data) {
     data->state->segment_start_cntr1 = current_poll.cntr1;
     data->state->segment_start_cntr2 = current_poll.cntr2;
     data->state->segment_start_time_ms = current_time;
-    data->state->clearTotalCarry();
-    data->state->clearTripCarry();
-    data->state->clearSegmentCarry();
 
     if (!data->state->segments.empty()) {
         data->state->segment_current_number = 0;
@@ -486,12 +481,10 @@ void on_next_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         data->state->segment_start_cntr1 = current_poll.cntr1;
         data->state->segment_start_cntr2 = current_poll.cntr2;
         data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
-        data->state->clearSegmentCarry();
         // Reset trip
         data->state->trip_start_cntr1 = current_poll.cntr1;
         data->state->trip_start_cntr2 = current_poll.cntr2;
         data->state->trip_start_time_ms = data->state->segment_start_time_ms;
-        data->state->clearTripCarry();
         ConfigFile::save(*data->state);
     }
 }
@@ -505,8 +498,7 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     auto current_poll = data->poller->getMostRecent();
     int64_t seg_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->segment_start_cntr1, data->state->segment_start_cntr2,
-        data->state->segment_carry_cntr1, data->state->segment_carry_cntr2);
+        data->state->segment_start_cntr1, data->state->segment_start_cntr2);
     
     Segment& cur_seg = data->state->segments[data->state->segment_current_number];
     int64_t remaining_counts = cur_seg.distance_counts - seg_count_diff;
@@ -528,11 +520,9 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         data->state->segment_start_cntr1 = current_poll.cntr1;
         data->state->segment_start_cntr2 = current_poll.cntr2;
         data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
-        data->state->clearSegmentCarry();
         data->state->trip_start_cntr1 = current_poll.cntr1;
         data->state->trip_start_cntr2 = current_poll.cntr2;
         data->state->trip_start_time_ms = data->state->segment_start_time_ms;
-        data->state->clearTripCarry();
     } else if (near_start) {
         // "prev": extend previous segment distance to end here, reset current segment start to now
         Segment& prev_seg = data->state->segments[data->state->segment_current_number - 1];
@@ -542,11 +532,9 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         data->state->segment_start_cntr1 = current_poll.cntr1;
         data->state->segment_start_cntr2 = current_poll.cntr2;
         data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
-        data->state->clearSegmentCarry();
         data->state->trip_start_cntr1 = current_poll.cntr1;
         data->state->trip_start_cntr2 = current_poll.cntr2;
         data->state->trip_start_time_ms = data->state->segment_start_time_ms;
-        data->state->clearTripCarry();
     }
     
     ConfigFile::save(*data->state);
@@ -558,18 +546,6 @@ gboolean update_display(gpointer user_data) {
     
     // Poll counters (respects 5ms minimum interval)
     data->poller->poll(data->counter1, data->counter2, data->register_addr);
-
-    auto recent = data->poller->getMostRecent();
-    if (recent.time_ms != 0) {
-        bool changed = data->state->last_cntr1 != recent.cntr1 || data->state->last_cntr2 != recent.cntr2;
-        data->state->last_cntr1 = recent.cntr1;
-        data->state->last_cntr2 = recent.cntr2;
-        static int64_t last_persist_ms = 0;
-        if (changed && recent.time_ms - last_persist_ms >= 15000) {
-            ConfigFile::save(*data->state);
-            last_persist_ms = recent.time_ms;
-        }
-    }
     
     // Check for auto-advance segments
     if (data->state->segment_current_number >= 0 && 
@@ -579,8 +555,7 @@ gboolean update_display(gpointer user_data) {
             auto current_poll = data->poller->getMostRecent();
             int64_t seg_count_diff = calculateDistanceCounts(*data->state,
                 current_poll.cntr1, current_poll.cntr2,
-                data->state->segment_start_cntr1, data->state->segment_start_cntr2,
-        data->state->segment_carry_cntr1, data->state->segment_carry_cntr2);
+                data->state->segment_start_cntr1, data->state->segment_start_cntr2);
             
             if (seg_count_diff >= seg.distance_counts) {
                 // Advance to next segment
@@ -590,12 +565,10 @@ gboolean update_display(gpointer user_data) {
                     data->state->segment_start_cntr1 = current_poll.cntr1;
                     data->state->segment_start_cntr2 = current_poll.cntr2;
                     data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
-                    data->state->clearSegmentCarry();
                     // Reset trip
                     data->state->trip_start_cntr1 = current_poll.cntr1;
                     data->state->trip_start_cntr2 = current_poll.cntr2;
                     data->state->trip_start_time_ms = data->state->segment_start_time_ms;
-                    data->state->clearTripCarry();
                     ConfigFile::save(*data->state);
                     notifyWebState(data);
                 }
@@ -1002,7 +975,7 @@ static int64_t calibrationRunPulses(AppData* data) {
         cntr2 = current_poll.cntr2;
     }
     return calculateDistanceCounts(*data->state, cntr1, cntr2,
-        data->cal_start_cntr1, data->cal_start_cntr2, 0, 0);
+        data->cal_start_cntr1, data->cal_start_cntr2);
 }
 
 static void markCalStep(GtkWidget* btn, bool next) {
@@ -1100,10 +1073,8 @@ void updateCalibrationDisplay(AppData* data) {
     uint64_t start_cntr1 = data->state->total_start_cntr1;
     uint64_t start_cntr2 = data->state->total_start_cntr2;
     
-    int64_t carry1 = data->state->total_carry_cntr1;
-    int64_t carry2 = data->state->total_carry_cntr2;
-    int64_t cntr1_diff = static_cast<int64_t>(current_poll.cntr1) - static_cast<int64_t>(start_cntr1) + carry1;
-    int64_t cntr2_diff = static_cast<int64_t>(current_poll.cntr2) - static_cast<int64_t>(start_cntr2) + carry2;
+    int64_t cntr1_diff = static_cast<int64_t>(current_poll.cntr1) - static_cast<int64_t>(start_cntr1);
+    int64_t cntr2_diff = static_cast<int64_t>(current_poll.cntr2) - static_cast<int64_t>(start_cntr2);
     
     // CNTR_A (calculated) - average if two counters, or just cntr1 if single
     int64_t cntr_a;
@@ -1564,8 +1535,7 @@ void on_alarm_set(GtkWidget* widget, gpointer user_data) {
     auto current_poll = data->poller->getMostRecent();
     int64_t total_counts = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2,
-        data->state->total_carry_cntr1, data->state->total_carry_cntr2);
+        data->state->total_start_cntr1, data->state->total_start_cntr2);
     
     int64_t km_in_counts = static_cast<int64_t>(metersToCounts(static_cast<double>(km) * 1000.0, data->state->calibration));
     data->state->alarm_distance_km = km;

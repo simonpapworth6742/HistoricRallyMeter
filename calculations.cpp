@@ -6,13 +6,12 @@
 #include <sstream>
 
 int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_t cntr2,
-                                  uint64_t start1, uint64_t start2,
-                                  int64_t carry1, int64_t carry2) {
-    int64_t delta1 = static_cast<int64_t>(cntr1) - static_cast<int64_t>(start1) + carry1;
+                                  uint64_t start1, uint64_t start2) {
+    int64_t delta1 = static_cast<int64_t>(cntr1) - static_cast<int64_t>(start1);
     
     if (state.counters) {
         // Two wheel: average
-        int64_t delta2 = static_cast<int64_t>(cntr2) - static_cast<int64_t>(start2) + carry2;
+        int64_t delta2 = static_cast<int64_t>(cntr2) - static_cast<int64_t>(start2);
         return (delta1 + delta2) / 2;
     } else {
         // One gearbox: just CNTR_1
@@ -20,10 +19,20 @@ int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_
     }
 }
 
-void continueCountAfterPowerLoss(uint64_t live, uint64_t lastSeen,
-                                  uint64_t& start, int64_t& carry) {
-    carry += static_cast<int64_t>(lastSeen) - static_cast<int64_t>(start);
-    start = live;
+void restartDistancesAfterPowerLoss(RallyState& state, uint64_t cntr1, uint64_t cntr2,
+                                    int64_t now_ms) {
+    state.total_start_cntr1 = cntr1;
+    state.total_start_cntr2 = cntr2;
+    state.total_start_time_ms = now_ms;
+    state.trip_start_cntr1 = cntr1;
+    state.trip_start_cntr2 = cntr2;
+    state.trip_start_time_ms = now_ms;
+    state.segment_start_cntr1 = cntr1;
+    state.segment_start_cntr2 = cntr2;
+    state.segment_start_time_ms = now_ms;
+    state.segment_current_number = -1;
+    state.alarm_distance_km = 0;
+    state.alarm_target_counts = 0;
 }
 
 long countsToCentimeters(int64_t counts, long calibration) {

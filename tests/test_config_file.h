@@ -188,6 +188,28 @@ public:
             return true;
         });
         
+        // Save replaces the file in one step and leaves no temporary behind
+        suite->addTest("Save renames a temporary file over the config", [this]() {
+            cleanup();
+            writeTestFile("{ \"calibration\": 123 }\n");
+
+            RallyState state;
+            state.calibration = 910000;
+            state.segments.push_back({50.0, 100.0, 1000.0, 2000.0, true});
+            ConfigFile::save(state, test_config_file);
+
+            std::ifstream tmp(test_config_file + ".tmp");
+            ASSERT_FALSE(tmp.is_open());
+
+            RallyState loaded;
+            ConfigFile::load(loaded, test_config_file);
+            ASSERT_EQ(loaded.calibration, 910000);
+            ASSERT_EQ(loaded.segments.size(), 1u);
+
+            cleanup();
+            return true;
+        });
+        
         // Test calibration default
         suite->addTest("Calibration defaults to 600000", []() {
             RallyState state;

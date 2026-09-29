@@ -130,8 +130,7 @@ void updateCopilotDisplay(AppData* data) {
     // Alarm check runs regardless of which screen is visible
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->total_start_cntr1, data->state->total_start_cntr2,
-        data->state->total_carry_cntr1, data->state->total_carry_cntr2);
+        data->state->total_start_cntr1, data->state->total_start_cntr2);
     
     // In single-display mode the countdown/clear widgets do not exist, but a
     // persisted alarm still fires its sound and auto-clears.
@@ -220,8 +219,7 @@ void updateCopilotDisplay(AppData* data) {
     // Trip distance
     int64_t trip_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,
-        data->state->trip_start_cntr1, data->state->trip_start_cntr2,
-        data->state->trip_carry_cntr1, data->state->trip_carry_cntr2);
+        data->state->trip_start_cntr1, data->state->trip_start_cntr2);
     long trip_m = countsToCentimeters(trip_count_diff, data->state->calibration) / 100;
     int64_t trip_duration_ms = current_time_ms - data->state->trip_start_time_ms;
     int64_t trip_secs = trip_duration_ms / 1000;
@@ -248,8 +246,7 @@ void updateCopilotDisplay(AppData* data) {
         const Segment& cur_seg = data->state->segments[data->state->segment_current_number];
         int64_t seg_count_diff = calculateDistanceCounts(*data->state,
             current_poll.cntr1, current_poll.cntr2,
-            data->state->segment_start_cntr1, data->state->segment_start_cntr2,
-            data->state->segment_carry_cntr1, data->state->segment_carry_cntr2);
+            data->state->segment_start_cntr1, data->state->segment_start_cntr2);
         int64_t remaining_counts = cur_seg.distance_counts - seg_count_diff;
         long remaining_cm = countsToCentimeters(remaining_counts, data->state->calibration);
         long remaining_m = (remaining_cm >= 0) ? (remaining_cm + 99) / 100 : -((-remaining_cm) / 100);

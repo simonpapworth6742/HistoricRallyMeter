@@ -8,13 +8,13 @@
 
 // Calculate distance in counts
 int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_t cntr2,
-                                  uint64_t start1, uint64_t start2,
-                                  int64_t carry1 = 0, int64_t carry2 = 0);
+                                  uint64_t start1, uint64_t start2);
 
-// A chip lost power and its count went back to zero. Keep the distance already
-// covered and continue from the live count.
-void continueCountAfterPowerLoss(uint64_t live, uint64_t lastSeen,
-                                  uint64_t& start, int64_t& carry);
+// The meter was off long enough for the counter chips to lose power, so both
+// counts restarted from zero. Start total, trip and segment again from the live
+// counts and the given time.
+void restartDistancesAfterPowerLoss(RallyState& state, uint64_t cntr1, uint64_t cntr2,
+                                    int64_t now_ms);
 
 // Convert counts to centimeters using calibration (integer, for display)
 long countsToCentimeters(int64_t counts, long calibration);
