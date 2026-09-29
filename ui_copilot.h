@@ -5,6 +5,7 @@
 #include "rally_types.h"
 
 void updateCopilotDisplay(AppData* data);
+void updateAdjustDistanceDisplay(AppData* data);
 GtkWidget* createCopilotWindow(AppData* data);
 void rebuildSetupDisplays(AppData* data);
 

@@ -72,6 +72,9 @@ struct AppData {
     // TwinMaster screen
     GtkWidget* twinMasterScreen;
     GtkWidget* adjustDistanceScreen = nullptr;
+    GtkLabel* adjustDistanceInfoLabel = nullptr;   // live total, trip and offset in metres
+    GtkEntry* adjustDistanceEntry = nullptr;       // metres to add/subtract or set
+    GtkWidget* adjustDistanceKeypad = nullptr;
     GtkLabel* totalDistLabel;
     GtkLabel* totalUnitLabel;
     GtkLabel* totalTimeLabel;

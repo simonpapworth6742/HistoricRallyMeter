@@ -23,6 +23,34 @@ public:
     long segment_current_number = -1;  // -1 = no segment
     long rallyTimeOffset_ms = 0;  // offset in milliseconds
     long ahead_behind_zero_offset_ms = 0;  // manual offset for driver's ahead/behind display
+    // Counts added to CNTR_A for total, trip and segment. Negative removes a
+    // detour. Zeroed by Total reset, stage go and the power-loss reset.
+    int64_t distance_offset_counts = 0;
+
+    // Trip and segment start readings include the offset so they read zero now.
+    void startTripAt(uint64_t cntr1, uint64_t cntr2, int64_t now_ms) {
+        trip_start_cntr1 = static_cast<uint64_t>(static_cast<int64_t>(cntr1) + distance_offset_counts);
+        trip_start_cntr2 = static_cast<uint64_t>(static_cast<int64_t>(cntr2) + distance_offset_counts);
+        trip_start_time_ms = now_ms;
+    }
+    void startSegmentAt(uint64_t cntr1, uint64_t cntr2, int64_t now_ms) {
+        segment_start_cntr1 = static_cast<uint64_t>(static_cast<int64_t>(cntr1) + distance_offset_counts);
+        segment_start_cntr2 = static_cast<uint64_t>(static_cast<int64_t>(cntr2) + distance_offset_counts);
+        segment_start_time_ms = now_ms;
+    }
+    // Total reset: the offset goes to zero, so take it back out of the trip and
+    // segment start readings to leave those two distances unchanged.
+    void startTotalAt(uint64_t cntr1, uint64_t cntr2, int64_t now_ms) {
+        int64_t off = distance_offset_counts;
+        trip_start_cntr1 = static_cast<uint64_t>(static_cast<int64_t>(trip_start_cntr1) - off);
+        trip_start_cntr2 = static_cast<uint64_t>(static_cast<int64_t>(trip_start_cntr2) - off);
+        segment_start_cntr1 = static_cast<uint64_t>(static_cast<int64_t>(segment_start_cntr1) - off);
+        segment_start_cntr2 = static_cast<uint64_t>(static_cast<int64_t>(segment_start_cntr2) - off);
+        distance_offset_counts = 0;
+        total_start_cntr1 = cntr1;
+        total_start_cntr2 = cntr2;
+        total_start_time_ms = now_ms;
+    }
     uint64_t auto_start_rally_time_minutes = 0;  // minutes since 1/1/2020, 0 = not set
     std::vector<Segment> segments;
     

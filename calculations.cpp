@@ -6,17 +6,20 @@
 #include <sstream>
 
 int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_t cntr2,
-                                  uint64_t start1, uint64_t start2) {
+                                  uint64_t start1, uint64_t start2,
+                                  bool dont_apply_offset) {
     int64_t delta1 = static_cast<int64_t>(cntr1) - static_cast<int64_t>(start1);
+    int64_t cntr_a;
     
     if (state.counters) {
         // Two wheel: average
         int64_t delta2 = static_cast<int64_t>(cntr2) - static_cast<int64_t>(start2);
-        return (delta1 + delta2) / 2;
+        cntr_a = (delta1 + delta2) / 2;
     } else {
         // One gearbox: just CNTR_1
-        return delta1;
+        cntr_a = delta1;
     }
+    return dont_apply_offset ? cntr_a : cntr_a + state.distance_offset_counts;
 }
 
 void restartDistancesAfterPowerLoss(RallyState& state, uint64_t cntr1, uint64_t cntr2,
@@ -33,6 +36,7 @@ void restartDistancesAfterPowerLoss(RallyState& state, uint64_t cntr1, uint64_t 
     state.segment_current_number = -1;
     state.alarm_distance_km = 0;
     state.alarm_target_counts = 0;
+    state.distance_offset_counts = 0;
 }
 
 long countsToCentimeters(int64_t counts, long calibration) {
@@ -49,6 +53,51 @@ double countsToMeters(double counts, long calibration) {
 double metersToCounts(double meters, long calibration) {
     // Inverse of countsToMeters
     return (meters * 1e6) / calibration;
+}
+
+// Split entry text into an optional leading sign and whole metres.
+// Returns false unless the rest is one or more digits.
+static bool parseSignedMetres(const std::string& text, char& sign, long& metres) {
+    size_t i = 0;
+    while (i < text.size() && text[i] == ' ') i++;
+    sign = 0;
+    if (i < text.size() && (text[i] == '+' || text[i] == '-')) sign = text[i++];
+    size_t digits_start = i;
+    long value = 0;
+    while (i < text.size() && text[i] >= '0' && text[i] <= '9') {
+        value = value * 10 + (text[i] - '0');
+        i++;
+    }
+    while (i < text.size() && text[i] == ' ') i++;
+    if (i == digits_start || i != text.size()) return false;
+    metres = value;
+    return true;
+}
+
+bool applyDistanceAdjustmentText(const std::string& text, int64_t current_offset_counts,
+                                 int64_t current_total_counts, long calibration,
+                                 int64_t& new_offset_counts) {
+    char sign; long metres;
+    if (!parseSignedMetres(text, sign, metres)) return false;
+    int64_t counts = static_cast<int64_t>(std::llround(metersToCounts(static_cast<double>(metres), calibration)));
+    if (sign == '+') new_offset_counts = current_offset_counts + counts;
+    else if (sign == '-') new_offset_counts = current_offset_counts - counts;
+    else if (metres == 0) new_offset_counts = 0;   // "0" zeroes the offset
+    else new_offset_counts = current_offset_counts + (counts - current_total_counts);  // total reads N
+    return true;
+}
+
+std::string nudgeDistanceAdjustmentText(const std::string& text, long delta_m) {
+    char sign = '+'; long metres = 0;
+    if (!text.empty() && !parseSignedMetres(text, sign, metres)) return text;
+    if (text.empty()) sign = '+';
+    if (sign == '+' || sign == '-') {
+        long value = (sign == '-' ? -metres : metres) + delta_m;
+        return (value < 0 ? "-" : "+") + std::to_string(value < 0 ? -value : value);
+    }
+    long value = metres + delta_m;
+    if (value < 0) value = 0;
+    return std::to_string(value);
 }
 
 double countsPerHourToKPH(double counts_per_hour, long calibration) {
@@ -91,8 +140,9 @@ double calculateCurrentSpeed(const RallyState& state, const CounterPoll& current
         return -1.0;
     }
     
+    // Raw difference between two readings: the distance offset does not apply
     int64_t count_diff = calculateDistanceCounts(state, current.cntr1, current.cntr2,
-                                                  tenth.cntr1, tenth.cntr2);
+                                                  tenth.cntr1, tenth.cntr2, true);
     long cm_diff = countsToCentimeters(count_diff, state.calibration);
     
     // Speed in cm/s

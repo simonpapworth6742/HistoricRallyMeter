@@ -153,6 +153,89 @@ public:
             return true;
         });
 
+        suite->addTest("distance_offset_counts is added to CNTR_A unless dont_apply_offset", []() {
+            RallyState state;
+            state.distance_offset_counts = -300;
+            state.counters = false;
+            ASSERT_EQ(calculateDistanceCounts(state, 1500, 0, 1000, 0), 200);        // 500 - 300
+            ASSERT_EQ(calculateDistanceCounts(state, 1500, 0, 1000, 0, true), 500);  // raw
+            state.counters = true;
+            ASSERT_EQ(calculateDistanceCounts(state, 1500, 2700, 1000, 2000, true), 600);  // avg(500,700)
+            ASSERT_EQ(calculateDistanceCounts(state, 1500, 2700, 1000, 2000), 300);
+            return true;
+        });
+
+        suite->addTest("Trip reset with an offset reads zero, then goes negative and counts back up", []() {
+            RallyState state;
+            state.counters = true;
+            state.distance_offset_counts = -400;
+            state.startTripAt(10000, 20000, 5000);
+            ASSERT_EQ(state.trip_start_time_ms, 5000);
+            ASSERT_EQ(calculateDistanceCounts(state, 10000, 20000, state.trip_start_cntr1, state.trip_start_cntr2), 0);
+            // Remove a detour of 250 counts
+            state.distance_offset_counts -= 250;
+            ASSERT_EQ(calculateDistanceCounts(state, 10000, 20000, state.trip_start_cntr1, state.trip_start_cntr2), -250);
+            // Drive 250 counts: back to zero; 10 more: +10
+            ASSERT_EQ(calculateDistanceCounts(state, 10250, 20250, state.trip_start_cntr1, state.trip_start_cntr2), 0);
+            ASSERT_EQ(calculateDistanceCounts(state, 10260, 20260, state.trip_start_cntr1, state.trip_start_cntr2), 10);
+            return true;
+        });
+
+        suite->addTest("Total reset zeroes the offset and leaves trip and segment unchanged", []() {
+            RallyState state;
+            state.counters = false;
+            state.total_start_cntr1 = 1000;
+            state.distance_offset_counts = -300;
+            state.startTripAt(1200, 0, 1);      // trip start stored as 1200 - 300 = 900
+            state.startSegmentAt(1100, 0, 1);
+            int64_t trip_before = calculateDistanceCounts(state, 1600, 0, state.trip_start_cntr1, 0);     // 700 - 300 = 400
+            int64_t seg_before = calculateDistanceCounts(state, 1600, 0, state.segment_start_cntr1, 0);   // 800 - 300 = 500
+            ASSERT_EQ(trip_before, 400);
+            ASSERT_EQ(seg_before, 500);
+
+            state.startTotalAt(1600, 0, 99);
+            ASSERT_EQ(state.distance_offset_counts, 0);
+            ASSERT_EQ(state.total_start_cntr1, 1600u);
+            ASSERT_EQ(state.total_start_time_ms, 99);
+            ASSERT_EQ(calculateDistanceCounts(state, 1600, 0, state.total_start_cntr1, 0), 0);
+            ASSERT_EQ(calculateDistanceCounts(state, 1600, 0, state.trip_start_cntr1, 0), trip_before);
+            ASSERT_EQ(calculateDistanceCounts(state, 1600, 0, state.segment_start_cntr1, 0), seg_before);
+            return true;
+        });
+
+        suite->addTest("Adjust entry: +N adds, -N subtracts, N makes total read N, 0 zeroes, junk ignored", []() {
+            long cal = 1000000;  // 1 m per count keeps the numbers readable
+            int64_t offset = -1000, total = 8200;   // total already includes the offset
+            int64_t out = 12345;
+            ASSERT_TRUE(applyDistanceAdjustmentText("+350", offset, total, cal, out));  ASSERT_EQ(out, -650);
+            ASSERT_TRUE(applyDistanceAdjustmentText("-350", offset, total, cal, out));  ASSERT_EQ(out, -1350);
+            // Total should read 5000: offset moves by (5000 - 8200)
+            ASSERT_TRUE(applyDistanceAdjustmentText("5000", offset, total, cal, out));  ASSERT_EQ(out, -4200);
+            ASSERT_TRUE(applyDistanceAdjustmentText("9000", offset, total, cal, out));  ASSERT_EQ(out, -200);
+            ASSERT_TRUE(applyDistanceAdjustmentText("0", offset, total, cal, out));     ASSERT_EQ(out, 0);
+            out = 777;
+            ASSERT_FALSE(applyDistanceAdjustmentText("", offset, total, cal, out));     ASSERT_EQ(out, 777);
+            ASSERT_FALSE(applyDistanceAdjustmentText("+", offset, total, cal, out));    ASSERT_EQ(out, 777);
+            ASSERT_FALSE(applyDistanceAdjustmentText("12a", offset, total, cal, out));  ASSERT_EQ(out, 777);
+            // Calibration applies: 600000 mm/1000 counts -> 0.6 m/count, 300 m = 500 counts
+            ASSERT_TRUE(applyDistanceAdjustmentText("-300", 0, 0, 600000, out));        ASSERT_EQ(out, -500);
+            // Total reads 300 m from a raw 1000 counts (600 m): offset = 500 - 1000
+            ASSERT_TRUE(applyDistanceAdjustmentText("300", 0, 1000, 600000, out));      ASSERT_EQ(out, -500);
+            return true;
+        });
+
+        suite->addTest("Adjust nudges: empty starts signed, signed passes zero, unsigned stops at 0", []() {
+            ASSERT_STR_EQ(nudgeDistanceAdjustmentText("", 10), "+10");
+            ASSERT_STR_EQ(nudgeDistanceAdjustmentText("", -100), "-100");
+            ASSERT_STR_EQ(nudgeDistanceAdjustmentText("+5", -10), "-5");
+            ASSERT_STR_EQ(nudgeDistanceAdjustmentText("-5", 5), "+0");
+            ASSERT_STR_EQ(nudgeDistanceAdjustmentText("-1000", -1000), "-2000");
+            ASSERT_STR_EQ(nudgeDistanceAdjustmentText("200", 10), "210");
+            ASSERT_STR_EQ(nudgeDistanceAdjustmentText("5", -10), "0");
+            ASSERT_STR_EQ(nudgeDistanceAdjustmentText("abc", 10), "abc");
+            return true;
+        });
+
         suite->addTest("Counter power loss restarts total, trip and segment from live counts", []() {
             RallyState state;
             state.counters = true;
@@ -163,9 +246,11 @@ public:
             state.segment_current_number = 2;
             state.alarm_distance_km = 5;
             state.alarm_target_counts = 99999;
+            state.distance_offset_counts = -123;
 
             // The chips restarted from zero and have counted a few pulses since
             restartDistancesAfterPowerLoss(state, 12, 14, 777000);
+            ASSERT_EQ(state.distance_offset_counts, 0);
 
             ASSERT_EQ(state.total_start_cntr1, 12u);   ASSERT_EQ(state.total_start_cntr2, 14u);
             ASSERT_EQ(state.trip_start_cntr1, 12u);    ASSERT_EQ(state.trip_start_cntr2, 14u);

@@ -46,9 +46,7 @@ static void notifyWebState(AppData* data) {
 void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     auto current_poll = data->poller->getMostRecent();
-    data->state->total_start_cntr1 = current_poll.cntr1;
-    data->state->total_start_cntr2 = current_poll.cntr2;
-    data->state->total_start_time_ms = getRallyTime_ms(*data->state);
+    data->state->startTotalAt(current_poll.cntr1, current_poll.cntr2, getRallyTime_ms(*data->state));
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -56,9 +54,7 @@ void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 void on_trip_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     auto current_poll = data->poller->getMostRecent();
-    data->state->trip_start_cntr1 = current_poll.cntr1;
-    data->state->trip_start_cntr2 = current_poll.cntr2;
-    data->state->trip_start_time_ms = getRallyTime_ms(*data->state);
+    data->state->startTripAt(current_poll.cntr1, current_poll.cntr2, getRallyTime_ms(*data->state));
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -98,17 +94,13 @@ void performStageGo(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
     int64_t current_time = getRallyTime_ms(*data->state);
 
+    // Offset goes first so the three starts below are recorded from the raw counts
+    data->state->distance_offset_counts = 0;
     data->state->total_start_cntr1 = current_poll.cntr1;
     data->state->total_start_cntr2 = current_poll.cntr2;
     data->state->total_start_time_ms = current_time;
-
-    data->state->trip_start_cntr1 = current_poll.cntr1;
-    data->state->trip_start_cntr2 = current_poll.cntr2;
-    data->state->trip_start_time_ms = current_time;
-
-    data->state->segment_start_cntr1 = current_poll.cntr1;
-    data->state->segment_start_cntr2 = current_poll.cntr2;
-    data->state->segment_start_time_ms = current_time;
+    data->state->startTripAt(current_poll.cntr1, current_poll.cntr2, current_time);
+    data->state->startSegmentAt(current_poll.cntr1, current_poll.cntr2, current_time);
 
     if (!data->state->segments.empty()) {
         data->state->segment_current_number = 0;
@@ -478,13 +470,9 @@ void on_next_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     if (data->state->segment_current_number < static_cast<long>(data->state->segments.size()) - 1) {
         auto current_poll = data->poller->getMostRecent();
         data->state->segment_current_number++;
-        data->state->segment_start_cntr1 = current_poll.cntr1;
-        data->state->segment_start_cntr2 = current_poll.cntr2;
-        data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
-        // Reset trip
-        data->state->trip_start_cntr1 = current_poll.cntr1;
-        data->state->trip_start_cntr2 = current_poll.cntr2;
-        data->state->trip_start_time_ms = data->state->segment_start_time_ms;
+        int64_t now_ms = getRallyTime_ms(*data->state);
+        data->state->startSegmentAt(current_poll.cntr1, current_poll.cntr2, now_ms);
+        data->state->startTripAt(current_poll.cntr1, current_poll.cntr2, now_ms);
         ConfigFile::save(*data->state);
     }
 }
@@ -517,24 +505,18 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         cur_seg.distance_m = countsToMeters(cur_seg.distance_counts, data->state->calibration);
         
         data->state->segment_current_number++;
-        data->state->segment_start_cntr1 = current_poll.cntr1;
-        data->state->segment_start_cntr2 = current_poll.cntr2;
-        data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
-        data->state->trip_start_cntr1 = current_poll.cntr1;
-        data->state->trip_start_cntr2 = current_poll.cntr2;
-        data->state->trip_start_time_ms = data->state->segment_start_time_ms;
+        int64_t now_ms = getRallyTime_ms(*data->state);
+        data->state->startSegmentAt(current_poll.cntr1, current_poll.cntr2, now_ms);
+        data->state->startTripAt(current_poll.cntr1, current_poll.cntr2, now_ms);
     } else if (near_start) {
         // "prev": extend previous segment distance to end here, reset current segment start to now
         Segment& prev_seg = data->state->segments[data->state->segment_current_number - 1];
         prev_seg.distance_counts += seg_count_diff;
         prev_seg.distance_m = countsToMeters(prev_seg.distance_counts, data->state->calibration);
         
-        data->state->segment_start_cntr1 = current_poll.cntr1;
-        data->state->segment_start_cntr2 = current_poll.cntr2;
-        data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
-        data->state->trip_start_cntr1 = current_poll.cntr1;
-        data->state->trip_start_cntr2 = current_poll.cntr2;
-        data->state->trip_start_time_ms = data->state->segment_start_time_ms;
+        int64_t now_ms = getRallyTime_ms(*data->state);
+        data->state->startSegmentAt(current_poll.cntr1, current_poll.cntr2, now_ms);
+        data->state->startTripAt(current_poll.cntr1, current_poll.cntr2, now_ms);
     }
     
     ConfigFile::save(*data->state);
@@ -562,13 +544,9 @@ gboolean update_display(gpointer user_data) {
                 if (data->state->segment_current_number < static_cast<long>(data->state->segments.size()) - 1) {
                     data->state->segment_current_number++;
                     auto current_poll = data->poller->getMostRecent();
-                    data->state->segment_start_cntr1 = current_poll.cntr1;
-                    data->state->segment_start_cntr2 = current_poll.cntr2;
-                    data->state->segment_start_time_ms = getRallyTime_ms(*data->state);
-                    // Reset trip
-                    data->state->trip_start_cntr1 = current_poll.cntr1;
-                    data->state->trip_start_cntr2 = current_poll.cntr2;
-                    data->state->trip_start_time_ms = data->state->segment_start_time_ms;
+                    int64_t now_ms = getRallyTime_ms(*data->state);
+                    data->state->startSegmentAt(current_poll.cntr1, current_poll.cntr2, now_ms);
+                    data->state->startTripAt(current_poll.cntr1, current_poll.cntr2, now_ms);
                     ConfigFile::save(*data->state);
                     notifyWebState(data);
                 }
@@ -626,6 +604,60 @@ void on_show_twinmaster(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 void on_show_adjust_distance(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     gtk_stack_set_visible_child_name(data->copilotStack, "adjustdistance");
+    if (data->adjustDistanceEntry) {
+        gtk_entry_set_text(data->adjustDistanceEntry, "");
+        data->activeEntry = data->adjustDistanceEntry;
+    }
+    updateAdjustDistanceDisplay(data);
+}
+
+// Only apply changes the offset. Nudges and the keypad change the entry text.
+void on_adjust_distance_apply(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (!data->adjustDistanceEntry) return;
+    auto current_poll = data->poller->getMostRecent();
+    int64_t total_counts = calculateDistanceCounts(*data->state,
+        current_poll.cntr1, current_poll.cntr2,
+        data->state->total_start_cntr1, data->state->total_start_cntr2);
+    int64_t new_offset = data->state->distance_offset_counts;
+    if (!applyDistanceAdjustmentText(gtk_entry_get_text(data->adjustDistanceEntry),
+                                     data->state->distance_offset_counts, total_counts,
+                                     data->state->calibration, new_offset)) {
+        return;
+    }
+    data->state->distance_offset_counts = new_offset;
+    ConfigFile::save(*data->state);
+    gtk_entry_set_text(data->adjustDistanceEntry, "");
+    notifyWebState(data);
+    on_show_twinmaster(nullptr, data);
+}
+
+void on_adjust_distance_clear(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->state->distance_offset_counts = 0;
+    ConfigFile::save(*data->state);
+    if (data->adjustDistanceEntry) gtk_entry_set_text(data->adjustDistanceEntry, "");
+    notifyWebState(data);
+    on_show_twinmaster(nullptr, data);
+}
+
+void on_adjust_distance_nudge(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (!data->adjustDistanceEntry) return;
+    long delta_m = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(widget), "nudge-m"));
+    std::string text = nudgeDistanceAdjustmentText(gtk_entry_get_text(data->adjustDistanceEntry), delta_m);
+    gtk_entry_set_text(data->adjustDistanceEntry, text.c_str());
+}
+
+// "+" or "-" on the keypad sets the leading sign of the entry, replacing one already there.
+void on_keypad_sign(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    if (!data->activeEntry) return;
+    const char* sign = gtk_button_get_label(GTK_BUTTON(widget));
+    std::string text = gtk_entry_get_text(data->activeEntry);
+    if (!text.empty() && (text[0] == '+' || text[0] == '-')) text.erase(0, 1);
+    text = std::string(sign) + text;
+    gtk_entry_set_text(data->activeEntry, text.c_str());
 }
 
 static void pumpUi() {
@@ -788,6 +820,36 @@ GtkWidget* createDateTimeKeypad(AppData* data) {
         GtkWidget* btn = gtk_button_new_with_label(digits[i]);
         gtk_widget_set_size_request(btn, 63, 50);
         g_signal_connect(btn, "clicked", G_CALLBACK(on_keypad_digit), data);
+        gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
+    }
+    
+    GtkWidget* clearBtn = gtk_button_new_with_label("C");
+    gtk_widget_set_size_request(clearBtn, 63, 50);
+    g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_keypad_clear), data);
+    gtk_grid_attach(GTK_GRID(keypad), clearBtn, 0, 4, 1, 1);
+    
+    GtkWidget* bkspBtn = gtk_button_new_with_label("<-");
+    gtk_widget_set_size_request(bkspBtn, 136, 50);
+    g_signal_connect(bkspBtn, "clicked", G_CALLBACK(on_keypad_backspace), data);
+    gtk_grid_attach(GTK_GRID(keypad), bkspBtn, 1, 4, 2, 1);
+    
+    return keypad;
+}
+
+// Numeric keypad with "+" and "-" in place of ";" and "."
+GtkWidget* createAdjustDistanceKeypad(AppData* data) {
+    GtkWidget* keypad = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(keypad), 5);
+    gtk_grid_set_column_spacing(GTK_GRID(keypad), 5);
+    
+    const char* keys[] = {"7", "8", "9", "4", "5", "6", "1", "2", "3", "+", "0", "-"};
+    
+    for (int i = 0; i < 12; i++) {
+        GtkWidget* btn = gtk_button_new_with_label(keys[i]);
+        gtk_widget_set_size_request(btn, 63, 50);
+        bool is_sign = (keys[i][0] == '+' || keys[i][0] == '-');
+        g_signal_connect(btn, "clicked",
+            G_CALLBACK(is_sign ? on_keypad_sign : on_keypad_digit), data);
         gtk_grid_attach(GTK_GRID(keypad), btn, i % 3, i / 3, 1, 1);
     }
     
@@ -974,8 +1036,9 @@ static int64_t calibrationRunPulses(AppData* data) {
         cntr1 = current_poll.cntr1;
         cntr2 = current_poll.cntr2;
     }
+    // Raw pulse count over the measured run: the distance offset does not apply
     return calculateDistanceCounts(*data->state, cntr1, cntr2,
-        data->cal_start_cntr1, data->cal_start_cntr2);
+        data->cal_start_cntr1, data->cal_start_cntr2, true);
 }
 
 static void markCalStep(GtkWidget* btn, bool next) {
@@ -1076,15 +1139,9 @@ void updateCalibrationDisplay(AppData* data) {
     int64_t cntr1_diff = static_cast<int64_t>(current_poll.cntr1) - static_cast<int64_t>(start_cntr1);
     int64_t cntr2_diff = static_cast<int64_t>(current_poll.cntr2) - static_cast<int64_t>(start_cntr2);
     
-    // CNTR_A (calculated) - average if two counters, or just cntr1 if single
-    int64_t cntr_a;
-    if (data->state->counters) {
-        // Two wheel counters - average
-        cntr_a = (cntr1_diff + cntr2_diff) / 2;
-    } else {
-        // Single gearbox counter
-        cntr_a = cntr1_diff;
-    }
+    // CNTR_A (calculated), including the distance offset, as on TwinMaster
+    int64_t cntr_a = calculateDistanceCounts(*data->state,
+        current_poll.cntr1, current_poll.cntr2, start_cntr1, start_cntr2);
     
     // Distance in meters
     long total_m = countsToCentimeters(cntr_a, data->state->calibration) / 100;

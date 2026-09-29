@@ -30,6 +30,10 @@ void on_show_segments(GtkWidget* widget, gpointer user_data);
 void on_show_calibration(GtkWidget* widget, gpointer user_data);
 void on_show_twinmaster(GtkWidget* widget, gpointer user_data);
 void on_show_adjust_distance(GtkWidget* widget, gpointer user_data);
+void on_adjust_distance_apply(GtkWidget* widget, gpointer user_data);
+void on_adjust_distance_clear(GtkWidget* widget, gpointer user_data);
+void on_adjust_distance_nudge(GtkWidget* widget, gpointer user_data);
+void on_keypad_sign(GtkWidget* widget, gpointer user_data);
 void on_show_datetime(GtkWidget* widget, gpointer user_data);
 void on_add_segment(GtkWidget* widget, gpointer user_data);
 void on_delete_segment(GtkWidget* widget, gpointer user_data);
@@ -71,5 +75,6 @@ void updateAutoStartDisplay(AppData* data);
 void performStageGo(AppData* data);
 GtkWidget* createNumericKeypad(AppData* data);
 GtkWidget* createDateTimeKeypad(AppData* data);
+GtkWidget* createAdjustDistanceKeypad(AppData* data);
 
 #endif // CALLBACKS_H

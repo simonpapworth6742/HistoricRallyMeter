@@ -59,6 +59,7 @@ std::string buildTelemetryJson(AppData* data) {
     long trip_m = countsToCentimeters(trip_count_diff, data->state->calibration) / 100;
     double trip_avg = calculateAverageSpeed(*data->state,
         data->state->trip_start_time_ms, current_time_ms, trip_count_diff);
+    if (trip_count_diff < 0) trip_avg = 0.0;   // trip taken negative by a distance adjustment
 
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
         current_poll.cntr1, current_poll.cntr2,

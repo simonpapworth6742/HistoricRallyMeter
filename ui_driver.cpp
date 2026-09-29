@@ -492,7 +492,11 @@ void updateDriverDisplay(AppData* data) {
     double trip_speed = calculateAverageSpeed(*data->state,
         data->state->trip_start_time_ms, current_time_ms, trip_count_diff);
     ss.str("");
-    ss << std::fixed << std::setprecision(2) << trip_speed;
+    if (trip_count_diff < 0) {
+        ss << "--.--";   // trip taken negative by a distance adjustment
+    } else {
+        ss << std::fixed << std::setprecision(2) << trip_speed;
+    }
     gtk_label_set_text(data->tripSpeedLabel, ss.str().c_str());
     
     // Total average speed

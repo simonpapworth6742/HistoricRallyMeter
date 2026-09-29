@@ -108,6 +108,8 @@ static void applyCopilotCSS() {
         "button.setup-kb label { font-size: 14px; }"
         "button.rally-nudge { font-size: 16px; padding: 2px 4px; min-height: 36px; }"
         "button.rally-nudge label { font-size: 16px; }"
+        ".adjust-readings { font-size: 28px; font-family: monospace; }"
+        ".adjust-entry, .adjust-entry entry, button.adjust-entry, button.adjust-entry label { font-size: 28px; }"
         "button.adj-total { padding: 0; min-width: 40px; min-height: 0; }"
         "button.adj-total label { font-size: 20px; padding: 0; margin: 0; }"
         "separator.setup-rule { background-color: #FFFFFF; min-height: 1px; }",
@@ -187,6 +189,11 @@ void updateCopilotDisplay(AppData* data) {
 
     if (visible_child == data->setupScreen) {
         refreshWebAccess(data);
+        return;
+    }
+
+    if (visible_child == data->adjustDistanceScreen) {
+        updateAdjustDistanceDisplay(data);
         return;
     }
     
@@ -1343,6 +1350,23 @@ static GtkWidget* createSetupScreen(AppData* data) {
     return screen;
 }
 
+void updateAdjustDistanceDisplay(AppData* data) {
+    if (!data->adjustDistanceInfoLabel) return;
+    auto current_poll = data->poller->getMostRecent();
+    int64_t total_counts = calculateDistanceCounts(*data->state,
+        current_poll.cntr1, current_poll.cntr2,
+        data->state->total_start_cntr1, data->state->total_start_cntr2);
+    int64_t trip_counts = calculateDistanceCounts(*data->state,
+        current_poll.cntr1, current_poll.cntr2,
+        data->state->trip_start_cntr1, data->state->trip_start_cntr2);
+    long total_m = countsToCentimeters(total_counts, data->state->calibration) / 100;
+    long trip_m = countsToCentimeters(trip_counts, data->state->calibration) / 100;
+    long offset_m = countsToCentimeters(data->state->distance_offset_counts, data->state->calibration) / 100;
+    std::string text = "Total: " + formatDistance(total_m, 1) + " m   Trip: " + formatDistance(trip_m, 1)
+                     + " m   Offset: " + formatDistance(offset_m, 1) + " m";
+    gtk_label_set_text(data->adjustDistanceInfoLabel, text.c_str());
+}
+
 static GtkWidget* createAdjustDistanceScreen(AppData* data) {
     GtkWidget* screen = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
     gtk_container_set_border_width(GTK_CONTAINER(screen), 5);
@@ -1353,6 +1377,68 @@ static GtkWidget* createAdjustDistanceScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(titleLabel), "title-label");
     gtk_widget_set_halign(titleLabel, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(screen), titleLabel, FALSE, FALSE, 0);
+
+    // Left: readings, entry and nudges. Right: keypad with + and -.
+    GtkWidget* mainBox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(screen), mainBox, TRUE, TRUE, 0);
+
+    GtkWidget* leftBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
+    gtk_widget_set_hexpand(leftBox, TRUE);
+    gtk_box_pack_start(GTK_BOX(mainBox), leftBox, TRUE, TRUE, 0);
+
+    data->adjustDistanceInfoLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->adjustDistanceInfoLabel)), "adjust-readings");
+    gtk_widget_set_halign(GTK_WIDGET(data->adjustDistanceInfoLabel), GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(leftBox), GTK_WIDGET(data->adjustDistanceInfoLabel), FALSE, FALSE, 0);
+
+    GtkWidget* entryRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_start(GTK_BOX(leftBox), entryRow, FALSE, FALSE, 0);
+    GtkWidget* entryLabel = gtk_label_new("Adjust by / total:");
+    gtk_style_context_add_class(gtk_widget_get_style_context(entryLabel), "adjust-entry");
+    gtk_box_pack_start(GTK_BOX(entryRow), entryLabel, FALSE, FALSE, 0);
+    data->adjustDistanceEntry = GTK_ENTRY(gtk_entry_new());
+    gtk_entry_set_placeholder_text(data->adjustDistanceEntry, "+/- metres");
+    gtk_entry_set_width_chars(data->adjustDistanceEntry, 9);
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->adjustDistanceEntry)), "adjust-entry");
+    g_signal_connect(data->adjustDistanceEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
+    gtk_box_pack_start(GTK_BOX(entryRow), GTK_WIDGET(data->adjustDistanceEntry), FALSE, FALSE, 0);
+    GtkWidget* unitLabel = gtk_label_new("m");
+    gtk_style_context_add_class(gtk_widget_get_style_context(unitLabel), "adjust-entry");
+    gtk_box_pack_start(GTK_BOX(entryRow), unitLabel, FALSE, FALSE, 0);
+
+    // clear zeroes the offset; apply uses the entry. Kept well apart.
+    GtkWidget* clearBtn = gtk_button_new_with_label("clear");
+    gtk_style_context_add_class(gtk_widget_get_style_context(clearBtn), "adjust-entry");
+    gtk_widget_set_margin_start(clearBtn, 20);
+    g_signal_connect(clearBtn, "clicked", G_CALLBACK(on_adjust_distance_clear), data);
+    gtk_box_pack_start(GTK_BOX(entryRow), clearBtn, FALSE, FALSE, 0);
+    GtkWidget* applyBtn = gtk_button_new_with_label("apply");
+    gtk_style_context_add_class(gtk_widget_get_style_context(applyBtn), "adjust-entry");
+    gtk_widget_set_margin_start(applyBtn, 150);
+    g_signal_connect(applyBtn, "clicked", G_CALLBACK(on_adjust_distance_apply), data);
+    gtk_box_pack_start(GTK_BOX(entryRow), applyBtn, FALSE, FALSE, 0);
+
+    // Nudges change the entry only; apply changes the offset.
+    GtkWidget* nudgeRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+    gtk_widget_set_margin_top(nudgeRow, 24);
+    gtk_box_pack_start(GTK_BOX(leftBox), nudgeRow, FALSE, FALSE, 0);
+    struct Nudge { const char* label; int delta_m; };
+    const Nudge nudges[] = {
+        {"-1km", -1000}, {"-100m", -100}, {"-10m", -10}, {"-1m", -1},
+        {"+1m", 1}, {"+10m", 10}, {"+100m", 100}, {"+1km", 1000},
+    };
+    for (const Nudge& nudge : nudges) {
+        GtkWidget* btn = gtk_button_new_with_label(nudge.label);
+        gtk_style_context_add_class(gtk_widget_get_style_context(btn), "rally-nudge");
+        gtk_widget_set_hexpand(btn, TRUE);
+        g_object_set_data(G_OBJECT(btn), "nudge-m", GINT_TO_POINTER(nudge.delta_m));
+        g_signal_connect(btn, "clicked", G_CALLBACK(on_adjust_distance_nudge), data);
+        gtk_box_pack_start(GTK_BOX(nudgeRow), btn, TRUE, TRUE, 0);
+    }
+
+    data->adjustDistanceKeypad = createAdjustDistanceKeypad(data);
+    gtk_widget_set_valign(data->adjustDistanceKeypad, GTK_ALIGN_START);
+    gtk_box_pack_end(GTK_BOX(mainBox), data->adjustDistanceKeypad, FALSE, FALSE, 10);
 
     GtkWidget* backBtn = gtk_button_new_with_label("back");
     gtk_style_context_add_class(gtk_widget_get_style_context(backBtn), "nav-button");

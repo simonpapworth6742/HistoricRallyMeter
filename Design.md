@@ -123,6 +123,7 @@ long rallyTimeOffset – ms offset of rally time to operating system time, defau
 string bluetooth_audio_name – display name of the remembered Bluetooth speaker, empty when none is remembered
 string bluetooth_audio_address – Bluetooth address of that speaker, empty when none is remembered. Pressing Remember bluetooth audio fills both from the Pi's current audio output when that output is a Bluetooth device, and clears both when it is not.
 long ahead_behind_zero_offset_ms - ms offset (+ or -) of the drivers ahead/behind caculation,defaults to zero and on stage-go. Set in the twinmaster display.
+long distance_offset_counts - counts (+ or -) added to the calculated counter CNTR_A for every distance measured since a start reading: total, trip and segment. A missed turn and the drive back are removed by making it more negative by that many counts. Defaults to zero, and is set to zero by a Total reset, stage go, and the counter power-loss reset. Set on the Adjust Distance Traveled screen.
 ulong auto_start_stage_at_rally_time - the date time in munites the stage should automatially be started in rally time, stored as an offset from 1/1/2020.
 structure segment[]  - Stage segments contain target speed over distance segments of the stage, and if manual or automatic progression to the next segment is required. Defaults to no segments.
 double target_speed_kph - the actual speed requested for this segment, this does not change when the calibration changes
@@ -132,7 +133,11 @@ double distance – number of counts for the segment (high precision floating po
 Boolean autoNext – True =  when the distance of this segment has been reached the next segment is started automatically, changing the segment_current value and segment_start counter as well as resetting the trip counter values, false = the next segment button on the co-pilots TwinMaster display must be pressed to advance to the next segment, setting the segment_current, segment_counters and Trip counters
  
 
-The system has two counters available CNTR_1 and CNTR_2, when configured to use one gearbox counter then the distance since total, trip or segment  will be the value of the current CNTR_1 minus the total / trip / segment start_cntr1. If configured to two wheel then the distance since total, trip or segment will be ( (CNTR_1 - the total / trip / segment start_cntr1) + (CNTR_2 - the total / trip / segment start_cntr2) ) then divided by 2. Use integer maths, this caculated counter should be called CNTR_A
+The system has two counters available CNTR_1 and CNTR_2, when configured to use one gearbox counter then the distance since total, trip or segment  will be the value of the current CNTR_1 minus the total / trip / segment start_cntr1. If configured to two wheel then the distance since total, trip or segment will be ( (CNTR_1 - the total / trip / segment start_cntr1) + (CNTR_2 - the total / trip / segment start_cntr2) ) then divided by 2. Use integer maths, this caculated counter should be called CNTR_A. The distance_offset_counts is then added to CNTR_A, so total, trip and segment, and every value derived from them (average speeds, ahead/behind, the tones, the alarm countdown and the web telemetry) all move together when it changes.
+
+Two measurements bypass the offset, using a dont_apply_offset argument on the same calculation: the current speed, which is the difference between two counter readings about two seconds apart, and the calibration run, which is a raw pulse count over a measured distance. Neither is a distance since a start reading.
+
+Because the offset is part of CNTR_A, a Trip reset and a segment start (next/prev, autoNext) record their start readings as the live count plus the offset, so the trip or segment reads zero at that moment. A Total reset sets the offset to zero and records the live count as the total start; the offset is removed from the trip and segment start readings at the same time so those two distances do not jump. Stage go sets the offset to zero and restarts all three from the live counts. After a Trip reset, a later negative adjustment takes the trip negative; it counts back up through zero as the car moves. The TwinMaster and the web show a negative trip with a leading minus, and show "--.--" for the trip average speed while the trip is negative.
 
 The counter chips are simple pulse counters. The application does not change their count mode.
 
@@ -497,16 +502,35 @@ Wi-Fi uses NetworkManager on `wlan0`. [Hotspot: hostname] starts an open access 
 
 **7) Adjust Distance Traveled**
 
-Opened from the vertical [Adj] button on the Total row of TwinMaster. For now the screen has no other controls. [back] is the same 20px, 43px-tall navigation button as on the other screens, sized to its label, and sits at the bottom right. It returns to TwinMaster.
+Opened from the vertical [Adj] button on the Total row of TwinMaster. It sets `distance_offset_counts`, entered in metres and converted with the current calibration. The readings line and the entry line are 28px, the readings in the monospace clock font; the nudges are 16px and the keypad is the standard keypad. [back] is the same 20px, 43px-tall navigation button as on the other screens, sized to its label, and sits at the bottom right. It returns to TwinMaster.
 
 ```
 +----------------------------------------------------------------------------------------------------------+
 |  ADJUST DISTANCE TRAVELED                                                                                |
 +----------------------------------------------------------------------------------------------------------+
-|                                                                                                          |
+|  Total:  xxx,xxx m   Trip:  xxx,xxx m   Offset:  xxx,xxx m                         7    8    9            |
+|  Adjust by / total: [__________] m   [clear]                [apply]                4    5    6            |
+|                                                                                    1    2    3            |
+|  [-1km] [-100m] [-10m] [-1m]  [+1m] [+10m] [+100m] [+1km]                          +    0    -            |
+|                                                                                 [C]  [   <--   ]          |
++----------------------------------------------------------------------------------------------------------+
 |                                                                                              [back]      |
 +----------------------------------------------------------------------------------------------------------+
 ```
+
+The first line shows the live total, trip and current offset in metres, refreshed with the TwinMaster values while this screen is visible. Negative values have a leading minus. There is a clear gap between the entry line and the nudge line.
+
+The entry box holds whole metres and takes its input from the keypad on the right and from the nudge row. The keypad is the numeric keypad with "+" and "-" in place of ";" and ".". Pressing "+" or "-" puts that sign at the front of the entry, replacing any sign already there. The entry has three meanings, decided by its first character when [apply] is pressed:
+
+- Starts with "+" or "-": add that many metres to the current offset, or subtract them. So after a 350 m missed turn and the drive back, "-350" [apply] removes it.
+- A number with no sign: make the total distance read that many metres. The offset becomes the current offset plus (entered metres − current total), so the total shows the entered value and trip, segment and everything derived move by the same amount. This is how the total is matched to a roadbook distance at a known point.
+- "0" on its own: set the offset to zero.
+
+An empty entry or one that is not a number does nothing. [apply] converts the metres to counts with metersToCounts, stores the offset, saves the config, clears the entry, and returns to TwinMaster.
+
+[clear] sits to the left of [apply] with a wide gap between them so one is not pressed for the other. It sets the offset to zero, saves, clears the entry and returns to the TwinMaster display. Nothing else on the screen changes the offset.
+
+The nudge buttons change only the entry box. [-1km] [-100m] [-10m] [-1m] subtract from the value in the box and [+1m] [+10m] [+100m] [+1km] add to it. An empty box is treated as "+0", so the first nudge produces a signed entry such as "+10" or "-100" that [apply] will add to the offset. A signed entry stays signed as it passes through zero ("+5" then [-10m] gives "-5"). An unsigned entry stays unsigned, and is held at 0 rather than going below it. The nudge buttons use the same 16px style as the Date/Time clock nudges.
 
 ## Remote Web Access (mobile phones)
 
@@ -694,6 +718,9 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - The pulse/metre conversion lives only in calculations.cpp: countsToCentimeters() (integer, for display), countsToMeters() (double, for segment distances) and its inverse metersToCounts() = (metres * 1e6) / calibration. No other file repeats the formula.
 - metersToCounts() and countsToMeters() round-trip: countsToMeters(metersToCounts(m)) == m within 1e-6
 - Handle 32-bit counter wrap-around correctly
+- distance_offset_counts is added to CNTR_A in single and dual counter mode; with dont_apply_offset it is not
+- A Trip reset with a non-zero offset records start = live + offset so the trip reads 0; a following negative adjustment takes the trip below zero and it counts back up through zero
+- A Total reset zeroes the offset and leaves the running trip and segment distances unchanged
 
 ### Calibration Tests
 - Default calibration value is 600000
@@ -762,7 +789,8 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Next segment resets Trip counters and time
 - Next segment increments segment_current_number
 - Next segment sets segment_start counters and time
-- Counter power-loss flag at startup resets total, trip and segment start counts to the live counts, start times to now, segment_current_number to -1, and clears the alarm; no flag leaves them unchanged
+- Counter power-loss flag at startup resets total, trip and segment start counts to the live counts, start times to now, segment_current_number to -1, clears the alarm and zeroes distance_offset_counts; no flag leaves them unchanged
+- Stage go zeroes distance_offset_counts
 
 ### Unit Toggle Tests
 - Toggle units from KPH to MPH
@@ -813,6 +841,13 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Calibration button navigates to Calibration screen
 - RallyClock displays at top in hh:mm:ss format
 - The vertical Adj button on the Total row opens Adjust Distance Traveled; back there returns to TwinMaster
+
+### Adjust Distance Traveled Tests
+- Entry "+350" then apply adds 350 m of counts to the offset; "-350" subtracts; "5000" changes the offset so the total reads 5,000 m; "0" zeroes it; empty or non-numeric does nothing
+- Apply and clear both return to TwinMaster; clear zeroes the offset
+- Nudge from an empty entry gives "+10" for [+10m] and "-100" for [-100m]; a signed entry passes through zero ("+5" [-10m] gives "-5"); an unsigned entry stops at "0"
+- Nudges never change the offset; only apply does
+- Keypad "+" and "-" set the leading sign of the entry, replacing an existing one
 - Stage Go dialog offers the next whole minute at least 10 seconds ahead, labelled hh:mm; pressing it stores that auto start time the same way as Auto Start Set, and the button disables once that minute is under 10 seconds away
 
 ### Date/Time Setup Screen Tests
