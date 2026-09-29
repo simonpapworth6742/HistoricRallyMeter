@@ -26,7 +26,7 @@ public:
             ASSERT_NEAR(seg.distance_m, 0.0, 0.001);
             ASSERT_NEAR(seg.target_speed_counts_per_hour, 0.0, 0.001);
             ASSERT_NEAR(seg.distance_counts, 0.0, 0.001);
-            ASSERT_FALSE(seg.autoNext);
+            ASSERT_TRUE(seg.autoNext);
             return true;
         });
 

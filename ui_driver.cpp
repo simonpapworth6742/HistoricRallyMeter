@@ -518,7 +518,6 @@ void updateDriverDisplay(AppData* data) {
         ss.str("");
         ss << std::fixed << std::setprecision(1) << target_kph;
         gtk_label_set_text(data->targetSpeedLabel, ss.str().c_str());
-        gtk_label_set_text(data->gaugeTargetLabel, ss.str().c_str());
         
         // Ahead/behind - calculated from stage start accounting for all segment speeds
         int64_t total_count_diff_ab = calculateDistanceCounts(*data->state,
@@ -552,23 +551,9 @@ void updateDriverDisplay(AppData* data) {
             }
         }
         
-        // Format as mm:ss.s (not hh:mm:ss.ss)
-        ss.str("");
-        if (seconds >= 0) {
-            ss << "+";
-        } else {
-            ss << "-";
-        }
         double abs_seconds = std::abs(seconds);
-        int total_sec = static_cast<int>(abs_seconds);
-        int tenths = static_cast<int>((abs_seconds - total_sec) * 10);
-        int mins = total_sec / 60;
-        int secs = total_sec % 60;
-        ss << std::setfill('0') << std::setw(2) << mins << ":"
-           << std::setw(2) << secs << "." << tenths;
-        gtk_label_set_text(data->aheadBehindLabel, ss.str().c_str());
-        
-        // Speed adjustment arrows - only if more than 0.1 seconds off
+
+        // Speed adjustment for the tone - only if more than 0.1 seconds off
         
         if (abs_seconds > 0.1 && target_kph > 0) {
             // Calculate speed needed to match target in next 500 meters
@@ -605,18 +590,6 @@ void updateDriverDisplay(AppData* data) {
                 num_arrows = 1;
             }
             
-            if (num_arrows > 0) {
-                ss.str("");
-                const char* color = (speed_diff > 0) ? "#00CC00" : "#EE0000";
-                const char* arrow = (speed_diff > 0) ? "↑" : "↓";
-                ss << "<span foreground=\"" << color << "\">";
-                for (int i = 0; i < num_arrows; i++) ss << arrow;
-                ss << "</span>";
-                gtk_label_set_markup(data->speedAdjustArrowsLabel, ss.str().c_str());
-            } else {
-                gtk_label_set_text(data->speedAdjustArrowsLabel, "");
-            }
-            
             // Tone cadence: silent once past the end of the last segment.
             // Silent if within ±0.1s or beyond ±30s.
             // Behind (speed_diff > 0, speed up): C6=1046.50
@@ -644,7 +617,6 @@ void updateDriverDisplay(AppData* data) {
                 }
             }
         } else {
-            gtk_label_set_text(data->speedAdjustArrowsLabel, "");
             if (data->toneGen) data->toneGen->setCadence(0, 0);
         }
         
@@ -654,9 +626,6 @@ void updateDriverDisplay(AppData* data) {
             gtk_widget_queue_draw(data->copilotGaugeArea);
     } else {
         gtk_label_set_text(data->targetSpeedLabel, "--.-");
-        gtk_label_set_text(data->gaugeTargetLabel, "--.-");
-        gtk_label_set_text(data->aheadBehindLabel, "--:--.--");
-        gtk_label_set_text(data->speedAdjustArrowsLabel, "");
         if (data->toneGen) data->toneGen->setCadence(0, 0);
         data->aheadBehindSeconds = 0.0;
         data->segmentProgress = 0.0;
@@ -667,52 +636,6 @@ void updateDriverDisplay(AppData* data) {
         if (data->copilotGaugeArea) {
             gtk_widget_queue_draw(data->copilotGaugeArea);
         }
-    }
-    
-    // Next segment info
-    if (data->state->segment_current_number >= 0 && 
-        data->state->segment_current_number < static_cast<long>(data->state->segments.size()) - 1) {
-        const Segment& current_seg = data->state->segments[data->state->segment_current_number];
-        int64_t seg_count_diff = calculateDistanceCounts(*data->state,
-            current_poll.cntr1, current_poll.cntr2,
-            data->state->segment_start_cntr1, data->state->segment_start_cntr2,
-                data->state->segment_carry_cntr1, data->state->segment_carry_cntr2);
-        
-        double remaining_counts = current_seg.distance_counts - static_cast<double>(seg_count_diff);
-        double remaining_m = countsToMeters(static_cast<int64_t>(remaining_counts), data->state->calibration);
-        
-        const Segment& next_seg = data->state->segments[data->state->segment_current_number + 1];
-        double next_target = countsPerHourToKPH(next_seg.target_speed_counts_per_hour, data->state->calibration);
-        if (data->state->units) {
-            next_target = next_target * 0.621371;
-        }
-        
-        if (current_speed > 0 && current_speed != -1) {
-            double speed_m_per_s = current_speed;
-            if (data->state->units) {
-                speed_m_per_s = speed_m_per_s * 1.60934;
-            }
-            speed_m_per_s = speed_m_per_s / 3.6;
-            double eta_seconds = remaining_m / speed_m_per_s;
-            
-            if (eta_seconds < 0) {
-                ss.str("");
-                ss << "Over by " << formatDuration(static_cast<int64_t>(-eta_seconds * 1000));
-                gtk_label_set_text(data->nextSegLabel, ss.str().c_str());
-            } else {
-                ss.str("");
-                ss << "next: " << std::fixed << std::setprecision(2) << next_target 
-                   << " in " << static_cast<long>(remaining_m) << " m  ETA " << formatDuration(static_cast<int64_t>(eta_seconds * 1000));
-                gtk_label_set_text(data->nextSegLabel, ss.str().c_str());
-            }
-        } else {
-            ss.str("");
-            ss << "next: " << std::fixed << std::setprecision(2) << next_target 
-               << " in " << static_cast<long>(remaining_m) << " m  ETA --:--:--";
-            gtk_label_set_text(data->nextSegLabel, ss.str().c_str());
-        }
-    } else {
-        gtk_label_set_text(data->nextSegLabel, "");
     }
     
     // FPS counter and CPU temp (refreshed once per second)
@@ -809,20 +732,12 @@ GtkWidget* createDriverWindow(AppData* data) {
     data->targetSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
     data->totalSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
     data->tripSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
-    data->speedAdjustArrowsLabel = GTK_LABEL(gtk_label_new(""));
     data->updatesPerSecLabel = GTK_LABEL(gtk_label_new("fps: 0"));
     data->cpuTempLabel = GTK_LABEL(gtk_label_new(readCpuTemp().c_str()));
-    data->nextSegLabel = GTK_LABEL(gtk_label_new(""));
-    data->unitsLabel = GTK_LABEL(gtk_label_new(data->state->units ? "(MPH)" : "(KPH)"));
-    data->aheadBehindLabel = GTK_LABEL(gtk_label_new(""));
-    data->gaugeTargetLabel = GTK_LABEL(gtk_label_new(""));
     for (GtkWidget* label : {
             GTK_WIDGET(data->currentSpeedLabel), GTK_WIDGET(data->targetSpeedLabel),
             GTK_WIDGET(data->totalSpeedLabel), GTK_WIDGET(data->tripSpeedLabel),
-            GTK_WIDGET(data->speedAdjustArrowsLabel), GTK_WIDGET(data->updatesPerSecLabel),
-            GTK_WIDGET(data->cpuTempLabel), GTK_WIDGET(data->nextSegLabel),
-            GTK_WIDGET(data->unitsLabel), GTK_WIDGET(data->aheadBehindLabel),
-            GTK_WIDGET(data->gaugeTargetLabel)}) {
+            GTK_WIDGET(data->updatesPerSecLabel), GTK_WIDGET(data->cpuTempLabel)}) {
         holdLabel(label);
     }
 

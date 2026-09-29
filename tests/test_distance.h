@@ -68,6 +68,21 @@ public:
             // meters = (counts * calibration) / 1000 / 1000
             long meters = (counts * calibration) / 1000000;
             ASSERT_EQ(meters, 600);
+            ASSERT_NEAR(countsToMeters(static_cast<double>(counts), calibration), 600.0, 1e-9);
+            
+            return true;
+        });
+        
+        // The helpers are the only place the formula lives; they must invert each other
+        suite->addTest("metersToCounts and countsToMeters round-trip", []() {
+            long calibration = 600000;
+            ASSERT_NEAR(metersToCounts(600.0, calibration), 1000.0, 1e-9);
+            for (double m : {0.0, 1.0, 12.5, 1234.0, 100000.0}) {
+                ASSERT_NEAR(countsToMeters(metersToCounts(m, calibration), calibration), m, 1e-6);
+            }
+            // 1 m per pulse calibration
+            ASSERT_NEAR(metersToCounts(50.0, 1000000), 50.0, 1e-9);
+            ASSERT_NEAR(countsToMeters(1.0, 1000000), 1.0, 1e-9);
             
             return true;
         });

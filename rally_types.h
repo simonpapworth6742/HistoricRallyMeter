@@ -46,13 +46,8 @@ struct AppData {
     GtkLabel* tripSpeedLabel;
     GtkLabel* totalSpeedLabel;
     GtkLabel* targetSpeedLabel;
-    GtkLabel* gaugeTargetLabel;    // target speed shown below gauge
-    GtkLabel* aheadBehindLabel;
-    GtkLabel* speedAdjustArrowsLabel;
-    GtkLabel* nextSegLabel;
     GtkLabel* updatesPerSecLabel;
     GtkLabel* cpuTempLabel;
-    GtkLabel* unitsLabel;  // Shows KPH or MPH in header
     GtkButton* unitToggleBtn;
     
     // Rally gauge

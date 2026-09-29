@@ -82,7 +82,7 @@ bool webHandleCommand(AppData* data, const char* json) {
         seg.target_speed_kph = kph;
         seg.target_speed_counts_per_hour = kphToCountsPerHour(kph, data->state->calibration);
         seg.distance_m = meters;
-        seg.distance_counts = (meters * 1e6) / data->state->calibration;
+        seg.distance_counts = metersToCounts(meters, data->state->calibration);
         seg.autoNext = autoNext;
         ConfigFile::save(*data->state);
         refreshSegmentList(data);
@@ -100,7 +100,7 @@ bool webHandleCommand(AppData* data, const char* json) {
         seg.target_speed_kph = kph;
         seg.target_speed_counts_per_hour = kphToCountsPerHour(kph, data->state->calibration);
         seg.distance_m = meters;
-        seg.distance_counts = (meters * 1e6) / data->state->calibration;
+        seg.distance_counts = metersToCounts(meters, data->state->calibration);
         seg.autoNext = autoNext;
         data->state->segments.push_back(seg);
         ConfigFile::save(*data->state);

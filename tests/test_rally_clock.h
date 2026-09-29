@@ -158,27 +158,6 @@ public:
             return true;
         });
         
-        // Test format duration
-        suite->addTest("Format duration as hh:mm:ss", []() {
-            int64_t duration_ms = 3723000;  // 1h 2m 3s
-            
-            std::string formatted = formatDuration(duration_ms);
-            ASSERT_STR_EQ(formatted, "001:02:03.0");
-            
-            return true;
-        });
-        
-        // Test format duration over 99 hours
-        suite->addTest("Format duration handles over 99 hours", []() {
-            int64_t duration_ms = 360000000;  // 100 hours
-            
-            std::string formatted = formatDuration(duration_ms);
-            // Should show 100:00:00 (3 digit hours)
-            ASSERT_TRUE(formatted.find("100") != std::string::npos);
-            
-            return true;
-        });
-        
         // Test negative offset
         suite->addTest("Rally clock handles negative offset", []() {
             RallyState state;

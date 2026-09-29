@@ -117,7 +117,7 @@ time trip_start_time – the time to at least the nearest ms that the trip dista
 ulong segment_start_cntr1 - segment distance start count for CNTR_1
 ulong segment_start_cntr2 – segment distance start count for CNTR_2
 time segment_start_time – the time to at least the nearest ms that the last segment was started
-long segment_current_number – the current segment of the stage so defining the current target average speed displayed. On startup/empty segments, segment_current_number defaults to -1; blank Seg/target/±/ETA/next line on drivers display.
+long segment_current_number – the current segment of the stage so defining the current target average speed displayed. On startup/empty segments, segment_current_number defaults to -1; blank target and ahead/behind on the drivers display.
  
 long rallyTimeOffset – ms offset of rally time to operating system time, defaults to 0
 string bluetooth_audio_name – display name of the remembered Bluetooth speaker, empty when none is remembered
@@ -164,11 +164,11 @@ when any button is pressed make a "soft beep" sound for feedback
 
 **_Drivers display Window (800 x 480) - dark theme only_**
 
-The drivers display window is 800x480 (or 480x800 when the panel is rotated). It is never placed on a 1280x400 or 400x1280 panel. It shows the average speed since the last reset of the Total, the current speed calculated from approximately the last 10 seconds of driving, the average speed since the last Trip reset, and the average speed since the start of the current segment. The target speed for the current segment and how many seconds ahead or behind target average speed by calculating how many counts difference there is between the actual count now and the count that it should be based upon the time since stage start taking account of the differing speeds in segments already completed and the target speed for the current segment, there is also an ahead_behind_zero_offset_ms value which is a simple addtion to the actual ahead/behind value. Along with the ETA = remaining segment distance / (last-10s average speed) to the next segment. If there is no current segment defined or more than 1000m past end of the last segment, then display "--.--" for Seg. For the next segment line of the display hide it if there is no next segment and if last-10s speed = 0: '--.--'; negative remaining: 'Over by xx:xx:xx'.
+The drivers display window is 800x480 (or 480x800 when the panel is rotated). It is never placed on a 1280x400 or 400x1280 panel. It shows the average speed since the last reset of the Total, the current speed calculated from approximately the last 10 seconds of driving, the average speed since the last Trip reset, and the average speed since the start of the current segment. The target speed for the current segment and how many seconds ahead or behind target average speed by calculating how many counts difference there is between the actual count now and the count that it should be based upon the time since stage start taking account of the differing speeds in segments already completed and the target speed for the current segment, there is also an ahead_behind_zero_offset_ms value which is a simple addtion to the actual ahead/behind value. If there is no current segment defined or more than 1000m past end of the last segment, then display "--.--" for Seg.
 
-Seconds ahead/behind formula (high precision): ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_h; diff = actual - ideal; seconds = diff / (target_counts_h / 3600.0). positive numbers means travelling too fast. All target speed and ETA calculations use high precision (double) floating point arithmetic throughout. If more than +- 0.1 ahead/behind then after the seconds ahead/behind value calculate the increase in speed needed (acceleration/deceleration) to exactly match the target in the next 500 meters. Use up to 3 green up arrows to indicate the requirement to speed up, and up to 3 red down arrows to show the requirement to slow down next to the Current Speed. If speed adjustment needed is less than 3 kph show one arrow, between 3 and 10 show two arrows, and more than 10 show 3 arrows. 
+Seconds ahead/behind formula (high precision): ideal_counts = (time_ms_since_segment / 3600000.0) * target_counts_h; diff = actual - ideal; seconds = diff / (target_counts_h / 3600.0). positive numbers means travelling too fast. All target speed calculations use high precision (double) floating point arithmetic throughout. If more than +- 0.1 ahead/behind then after the seconds ahead/behind value calculate the increase in speed needed (acceleration/deceleration) to exactly match the target in the next 500 meters. Less than 3 kph is one step, between 3 and 10 is two steps, and more than 10 is three steps.
 
-Indicate the change in acceleration required green / red arrows to the driver with sound as well (provided within the stage) as the visual indicators, if driving to +- 0.1 seconds ahead / behind or greater than +-30 seconds emit no tone. Provided the distance is within the Stage using the same three acceleration brackets as the red / green arrows make 0.1 second tone with 0.1 second no tone, moving to 0.5/0.2 seconds and lastly 0.7/0.3 seconds.
+Indicate that speed change with sound while within the stage. If driving to +- 0.1 seconds ahead / behind or greater than +-30 seconds emit no tone. Within the stage, one step is a 0.1 second tone with 0.1 second silence, two steps are 0.5/0.2 seconds, and three steps are 0.7/0.3 seconds.
 The tones generated should be piano C6,C6,C6 when behind and F6,F6,F6 when ahead.The tone generator should apply a 5ms fade-in/fade-out envelope at every tone-to-silence and silence-to-tone transition.
 The tones should sound from the stage start while within the stage. Once past the end of the last segment the tones should stop. While the TwinMaster mute button is muted, these ahead/behind tones do not sound. Button beeps and the distance alarm still sound. The mute is not stored. Stage go starts unmuted.
 
@@ -690,6 +690,8 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Verify integer math (no floating point until final display)
 - Distance in meters = (count_diff * calibration) / 1000 / 1000
 - Distance in centimetres = (count_diff * calibration) / 10000
+- The pulse/metre conversion lives only in calculations.cpp: countsToCentimeters() (integer, for display), countsToMeters() (double, for segment distances) and its inverse metersToCounts() = (metres * 1e6) / calibration. No other file repeats the formula.
+- metersToCounts() and countsToMeters() round-trip: countsToMeters(metersToCounts(m)) == m within 1e-6
 - Handle 32-bit counter wrap-around correctly
 
 ### Calibration Tests
@@ -705,7 +707,6 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Convert counts/hour to KPH: (counts_per_hour * calibration) / 1e9 (high precision double)
 - Convert counts/hour to MPH: KPH * 100000 / 160934
 - kphToCountsPerHour() returns double for high precision
-- countsToMeters() returns double for high precision distance calculations
 - 100 KPH displays as "62.14" MPH after unit switch
 - Average speed since Total reset
 - Average speed since Trip reset
@@ -745,14 +746,6 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Positive seconds means travelling too fast (ahead)
 - Negative seconds means travelling too slow (behind)
 - Display "+xxxxx" for ahead, "-xxxxx" for behind
-
-### ETA Calculation Tests
-- All calculations use high precision (double) floating point
-- ETA = remaining_segment_distance / current_speed
-- remaining_segment_distance calculated in meters using countsToMeters()
-- Display "--.--" when current speed is zero
-- Display "Over by hh:mm:ss" when past segment end (negative remaining)
-- Format ETA as hh:mm:ss
 
 ### RallyClock Tests
 - RallyClock = system_time + rallyTimeOffset_ms

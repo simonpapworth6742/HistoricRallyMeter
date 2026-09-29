@@ -16,11 +16,14 @@ int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_
 void continueCountAfterPowerLoss(uint64_t live, uint64_t lastSeen,
                                   uint64_t& start, int64_t& carry);
 
-// Convert counts to meters using calibration (high precision)
-double countsToMeters(int64_t counts, long calibration);
-
-// Convert counts to centimeters using calibration
+// Convert counts to centimeters using calibration (integer, for display)
 long countsToCentimeters(int64_t counts, long calibration);
+
+// Convert counts to metres (high precision, for segment distances)
+double countsToMeters(double counts, long calibration);
+
+// Convert metres to counts (high precision) - inverse of countsToMeters
+double metersToCounts(double meters, long calibration);
 
 // Convert counts per hour to KPH (high precision)
 double countsPerHourToKPH(double counts_per_hour, long calibration);
@@ -33,9 +36,6 @@ int64_t getRallyTime_ms(const RallyState& state);
 
 // Format time as HH:MM:SS
 std::string formatTime(int64_t time_ms);
-
-// Format duration as HH:MM:SS
-std::string formatDuration(int64_t duration_ms);
 
 // Calculate current speed from 10-second rolling average
 double calculateCurrentSpeed(const RallyState& state, const CounterPoll& current, 

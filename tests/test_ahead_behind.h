@@ -8,7 +8,7 @@
 class TestAheadBehind {
 public:
     TestSuite* createSuite() {
-        auto* suite = new TestSuite("Ahead/Behind and ETA Tests");
+        auto* suite = new TestSuite("Ahead/Behind Tests");
         
         // Test ideal_counts formula
         suite->addTest("ideal_counts = (time_ms / 3600000) * target_counts_h", []() {
@@ -94,57 +94,6 @@ public:
             
             ASSERT_STR_EQ(std::string(buf_ahead), "+180");
             ASSERT_STR_EQ(std::string(buf_behind), "-120");
-            
-            return true;
-        });
-        
-        // Test ETA calculation
-        suite->addTest("ETA = remaining_distance / current_speed", []() {
-            long remaining_cm = 6000000;  // 60km = 6000000cm
-            double current_speed_kph = 60.0;
-            
-            // ETA in hours = 60km / 60kph = 1 hour
-            double eta_hours = (remaining_cm / 100000.0) / current_speed_kph;
-            ASSERT_NEAR(eta_hours, 1.0, 0.01);
-            
-            // In seconds = 3600
-            double eta_seconds = eta_hours * 3600;
-            ASSERT_NEAR(eta_seconds, 3600.0, 1.0);
-            
-            return true;
-        });
-        
-        // Test ETA with zero speed
-        suite->addTest("Display --.-- when current speed is zero", []() {
-            double current_speed = 0.0;
-            
-            bool should_show_dashes = (current_speed <= 0);
-            ASSERT_TRUE(should_show_dashes);
-            
-            return true;
-        });
-        
-        // Test ETA with negative remaining (over segment end)
-        suite->addTest("Display Over by hh:mm:ss when past segment end", []() {
-            long remaining = -10000;  // Negative = past end
-            
-            bool is_over = (remaining < 0);
-            ASSERT_TRUE(is_over);
-            
-            // Format as "Over by xx:xx:xx"
-            long over_by = -remaining;
-            ASSERT_TRUE(over_by > 0);
-            // Over by 10000 cm = 100m, at 60kph would be ~6 seconds
-            
-            return true;
-        });
-        
-        // Test ETA format
-        suite->addTest("Format ETA as hh:mm:ss", []() {
-            int64_t eta_ms = 3661000;  // 1 hour, 1 minute, 1 second
-            
-            std::string formatted = formatDuration(eta_ms);
-            ASSERT_STR_EQ(formatted, "001:01:01.0");
             
             return true;
         });

@@ -36,13 +36,7 @@ void on_unit_toggle(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     data->state->units = !data->state->units;
     ConfigFile::save(*data->state);
-    if (data->state->units) {
-        gtk_button_set_label(data->unitToggleBtn, "MPH");
-        gtk_label_set_text(data->unitsLabel, "MPH");
-    } else {
-        gtk_button_set_label(data->unitToggleBtn, "KPH");
-        gtk_label_set_text(data->unitsLabel, "KPH");
-    }
+    gtk_button_set_label(data->unitToggleBtn, data->state->units ? "MPH" : "KPH");
 }
 
 static void notifyWebState(AppData* data) {
@@ -528,7 +522,7 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     if (near_end) {
         // "next": reduce current segment distance to actual distance travelled, then advance
         cur_seg.distance_counts = seg_count_diff;
-        cur_seg.distance_m = (cur_seg.distance_counts * data->state->calibration) / 1e6;
+        cur_seg.distance_m = countsToMeters(cur_seg.distance_counts, data->state->calibration);
         
         data->state->segment_current_number++;
         data->state->segment_start_cntr1 = current_poll.cntr1;
@@ -543,7 +537,7 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         // "prev": extend previous segment distance to end here, reset current segment start to now
         Segment& prev_seg = data->state->segments[data->state->segment_current_number - 1];
         prev_seg.distance_counts += seg_count_diff;
-        prev_seg.distance_m = (prev_seg.distance_counts * data->state->calibration) / 1e6;
+        prev_seg.distance_m = countsToMeters(prev_seg.distance_counts, data->state->calibration);
         
         data->state->segment_start_cntr1 = current_poll.cntr1;
         data->state->segment_start_cntr2 = current_poll.cntr2;
@@ -891,7 +885,7 @@ void on_segment_entry_changed(GtkWidget* widget, gpointer user_data) {
         } else if (strcmp(entry_type, "distance") == 0) {
             double meters = std::stod(text);
             data->state->segments[index].distance_m = meters;
-            data->state->segments[index].distance_counts = (meters * 1e6) / data->state->calibration;
+            data->state->segments[index].distance_counts = metersToCounts(meters, data->state->calibration);
         }
         ConfigFile::save(*data->state);
         notifyWebState(data);
@@ -1092,7 +1086,7 @@ void on_cal_new_changed(G_GNUC_UNUSED GtkEditable* editable, gpointer user_data)
 
     long calibration = 0;
     if (!parseLongText(gtk_entry_get_text(data->calNewEntry), calibration) || calibration < 0) return;
-    long metres = (calibration * data->cal_pulse_count) / 1000000L;
+    long metres = static_cast<long>(countsToMeters(static_cast<double>(data->cal_pulse_count), calibration));
     data->cal_syncing = true;
     gtk_entry_set_text(data->rallyDistEntry, std::to_string(metres).c_str());
     data->cal_syncing = false;
@@ -1141,7 +1135,7 @@ void updateCalibrationDisplay(AppData* data) {
     gtk_label_set_text(data->totalDistCalLabel, ss.str().c_str());
 
     if (data->calibrationValueLabel) {
-        double metres_per_pulse = static_cast<double>(data->state->calibration) / 1e6;
+        double metres_per_pulse = countsToMeters(1.0, data->state->calibration);
         std::stringstream cal;
         cal << "Current Calibration\n"
             << data->state->calibration << " mm/1000p\n"
@@ -1285,7 +1279,7 @@ void on_add_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
             double distance_m = std::stod(token);
             if (distance_m <= 0) continue;
             
-            double distance_counts = (distance_m * 1e6) / data->state->calibration;
+            double distance_counts = metersToCounts(distance_m, data->state->calibration);
             
             Segment seg;
             seg.target_speed_kph = target_kph;
@@ -1425,12 +1419,12 @@ void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 
     for (auto& seg : data->state->segments) {
         seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-        seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+        seg.distance_counts = metersToCounts(seg.distance_m, data->state->calibration);
     }
     for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
         for (auto& seg : data->state->memory_slots[i]) {
             seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-            seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+            seg.distance_counts = metersToCounts(seg.distance_m, data->state->calibration);
         }
     }
 
@@ -1485,12 +1479,12 @@ void on_reset_calibration_1m(GtkWidget* widget, gpointer user_data) {
 
     for (auto& seg : data->state->segments) {
         seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-        seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+        seg.distance_counts = metersToCounts(seg.distance_m, data->state->calibration);
     }
     for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
         for (auto& seg : data->state->memory_slots[i]) {
             seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-            seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+            seg.distance_counts = metersToCounts(seg.distance_m, data->state->calibration);
         }
     }
 
@@ -1523,12 +1517,12 @@ void on_set_sensor_1(GtkWidget* widget, gpointer user_data) {
 
     for (auto& seg : data->state->segments) {
         seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-        seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+        seg.distance_counts = metersToCounts(seg.distance_m, data->state->calibration);
     }
     for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
         for (auto& seg : data->state->memory_slots[i]) {
             seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-            seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+            seg.distance_counts = metersToCounts(seg.distance_m, data->state->calibration);
         }
     }
 
@@ -1549,12 +1543,12 @@ void on_set_sensor_both(GtkWidget* widget, gpointer user_data) {
 
     for (auto& seg : data->state->segments) {
         seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-        seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+        seg.distance_counts = metersToCounts(seg.distance_m, data->state->calibration);
     }
     for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
         for (auto& seg : data->state->memory_slots[i]) {
             seg.target_speed_counts_per_hour = kphToCountsPerHour(seg.target_speed_kph, data->state->calibration);
-            seg.distance_counts = (seg.distance_m * 1e6) / data->state->calibration;
+            seg.distance_counts = metersToCounts(seg.distance_m, data->state->calibration);
         }
     }
 
@@ -1573,7 +1567,7 @@ void on_alarm_set(GtkWidget* widget, gpointer user_data) {
         data->state->total_start_cntr1, data->state->total_start_cntr2,
         data->state->total_carry_cntr1, data->state->total_carry_cntr2);
     
-    int64_t km_in_counts = static_cast<int64_t>((static_cast<double>(km) * 1000.0 * 1e6) / data->state->calibration);
+    int64_t km_in_counts = static_cast<int64_t>(metersToCounts(static_cast<double>(km) * 1000.0, data->state->calibration));
     data->state->alarm_distance_km = km;
     data->state->alarm_target_counts = total_counts + km_in_counts;
     data->alarmSoundStartTime = 0;

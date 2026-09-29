@@ -26,17 +26,20 @@ void continueCountAfterPowerLoss(uint64_t live, uint64_t lastSeen,
     start = live;
 }
 
-// High precision: counts to meters
-double countsToMeters(int64_t counts, long calibration) {
-    // calibration = mm per 1000 counts
-    // meters = counts * (calibration / 1000) / 1000 = counts * calibration / 1e6
-    return (static_cast<double>(counts) * calibration) / 1e6;
-}
-
 long countsToCentimeters(int64_t counts, long calibration) {
     // meters = (counts * calibration) / 1000 / 1000
     // centimeters = (counts * calibration) / 1000 / 10
     return (counts * calibration) / 10000;
+}
+
+double countsToMeters(double counts, long calibration) {
+    // calibration = mm per 1000 counts, so m/count = calibration / 1e6
+    return (counts * calibration) / 1e6;
+}
+
+double metersToCounts(double meters, long calibration) {
+    // Inverse of countsToMeters
+    return (meters * 1e6) / calibration;
 }
 
 double countsPerHourToKPH(double counts_per_hour, long calibration) {
@@ -65,17 +68,6 @@ std::string formatTime(int64_t time_ms) {
     struct tm* tm = localtime(&seconds);
     char buf[20];
     snprintf(buf, sizeof(buf), "%02d:%02d:%02d", tm->tm_hour, tm->tm_min, tm->tm_sec);
-    return std::string(buf);
-}
-
-std::string formatDuration(int64_t duration_ms) {
-    int64_t total_seconds = duration_ms / 1000;
-    int tenths = (duration_ms % 1000) / 100;
-    int hours = total_seconds / 3600;
-    int minutes = (total_seconds % 3600) / 60;
-    int seconds = total_seconds % 60;
-    char buf[24];
-    snprintf(buf, sizeof(buf), "%03d:%02d:%02d.%d", hours, minutes, seconds, tenths);
     return std::string(buf);
 }
 

@@ -1,5 +1,6 @@
 #include "config_file.h"
 #include "rally_state.h"
+#include "calculations.h"
 #include <fstream>
 #include <string>
 #include <sstream>
@@ -80,10 +81,10 @@ static void parseSegmentArray(std::istringstream& stream, std::vector<Segment>& 
             has_m = false;
         } else if (line.find('}') != std::string::npos && in_obj) {
             if (!has_kph && calibration > 0) {
-                seg.target_speed_kph = (seg.target_speed_counts_per_hour * calibration) / 1e9;
+                seg.target_speed_kph = countsPerHourToKPH(seg.target_speed_counts_per_hour, calibration);
             }
             if (!has_m && calibration > 0) {
-                seg.distance_m = (seg.distance_counts * calibration) / 1e6;
+                seg.distance_m = countsToMeters(seg.distance_counts, calibration);
             }
             out.push_back(seg);
             in_obj = false;
