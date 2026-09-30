@@ -31,6 +31,14 @@ std::vector<long> parseTripHistory(const std::string& history);
 // through here so the history is complete.
 void resetTrip(RallyState& state, uint64_t cntr1, uint64_t cntr2, int64_t now_ms);
 
+// Segment arrival tone. Returns true when the tone should sound now: once per
+// segment start (segment_start_ms), the first time remaining_m is 500 m or
+// less. sounded_for_start_ms remembers the start it has sounded for. On the
+// first check after startup a segment already inside 500 m is marked as
+// sounded without sounding, so a restart mid-segment stays quiet.
+bool arrivalToneDue(long remaining_m, int64_t segment_start_ms,
+                    int64_t& sounded_for_start_ms, bool first_check);
+
 // Convert counts to centimeters using calibration (integer, for display)
 long countsToCentimeters(int64_t counts, long calibration);
 

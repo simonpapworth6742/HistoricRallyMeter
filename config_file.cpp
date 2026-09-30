@@ -189,6 +189,8 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.alarm_target_counts = extractLong(line);
         } else if (line.find("\"force_single_display\"") != std::string::npos) {
             state.force_single_display = extractBool(line);
+        } else if (line.find("\"arrival_tone_enabled\"") != std::string::npos) {
+            state.arrival_tone_enabled = extractBool(line);
         } else if (line.find("\"web_enabled\"") != std::string::npos) {
             state.web_enabled = extractBool(line);
         } else if (line.find("\"web_port\"") != std::string::npos) {
@@ -259,6 +261,7 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"alarm_distance_km\": " << state.alarm_distance_km << ",\n";
     file << "  \"alarm_target_counts\": " << state.alarm_target_counts << ",\n";
     file << "  \"force_single_display\": " << (state.force_single_display ? "true" : "false") << ",\n";
+    file << "  \"arrival_tone_enabled\": " << (state.arrival_tone_enabled ? "true" : "false") << ",\n";
     file << "  \"web_enabled\": " << (state.web_enabled ? "true" : "false") << ",\n";
     file << "  \"web_port\": " << state.web_port << ",\n";
     file << "  \"bluetooth_audio_name\": \"" << jsonEscape(state.bluetooth_audio_name) << "\",\n";

@@ -75,6 +75,14 @@ void resetTrip(RallyState& state, uint64_t cntr1, uint64_t cntr2, int64_t now_ms
     state.startTripAt(cntr1, cntr2, now_ms);
 }
 
+bool arrivalToneDue(long remaining_m, int64_t segment_start_ms,
+                    int64_t& sounded_for_start_ms, bool first_check) {
+    if (remaining_m > 500) return false;
+    if (sounded_for_start_ms == segment_start_ms) return false;
+    sounded_for_start_ms = segment_start_ms;
+    return !first_check;
+}
+
 long countsToCentimeters(int64_t counts, long calibration) {
     // meters = (counts * calibration) / 1000 / 1000
     // centimeters = (counts * calibration) / 1000 / 10

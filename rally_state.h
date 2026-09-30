@@ -9,6 +9,7 @@
 class RallyState {
 public:
     bool units = false;  // false = KPH, true = MPH
+    bool arrival_tone_enabled = false;  // chime once at 500 m before the segment end
     long calibration = 600000;  // mm per 1000 counts
     bool counters = true;  // false = one gearbox, true = two wheel
     uint64_t total_start_cntr1 = 0;

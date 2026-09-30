@@ -106,6 +106,7 @@ The purpose of the Historic Car Regulation Rally meter is to enable drivers and 
               Global variables: -
 
 Boolean units – false = KPH (default), true = MPH
+Boolean arrival_tone_enabled – true = play arrival.wav once when 500 m from the end of the current segment (see Segment arrival tone), default false. Set on the Setup screen.
 long calibration = see calibration below, defaults to 600000.
 Boolean counters – false = One gearbox 32 bit counter CNTR_1, True= two wheel 32 bit counters CNTR_1 & CNTR_2, when set the number of counts from the total_start and trip_start is the average of CNTR_1 and CNTR_2
 ulong total_start_cntr1 - Total distance start count for CNTR_1
@@ -389,6 +390,8 @@ Layout:
 
 - Distance alarm: co-pilot presses a km button (2-13) to set an alarm that many km ahead of the current total distance. The target is calculated in pulses and stored in the config file to survive Pi5 restart. When the total distance reaches the target, alarm.wav is played, then the alarm auto-clears after 5 seconds. The countdown ("x,xxx m to alarm") is shown in the right panel. The alarm check runs regardless of which co-pilot screen is visible. Press [clear] to cancel an active alarm.
 
+- Segment arrival tone: when the Setup option "Arrival tone 500m before segment end" (`arrival_tone_enabled`) is on and a segment is current, arrival.wav (a two-note chime of about a second and a half) is played once per segment start, the first time the distance remaining in the segment is 500 m or less. A segment shorter than 500 m is already inside that distance when it starts, so the tone sounds as soon as it starts. The tone sounds again for the same segment only when its start reading is recorded again ([prev], or stage go). It is checked every update regardless of which co-pilot screen is visible, and, like the distance alarm, it is not silenced by the mute button. If the app starts with a segment already inside 500 m, that segment is treated as sounded, so a restart mid-segment stays quiet.
+
 **TwinMaster Screen - Single-Display Mode**
 
 When the application is in single-display mode (exactly one monitor, 1280x400 - see "Display Assignment"), the right-hand alarm panel is replaced by the compact driver display:
@@ -472,13 +475,15 @@ Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16
 |  [Reset layout]   force single display mode ( o)  |                                     |
 |----------------------------------------------------------------------------------------------------------|
 |----------------------------------------------------------------------------------------------------------|
-|  speed units  [ KPH ]                                                                                     |
-|  [Remember bluetooth audio]  device name   [Connect]  [Disconnect]                                       |
-|  [Hotspot: hostname]   [Join WiFi4hostname]                                                              |
-|  status line                                                                                             |
+|  Options                                            |  Wi-Fi / Bluetooth                                  |
+|  speed units  [ KPH ]                               |  [Remember bluetooth audio]  name  [Connect] [Disconnect] |
+|  Arrival tone 500m before segment end  ( o)         |  [Hotspot: hostname]   [Join WiFi4hostname]         |
+|                                                     |  status line                                        |
 |                                [exit app]  [Exit & Check for updates]  [back]                          |
 +----------------------------------------------------------------------------------------------------------+
 ```
+
+Below the two lines the screen is split into two equal columns. The left column is headed "Options" and holds the option controls, one per row: speed units, then the Arrival tone switch. The right column is headed "Wi-Fi / Bluetooth" and holds the Bluetooth audio row, the Wi-Fi row and the status line, which wraps within that column. The navigation row stays across the bottom.
 
 The update script writes the checked-out release tag (vX.Y.Z) to `version.txt` in the project directory when it fetches the update. The Setup title reads that file. If the file is missing, the version is shown as unknown. The hostname is the Pi's hostname, without a domain suffix.
 
@@ -496,6 +501,7 @@ Options moved here from Date/Time:
 
 - force single display mode is a toggle that sets `force_single_display` in the rally config and forces single-display mode even when more than one screen exists. It takes effect the next time the app starts.
 - speed units is a button showing the current unit ("KPH" or "MPH"). Pressing it toggles `units` and saves. This is the only place the units are changed. Driver, co-pilot, and web speeds follow it.
+- Arrival tone 500m before segment end is a switch that sets `arrival_tone_enabled` and saves. See "Segment arrival tone" under TwinMaster for what it does.
 - [Remember bluetooth audio] looks at the Pi's current audio output. If that output is a Bluetooth device, its name and address are written to `bluetooth_audio_name` and `bluetooth_audio_address` and the name is shown beside the button. If the Pi is not using a Bluetooth speaker, both entries are saved empty, the name is blank, and `bluetooth_audio_autoconnect` is cleared. The TwinMaster connect-speaker control is shown only while an address is stored.
 
 [Connect] and [Disconnect] are shown only when a Bluetooth address is recorded. Connect reconnects that speaker, makes it the audio output, trusts it in BlueZ, and sets `bluetooth_audio_autoconnect` so the app connects it again on startup. Disconnect disconnects it, moves the default output off that speaker, untrusts it so BlueZ does not reconnect it at login, and clears `bluetooth_audio_autoconnect`. The remembered name and address stay, so the buttons remain. The TwinMaster connect-speaker control still connects immediately and does not change the saved autoconnect choice.
@@ -876,6 +882,9 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Rotate cycles normal, left, inverted, right
 - Enable KB on a display pins squeekboard to that output, starts it on Wayland, and shows the keyboard there; Disable KB turns it off. The label follows the current display
 - Force single display, speed units, and Remember bluetooth audio behave as they did on Date/Time and are no longer on that screen
+- Below the two lines, the Options column on the left holds speed units and the Arrival tone switch; the Wi-Fi / Bluetooth column on the right holds the Bluetooth, Wi-Fi and status rows
+- The Arrival tone switch sets `arrival_tone_enabled` and saves; it round-trips through the config file
+- Arrival tone is due once per segment start the first time remaining is 500 m or less; not due again for the same start; due immediately for a segment shorter than 500 m; a segment already inside 500 m on the first check is marked sounded without sounding
 - Connect and Disconnect appear only when a Bluetooth address is saved; Connect sets autoconnect, Disconnect clears it and keeps the address
 - Hotspot uses the hostname as an open SSID; Join uses WiFi4 plus the hostname; the chosen NetworkManager connection autoconnects and the other Wi-Fi connections do not
 

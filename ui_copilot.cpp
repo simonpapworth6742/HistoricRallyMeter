@@ -167,6 +167,23 @@ void updateCopilotDisplay(AppData* data) {
         if (data->alarmCountdownLabel) gtk_label_set_text(data->alarmCountdownLabel, "");
         if (data->alarmClearBtn) gtk_widget_hide(data->alarmClearBtn);
     }
+
+    // Segment arrival tone: once per segment start, at 500 m before its end.
+    // Checked on every update like the alarm, whatever screen is showing.
+    if (data->state->arrival_tone_enabled &&
+        data->state->segment_current_number >= 0 &&
+        data->state->segment_current_number < static_cast<long>(data->state->segments.size())) {
+        const Segment& seg = data->state->segments[data->state->segment_current_number];
+        int64_t seg_counts = calculateDistanceCounts(*data->state,
+            current_poll.cntr1, current_poll.cntr2,
+            data->state->segment_start_cntr1, data->state->segment_start_cntr2);
+        long remaining_m = countsToCentimeters(seg.distance_counts - seg_counts, data->state->calibration) / 100;
+        if (arrivalToneDue(remaining_m, data->state->segment_start_time_ms,
+                           data->arrivalToneSoundedStartMs, data->arrivalToneFirstCheck)) {
+            system("aplay arrival.wav 2>/dev/null &");
+        }
+    }
+    data->arrivalToneFirstCheck = false;
     
     // Check which screen is visible
     GtkWidget* visible_child = gtk_stack_get_visible_child(data->copilotStack);
@@ -1300,6 +1317,18 @@ static GtkWidget* createSetupScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(rules), setupRule(), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(screen), rules, FALSE, FALSE, 0);
 
+    // Lower half: two equal columns, options on the left, Wi-Fi/Bluetooth on the right.
+    GtkWidget* lower = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 16);
+    gtk_box_set_homogeneous(GTK_BOX(lower), TRUE);
+    gtk_box_pack_start(GTK_BOX(screen), lower, FALSE, FALSE, 0);
+
+    GtkWidget* optionsCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    gtk_widget_set_valign(optionsCol, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(lower), optionsCol, TRUE, TRUE, 0);
+    GtkWidget* optionsHeading = setupText("Options");
+    gtk_widget_set_halign(optionsHeading, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(optionsCol), optionsHeading, FALSE, FALSE, 0);
+
     GtkWidget* optRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 18);
     GtkWidget* unitsLabel = setupText("speed units");
     gtk_widget_set_valign(unitsLabel, GTK_ALIGN_CENTER);
@@ -1307,7 +1336,25 @@ static GtkWidget* createSetupScreen(AppData* data) {
     gtk_widget_set_valign(GTK_WIDGET(data->unitToggleBtn), GTK_ALIGN_CENTER);
     gtk_box_pack_start(GTK_BOX(optRow), unitsLabel, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(optRow), GTK_WIDGET(data->unitToggleBtn), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(screen), optRow, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(optionsCol), optRow, FALSE, FALSE, 0);
+
+    GtkWidget* arrivalRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget* arrivalLabel = setupText("Arrival tone 500m before segment end");
+    gtk_widget_set_valign(arrivalLabel, GTK_ALIGN_CENTER);
+    GtkWidget* arrivalSwitch = gtk_switch_new();
+    gtk_switch_set_active(GTK_SWITCH(arrivalSwitch), data->state->arrival_tone_enabled);
+    gtk_widget_set_valign(arrivalSwitch, GTK_ALIGN_CENTER);
+    g_signal_connect(arrivalSwitch, "state-set", G_CALLBACK(on_arrival_tone_toggle), data);
+    gtk_box_pack_start(GTK_BOX(arrivalRow), arrivalLabel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(arrivalRow), arrivalSwitch, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(optionsCol), arrivalRow, FALSE, FALSE, 0);
+
+    GtkWidget* networkCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    gtk_widget_set_valign(networkCol, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(lower), networkCol, TRUE, TRUE, 0);
+    GtkWidget* networkHeading = setupText("Wi-Fi / Bluetooth");
+    gtk_widget_set_halign(networkHeading, GTK_ALIGN_START);
+    gtk_box_pack_start(GTK_BOX(networkCol), networkHeading, FALSE, FALSE, 0);
 
     GtkWidget* btRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     GtkWidget* rememberBtn = gtk_button_new_with_label("Remember bluetooth audio");
@@ -1329,7 +1376,7 @@ static GtkWidget* createSetupScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(btRow), GTK_WIDGET(data->bluetoothAudioLabel), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(btRow), data->setupBtConnectBtn, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(btRow), data->setupBtDisconnectBtn, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(screen), btRow, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(networkCol), btRow, FALSE, FALSE, 0);
 
     GtkWidget* wifiRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     std::string host = piHostname();
@@ -1339,15 +1386,15 @@ static GtkWidget* createSetupScreen(AppData* data) {
     g_signal_connect(joinBtn, "clicked", G_CALLBACK(on_setup_join_wifi), data);
     gtk_box_pack_start(GTK_BOX(wifiRow), hotspotBtn, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(wifiRow), joinBtn, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(screen), wifiRow, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(networkCol), wifiRow, FALSE, FALSE, 0);
 
     data->setupStatusLabel = GTK_LABEL(gtk_label_new(wifiStatusLine().c_str()));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->setupStatusLabel)), "setup-label");
     gtk_label_set_xalign(data->setupStatusLabel, 0.0);
     gtk_label_set_line_wrap(data->setupStatusLabel, TRUE);
-    gtk_label_set_max_width_chars(data->setupStatusLabel, 90);
+    gtk_label_set_max_width_chars(data->setupStatusLabel, 55);
     gtk_widget_set_halign(GTK_WIDGET(data->setupStatusLabel), GTK_ALIGN_START);
-    gtk_box_pack_start(GTK_BOX(screen), GTK_WIDGET(data->setupStatusLabel), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(networkCol), GTK_WIDGET(data->setupStatusLabel), FALSE, FALSE, 0);
 
     GtkWidget* navRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 15);
     gtk_widget_set_halign(navRow, GTK_ALIGN_END);

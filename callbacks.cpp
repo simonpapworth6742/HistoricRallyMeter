@@ -1692,6 +1692,13 @@ gboolean on_force_single_display_toggle(G_GNUC_UNUSED GtkSwitch* sw, gboolean st
     return FALSE;  // allow default handler to update the switch visual state
 }
 
+gboolean on_arrival_tone_toggle(G_GNUC_UNUSED GtkSwitch* sw, gboolean state, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->state->arrival_tone_enabled = state;
+    ConfigFile::save(*data->state);
+    return FALSE;
+}
+
 void on_save_datetime(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     

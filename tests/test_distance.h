@@ -265,6 +265,31 @@ public:
             return true;
         });
 
+        suite->addTest("Arrival tone is due once per segment start at 500 m, quiet on the first check", []() {
+            int64_t sounded = -1;
+            // Long segment: nothing until 500 m, then once
+            ASSERT_FALSE(arrivalToneDue(2000, 1000, sounded, false));
+            ASSERT_FALSE(arrivalToneDue(501, 1000, sounded, false));
+            ASSERT_TRUE(arrivalToneDue(500, 1000, sounded, false));
+            ASSERT_FALSE(arrivalToneDue(300, 1000, sounded, false));
+            ASSERT_FALSE(arrivalToneDue(-20, 1000, sounded, false));
+            // Next segment (new start): a short segment is due immediately
+            ASSERT_TRUE(arrivalToneDue(350, 2000, sounded, false));
+            ASSERT_FALSE(arrivalToneDue(100, 2000, sounded, false));
+            // Same segment started again with [prev]: due again
+            ASSERT_TRUE(arrivalToneDue(400, 3000, sounded, false));
+            // App restarted inside 500 m: marked, not sounded, and not later either
+            int64_t fresh = -1;
+            ASSERT_FALSE(arrivalToneDue(200, 4000, fresh, true));
+            ASSERT_EQ(fresh, 4000);
+            ASSERT_FALSE(arrivalToneDue(150, 4000, fresh, false));
+            // App restarted with plenty of segment left: sounds later as normal
+            int64_t fresh2 = -1;
+            ASSERT_FALSE(arrivalToneDue(3000, 5000, fresh2, true));
+            ASSERT_TRUE(arrivalToneDue(499, 5000, fresh2, false));
+            return true;
+        });
+
         suite->addTest("Counter power loss restarts total, trip and segment from live counts", []() {
             RallyState state;
             state.counters = true;

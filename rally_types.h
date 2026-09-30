@@ -96,6 +96,8 @@ struct AppData {
     GtkLabel* alarmCountdownLabel;
     GtkWidget* alarmClearBtn;
     int64_t alarmSoundStartTime = 0;    // when doorbell started (0 = not ringing)
+    int64_t arrivalToneSoundedStartMs = -1;  // segment start the arrival tone has sounded for
+    bool arrivalToneFirstCheck = true;       // startup: mark, do not sound
 
     GtkLabel* webUrlLabel = nullptr;
     GtkWidget* webQrArea = nullptr;

@@ -210,14 +210,17 @@ public:
             return true;
         });
         
-        suite->addTest("Trip history string round-trips through the config", [this]() {
+        suite->addTest("Trip history string and arrival tone option round-trip through the config", [this]() {
             cleanup();
             RallyState state;
             state.trip_history_m = "1234,-56,7";
+            state.arrival_tone_enabled = true;
             ConfigFile::save(state, test_config_file);
             RallyState loaded;
+            ASSERT_FALSE(loaded.arrival_tone_enabled);
             ConfigFile::load(loaded, test_config_file);
             ASSERT_STR_EQ(loaded.trip_history_m, "1234,-56,7");
+            ASSERT_TRUE(loaded.arrival_tone_enabled);
             cleanup();
             return true;
         });
