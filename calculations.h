@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 #include "rally_state.h"
 #include "rally_types.h"
 
@@ -18,6 +19,17 @@ int64_t calculateDistanceCounts(const RallyState& state, uint64_t cntr1, uint64_
 // counts and the given time.
 void restartDistancesAfterPowerLoss(RallyState& state, uint64_t cntr1, uint64_t cntr2,
                                     int64_t now_ms);
+
+// Put trip_m at the front of a comma-separated history, keeping at most max_entries.
+std::string pushTripHistory(const std::string& history, long trip_m, size_t max_entries = 6);
+
+// Split a comma-separated history into metres, most recent first. Junk is skipped.
+std::vector<long> parseTripHistory(const std::string& history);
+
+// Reset the trip: record the trip distance as it reads now in the history,
+// then start the trip again from the live counts. Every trip reset goes
+// through here so the history is complete.
+void resetTrip(RallyState& state, uint64_t cntr1, uint64_t cntr2, int64_t now_ms);
 
 // Convert counts to centimeters using calibration (integer, for display)
 long countsToCentimeters(int64_t counts, long calibration);

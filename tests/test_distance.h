@@ -236,6 +236,35 @@ public:
             return true;
         });
 
+        suite->addTest("Trip history keeps the last six, most recent first, and parses junk safely", []() {
+            std::string h;
+            for (long m : {100, 200, 300, 400, 500, 600}) h = pushTripHistory(h, m);
+            ASSERT_STR_EQ(h, "600,500,400,300,200,100");
+            h = pushTripHistory(h, -70);
+            ASSERT_STR_EQ(h, "-70,600,500,400,300,200");
+            std::vector<long> parsed = parseTripHistory(h);
+            ASSERT_EQ(parsed.size(), 6u);
+            ASSERT_EQ(parsed[0], -70);
+            ASSERT_EQ(parsed[5], 200);
+            ASSERT_EQ(parseTripHistory("").size(), 0u);
+            ASSERT_EQ(parseTripHistory("1234,56").size(), 2u);
+            ASSERT_EQ(parseTripHistory("12,abc,34").size(), 2u);
+            return true;
+        });
+
+        suite->addTest("resetTrip records the trip as it read, offset included, then starts again at zero", []() {
+            RallyState state;
+            state.counters = false;
+            state.calibration = 1000000;         // 1 m per count
+            state.trip_start_cntr1 = 1000;
+            state.distance_offset_counts = -300; // trip reads 2500 - 1000 - 300 = 1200
+            resetTrip(state, 2500, 0, 9000);
+            ASSERT_STR_EQ(state.trip_history_m, "1200");
+            ASSERT_EQ(state.trip_start_time_ms, 9000);
+            ASSERT_EQ(calculateDistanceCounts(state, 2500, 0, state.trip_start_cntr1, state.trip_start_cntr2), 0);
+            return true;
+        });
+
         suite->addTest("Counter power loss restarts total, trip and segment from live counts", []() {
             RallyState state;
             state.counters = true;

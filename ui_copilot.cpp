@@ -83,6 +83,8 @@ static void applyCopilotCSS() {
         ".dist-value { font-size: 88px; font-weight: bold; font-family: monospace; }"
         ".dist-unit { font-size: 48px; font-weight: bold; font-family: monospace; }"
         ".time-label { font-size: 36px; font-family: monospace; color: #CCCCCC; }"
+        ".trip-history-heading { font-size: 20px; }"
+        ".trip-history-value { font-size: 40px; font-weight: bold; font-family: monospace; }"
         ".alarm-label { font-size: 20px; }"
         ".alarm-button { font-size: 22px; }"
         ".reset-button { font-size: 36px; }"
@@ -201,6 +203,15 @@ void updateCopilotDisplay(AppData* data) {
     if (visible_child != data->twinMasterScreen) {
         return;
     }
+
+    // Trip history column: most recent reset at the top, blank below the last one
+    if (data->tripHistoryLabels[0]) {
+        std::vector<long> history = parseTripHistory(data->state->trip_history_m);
+        for (size_t i = 0; i < 6; i++) {
+            std::string text = i < history.size() ? formatDistance(history[i], 7) : "";
+            gtk_label_set_text(data->tripHistoryLabels[i], text.c_str());
+        }
+    }
     
     // Update Adj. driver Zero button label
     {
@@ -268,7 +279,7 @@ void updateCopilotDisplay(AppData* data) {
         if (next_seg_idx < static_cast<long>(data->state->segments.size())) {
             const Segment& next_seg = data->state->segments[next_seg_idx];
             ss.str("");
-            ss << std::fixed << std::setprecision(0) << next_seg.target_speed_kph << " kph";
+            ss << std::fixed << std::setprecision(0) << next_seg.target_speed_kph << "\nkph";
             gtk_label_set_text(data->nextSpeedLabel, ss.str().c_str());
         } else {
             gtk_label_set_text(data->nextSpeedLabel, "END");
@@ -453,14 +464,35 @@ GtkWidget* createTwinMasterScreen(AppData* data) {
     gtk_widget_set_valign(GTK_WIDGET(data->nextUnitLabel), GTK_ALIGN_END);
     gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->nextUnitLabel), 2, 2, 1, 1);
     
-    // Col 3: Next segment speed
+    // Col 3: Next segment speed, number over unit so the column stays narrow
     data->nextSpeedLabel = GTK_LABEL(gtk_label_new("---"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->nextSpeedLabel)), "time-label");
     gtk_label_set_xalign(data->nextSpeedLabel, 0.0);
+    gtk_label_set_justify(data->nextSpeedLabel, GTK_JUSTIFY_LEFT);
     gtk_widget_set_valign(GTK_WIDGET(data->nextSpeedLabel), GTK_ALIGN_CENTER);
     gtk_widget_set_margin_start(GTK_WIDGET(data->nextSpeedLabel), 10);
     if (!data->singleDisplayMode)  // hidden in single-display mode for a bigger gauge
         gtk_grid_attach(GTK_GRID(distGrid), GTK_WIDGET(data->nextSpeedLabel), 3, 2, 1, 1);
+
+    // Col 4: Trip history, spanning all three rows. Hidden in single-display
+    // mode, where the left panel gives its width to the gauge.
+    if (!data->singleDisplayMode) {
+        GtkWidget* historyBox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+        gtk_widget_set_margin_start(historyBox, 16);
+        gtk_widget_set_valign(historyBox, GTK_ALIGN_START);
+        GtkWidget* historyHeading = gtk_label_new("Trip history");
+        gtk_style_context_add_class(gtk_widget_get_style_context(historyHeading), "trip-history-heading");
+        gtk_widget_set_halign(historyHeading, GTK_ALIGN_END);
+        gtk_box_pack_start(GTK_BOX(historyBox), historyHeading, FALSE, FALSE, 0);
+        for (auto& label : data->tripHistoryLabels) {
+            label = GTK_LABEL(gtk_label_new(""));
+            gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(label)), "trip-history-value");
+            gtk_label_set_xalign(label, 1.0);
+            gtk_label_set_width_chars(label, 7);
+            gtk_box_pack_start(GTK_BOX(historyBox), GTK_WIDGET(label), FALSE, FALSE, 0);
+        }
+        gtk_grid_attach(GTK_GRID(distGrid), historyBox, 4, 0, 1, 3);
+    }
     
     // ── RIGHT PANEL (30%) ──
     // Normal: clock, alarm buttons, countdown.

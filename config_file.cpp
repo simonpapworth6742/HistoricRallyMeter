@@ -169,6 +169,8 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
             state.ahead_behind_zero_offset_ms = extractLong(line);
         } else if (line.find("\"distance_offset_counts\"") != std::string::npos) {
             state.distance_offset_counts = extractLong(line);
+        } else if (line.find("\"trip_history_m\"") != std::string::npos) {
+            state.trip_history_m = extractString(line);
         } else if (line.find("\"auto_start_rally_time_minutes\"") != std::string::npos) {
             state.auto_start_rally_time_minutes = static_cast<uint64_t>(extractLong(line));
         } else if (line.find("\"driver_window_x\"") != std::string::npos) {
@@ -247,6 +249,7 @@ void ConfigFile::save(const RallyState& state, const std::string& path) {
     file << "  \"rallyTimeOffset_ms\": " << state.rallyTimeOffset_ms << ",\n";
     file << "  \"ahead_behind_zero_offset_ms\": " << state.ahead_behind_zero_offset_ms << ",\n";
     file << "  \"distance_offset_counts\": " << state.distance_offset_counts << ",\n";
+    file << "  \"trip_history_m\": \"" << jsonEscape(state.trip_history_m) << "\",\n";
     file << "  \"auto_start_rally_time_minutes\": " << state.auto_start_rally_time_minutes << ",\n";
     file << "  \"driver_window_x\": " << state.driver_window_x << ",\n";
     file << "  \"driver_window_y\": " << state.driver_window_y << ",\n";

@@ -39,6 +39,42 @@ void restartDistancesAfterPowerLoss(RallyState& state, uint64_t cntr1, uint64_t 
     state.distance_offset_counts = 0;
 }
 
+std::string pushTripHistory(const std::string& history, long trip_m, size_t max_entries) {
+    std::vector<long> entries = parseTripHistory(history);
+    entries.insert(entries.begin(), trip_m);
+    if (entries.size() > max_entries) entries.resize(max_entries);
+    std::string out;
+    for (size_t i = 0; i < entries.size(); i++) {
+        if (i) out += ',';
+        out += std::to_string(entries[i]);
+    }
+    return out;
+}
+
+std::vector<long> parseTripHistory(const std::string& history) {
+    std::vector<long> out;
+    std::stringstream ss(history);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+        try {
+            size_t used = 0;
+            long v = std::stol(item, &used);
+            if (used > 0) out.push_back(v);
+        } catch (...) {
+            // not a number: skip
+        }
+    }
+    return out;
+}
+
+void resetTrip(RallyState& state, uint64_t cntr1, uint64_t cntr2, int64_t now_ms) {
+    int64_t trip_counts = calculateDistanceCounts(state, cntr1, cntr2,
+        state.trip_start_cntr1, state.trip_start_cntr2);
+    long trip_m = countsToCentimeters(trip_counts, state.calibration) / 100;
+    state.trip_history_m = pushTripHistory(state.trip_history_m, trip_m);
+    state.startTripAt(cntr1, cntr2, now_ms);
+}
+
 long countsToCentimeters(int64_t counts, long calibration) {
     // meters = (counts * calibration) / 1000 / 1000
     // centimeters = (counts * calibration) / 1000 / 10

@@ -51,6 +51,9 @@ public:
         total_start_cntr2 = cntr2;
         total_start_time_ms = now_ms;
     }
+    // Last six trip distances in whole metres, most recent first, comma
+    // separated. Every trip reset records the trip first (see resetTrip).
+    std::string trip_history_m;
     uint64_t auto_start_rally_time_minutes = 0;  // minutes since 1/1/2020, 0 = not set
     std::vector<Segment> segments;
     

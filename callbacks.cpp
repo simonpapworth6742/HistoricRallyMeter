@@ -54,7 +54,7 @@ void on_total_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
 void on_trip_reset(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     auto current_poll = data->poller->getMostRecent();
-    data->state->startTripAt(current_poll.cntr1, current_poll.cntr2, getRallyTime_ms(*data->state));
+    resetTrip(*data->state, current_poll.cntr1, current_poll.cntr2, getRallyTime_ms(*data->state));
     ConfigFile::save(*data->state);
     notifyWebState(data);
 }
@@ -94,7 +94,9 @@ void performStageGo(AppData* data) {
     auto current_poll = data->poller->getMostRecent();
     int64_t current_time = getRallyTime_ms(*data->state);
 
-    // Offset goes first so the three starts below are recorded from the raw counts
+    // Record the trip as it reads (offset included) in the history, then zero
+    // the offset so the three starts below are recorded from the raw counts.
+    resetTrip(*data->state, current_poll.cntr1, current_poll.cntr2, current_time);
     data->state->distance_offset_counts = 0;
     data->state->total_start_cntr1 = current_poll.cntr1;
     data->state->total_start_cntr2 = current_poll.cntr2;
@@ -472,7 +474,7 @@ void on_next_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         data->state->segment_current_number++;
         int64_t now_ms = getRallyTime_ms(*data->state);
         data->state->startSegmentAt(current_poll.cntr1, current_poll.cntr2, now_ms);
-        data->state->startTripAt(current_poll.cntr1, current_poll.cntr2, now_ms);
+        resetTrip(*data->state, current_poll.cntr1, current_poll.cntr2, now_ms);
         ConfigFile::save(*data->state);
     }
 }
@@ -507,7 +509,7 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         data->state->segment_current_number++;
         int64_t now_ms = getRallyTime_ms(*data->state);
         data->state->startSegmentAt(current_poll.cntr1, current_poll.cntr2, now_ms);
-        data->state->startTripAt(current_poll.cntr1, current_poll.cntr2, now_ms);
+        resetTrip(*data->state, current_poll.cntr1, current_poll.cntr2, now_ms);
     } else if (near_start) {
         // "prev": extend previous segment distance to end here, reset current segment start to now
         Segment& prev_seg = data->state->segments[data->state->segment_current_number - 1];
@@ -516,7 +518,7 @@ void on_next_prev_segment(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
         
         int64_t now_ms = getRallyTime_ms(*data->state);
         data->state->startSegmentAt(current_poll.cntr1, current_poll.cntr2, now_ms);
-        data->state->startTripAt(current_poll.cntr1, current_poll.cntr2, now_ms);
+        resetTrip(*data->state, current_poll.cntr1, current_poll.cntr2, now_ms);
     }
     
     ConfigFile::save(*data->state);
@@ -546,7 +548,7 @@ gboolean update_display(gpointer user_data) {
                     auto current_poll = data->poller->getMostRecent();
                     int64_t now_ms = getRallyTime_ms(*data->state);
                     data->state->startSegmentAt(current_poll.cntr1, current_poll.cntr2, now_ms);
-                    data->state->startTripAt(current_poll.cntr1, current_poll.cntr2, now_ms);
+                    resetTrip(*data->state, current_poll.cntr1, current_poll.cntr2, now_ms);
                     ConfigFile::save(*data->state);
                     notifyWebState(data);
                 }

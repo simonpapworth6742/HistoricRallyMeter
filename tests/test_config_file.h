@@ -210,6 +210,18 @@ public:
             return true;
         });
         
+        suite->addTest("Trip history string round-trips through the config", [this]() {
+            cleanup();
+            RallyState state;
+            state.trip_history_m = "1234,-56,7";
+            ConfigFile::save(state, test_config_file);
+            RallyState loaded;
+            ConfigFile::load(loaded, test_config_file);
+            ASSERT_STR_EQ(loaded.trip_history_m, "1234,-56,7");
+            cleanup();
+            return true;
+        });
+
         // Test calibration default
         suite->addTest("Calibration defaults to 600000", []() {
             RallyState state;

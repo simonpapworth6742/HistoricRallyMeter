@@ -85,6 +85,7 @@ struct AppData {
     GtkLabel* nextDistLabel;
     GtkLabel* nextUnitLabel;
     GtkLabel* nextSpeedLabel;
+    GtkLabel* tripHistoryLabels[6] = {};   // most recent first; null in single-display mode
     GtkWidget* nextPrevBtn;
     GtkWidget* stageGoBtn = nullptr;
     GtkWidget* toneMuteBtn = nullptr;

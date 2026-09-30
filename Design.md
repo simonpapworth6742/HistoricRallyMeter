@@ -124,6 +124,7 @@ string bluetooth_audio_name – display name of the remembered Bluetooth speaker
 string bluetooth_audio_address – Bluetooth address of that speaker, empty when none is remembered. Pressing Remember bluetooth audio fills both from the Pi's current audio output when that output is a Bluetooth device, and clears both when it is not.
 long ahead_behind_zero_offset_ms - ms offset (+ or -) of the drivers ahead/behind caculation,defaults to zero and on stage-go. Set in the twinmaster display.
 long distance_offset_counts - counts (+ or -) added to the calculated counter CNTR_A for every distance measured since a start reading: total, trip and segment. A missed turn and the drive back are removed by making it more negative by that many counts. Defaults to zero, and is set to zero by a Total reset, stage go, and the counter power-loss reset. Set on the Adjust Distance Traveled screen.
+string trip_history_m - the last six trip distances, in whole metres, recorded each time the trip is reset by any means (Trip button, stage go, next/prev, autoNext, the web Reset Trip command). Stored as a comma-separated string with the most recent first, e.g. "1234,5678,910"; a new reset is put at the front and the seventh oldest is dropped. Defaults to empty. The trip is recorded as it read at the moment of the reset, so it can be negative after a negative distance adjustment. The counter power-loss reset does not record anything, because the trip distance is not known at that point.
 ulong auto_start_stage_at_rally_time - the date time in munites the stage should automatially be started in rally time, stored as an offset from 1/1/2020.
 structure segment[]  - Stage segments contain target speed over distance segments of the stage, and if manual or automatic progression to the next segment is required. Defaults to no segments.
 double target_speed_kph - the actual speed requested for this segment, this does not change when the calibration changes
@@ -352,7 +353,8 @@ Layout:
     - Col 2: unit "m" (48px bold monospace), bottom-aligned
     - Under the Total button, and under the Trip button, the elapsed time mmm:ss (36px monospace, light grey #CCCCCC) with a small white stopwatch icon to its left
     - Col 3 of the Total row: a thin vertical [Adj] button. The letters run downward (A, then d, then j). The button is twice as wide as the letter A and its border. It opens Adjust Distance Traveled.
-    - Col 3 of the Next row: speed of the next segment, vertically centred
+    - Col 3 of the Next row: speed of the next segment on two lines, the number above its unit (e.g. "80" over "kph"), vertically centred, so the column is narrow
+    - Col 4, spanning the three rows, between the speed and the right panel: "Trip history" (20px) with the last six recorded trip distances below it, most recent at the top, one per line, right-aligned in metres with comma separators (40px bold monospace, the largest that lets the heading and six lines fit the height of the three rows without moving the navigation row). Lines with no history yet are blank. This column is hidden in single-display mode.
 - Segment info on the third line "Next" showing the distance to the next segment in meters and the speed of the next segment, if there are no segments the next line shows ---.--- and the speed shows ---. If past the end of the of the segments then the distance shows the negative meters past the end of the last segment and the speed shows "END". Next rounds up to the nearest meter so that Total/Trip are in sync to it as they round down.
   
 - Right panel:
@@ -378,7 +380,7 @@ Layout:
 
 - setup: a cog button (the standard preferences-system icon) immediately to the right of date/time. It stays a fixed 43px square while the other navigation buttons share the remaining width. Opens the Setup screen.
 
-- Reset buttons: [Total] / [Trip]  are reset buttons and reset their respective counters and start time only
+- Reset buttons: [Total] / [Trip]  are reset buttons and reset their respective counters and start time only. Every trip reset, by whatever means, first records the trip distance at the front of trip_history_m (see global variables), so the Trip history column always shows what the trip read at each of the last six resets.
 
 - [next/prev] button is only active when within 500m of the begining of a segment or the end of the segment, when it is within 500m of the end of a segement 
     the button displays "next", when it is within 500m of the start of a segment (not the first) it displays "prev" otherwise it displays "--->". The button allows the correction of distance of segment starts/ends, due to poor driving dicipline or mistakes in setting up the road book. When pressed within the 500m before a segment end then the segment distance should be reduced to the distance when the button was pressed. When press within 500m of the of the start of a segment (not the first) then the distance of the last segment should be extened to match the when the button was pressed.
@@ -395,7 +397,7 @@ When the application is in single-display mode (exactly one monitor, 1280x400 - 
 - The right panel contains the compact driver gauge layout, identical to the 800x480 driver layout: the gauge with needle and digital readout, with target, current, total and trip values drawn inside the gauge area, fonts scaled down with the gauge size, and the same compact gauge geometry (gauge fills the panel width, arc top may cut into the target line, fps/cpu in line with the readout box bottom). Target, total and trip are drawn a little smaller than on the standalone driver gauge (48px at full scale instead of 56px); current stays at 50px.
 - The rally clock (hh:mm:ss) is kept, drawn in the top-right corner of the gauge area at 28px scaled with the gauge (minimum 20px). The connect speaker control, when a speaker is remembered, is the same small square ("cnet" / "spkr") centred under that clock. The mute button stays to the left of the clock.
 - Alarm buttons are unavailable in this mode, so new alarms cannot be set. An alarm persisted in the config from a previous run still fires: alarm.wav is played when the target is reached and the alarm auto-clears after 5 seconds; no countdown or [clear] button is shown.
-- The left panel has the total/trip times hidden and the next target speed hidden inorder to allow the gauage to be bigger, bottom navigation row are unchanged.
+- The left panel has the total/trip times hidden and the next target speed and Trip history column hidden inorder to allow the gauage to be bigger, bottom navigation row are unchanged.
 
 
 
@@ -838,6 +840,8 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Trip reset button updates counters and time, saves to JSON
 - Segments button navigates to Stage Setup screen
 - Next segment button advances segment and resets Trip
+- Trip history: a reset puts the trip distance in metres at the front of trip_history_m; the seventh entry is dropped; a negative trip is recorded with its sign
+- Trip history string round-trips through the config file and parses "" as no entries and "1234,56" as two
 - Calibration button navigates to Calibration screen
 - RallyClock displays at top in hh:mm:ss format
 - The vertical Adj button on the Total row opens Adjust Distance Traveled; back there returns to TwinMaster
