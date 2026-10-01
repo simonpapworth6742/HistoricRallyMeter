@@ -1,5 +1,6 @@
 #include "web_telemetry.h"
 #include "calculations.h"
+#include "callbacks.h"   // getAutoStartEpochMs
 #include "rally_types.h"
 #include "counter_poller.h"
 #include "rally_state.h"
@@ -33,19 +34,27 @@ NextPrevState computeNextPrevState(AppData* data) {
     bool near_start = (travelled_m >= 0 && travelled_m <= 500) &&
                       (data->state->segment_current_number > 0);
 
-    if (near_end) {
-        out.label = "next";
-        out.enabled = true;
-    } else if (near_start) {
-        out.label = "prev";
-        out.enabled = true;
-    }
+    // Same precedence as the TwinMaster button: "next" wins when both apply.
+    if (near_end) out.next_enabled = true;
+    else if (near_start) out.prev_enabled = true;
     return out;
 }
 
+// For a figure that is genuinely KPH whatever the meter is set to: the
+// segment's target speed. calculateCurrentSpeed and calculateAverageSpeed
+// already return MPH when state.units is set, so they must not come through
+// here or the phone would show them converted twice.
 static double displayKph(AppData* data, double kph) {
     if (data->state->units) return kph * 0.621371;
     return kph;
+}
+
+std::string toneCadenceJson(const ToneCadence& tone) {
+    char buf[128];
+    snprintf(buf, sizeof(buf),
+        "{\"tone_ms\":%d,\"silence_ms\":%d,\"freq_hz\":%.2f,\"wave\":\"sine\"}",
+        tone.tone_ms, tone.silence_ms, tone.freq_hz);
+    return buf;
 }
 
 std::string buildTelemetryJson(AppData* data) {
@@ -84,7 +93,9 @@ std::string buildTelemetryJson(AppData* data) {
     NextPrevState np = computeNextPrevState(data);
     std::string rally_clock = formatTime(current_time_ms);
 
-    char buf[1024];
+    // Sized for every field below plus the tone object; snprintf would
+    // truncate silently and hand the phone unparseable JSON.
+    char buf[1536];
     snprintf(buf, sizeof(buf),
         "{\"type\":\"telemetry\","
         "\"rally_clock\":\"%s\","
@@ -97,22 +108,28 @@ std::string buildTelemetryJson(AppData* data) {
         "\"ahead_behind_s\":%.1f,"
         "\"segment_number\":%ld,"
         "\"segment_count\":%zu,"
-        "\"next_prev_label\":\"%s\","
-        "\"next_prev_enabled\":%s,"
-        "\"units\":\"%s\"}",
+        "\"next_enabled\":%s,"
+        "\"prev_enabled\":%s,"
+        "\"units\":\"%s\","
+        // The ahead/behind tone the meter is playing right now, so the phone
+        // plays the same one.
+        "\"tone\":%s,"
+        // No Beep Assist in this version; the client ignores a null beep.
+        "\"beep\":null}",
         rally_clock.c_str(),
         trip_m,
         total_m,
-        displayKph(data, cur_speed),
-        displayKph(data, trip_avg),
-        displayKph(data, total_avg),
-        displayKph(data, target_kph),
+        cur_speed,      // already in the meter's units
+        trip_avg,       // already in the meter's units
+        total_avg,      // already in the meter's units
+        displayKph(data, target_kph),   // stored in KPH; convert
         ahead_behind_s,
         data->state->segment_current_number >= 0 ? data->state->segment_current_number + 1 : 0,
         data->state->segments.size(),
-        np.label,
-        np.enabled ? "true" : "false",
-        data->state->units ? "mph" : "kph");
+        np.next_enabled ? "true" : "false",
+        np.prev_enabled ? "true" : "false",
+        data->state->units ? "mph" : "kph",
+        toneCadenceJson(data->currentTone).c_str());
     return buf;
 }
 
@@ -121,6 +138,9 @@ std::string buildStateJson(AppData* data) {
     ss << std::fixed << std::setprecision(1);
     ss << "{\"type\":\"state\","
        << "\"segment_current_number\":" << data->state->segment_current_number << ","
+       // Reset Total from the phone is applied at once, as the TwinMaster
+       // Total button is, so the phone never needs the stage-running dialog.
+       << "\"total_reset_asks\":false,"
        << "\"segments\":[";
     for (size_t i = 0; i < data->state->segments.size(); i++) {
         const Segment& seg = data->state->segments[i];
@@ -128,6 +148,20 @@ std::string buildStateJson(AppData* data) {
         ss << "{\"target_speed_kph\":" << seg.target_speed_kph
            << ",\"distance_m\":" << static_cast<long>(seg.distance_m)
            << ",\"autoNext\":" << (seg.autoNext ? "true" : "false") << "}";
+    }
+    ss << "],";
+
+    // The auto start line for the phone's stage panel.
+    ss << "\"autostart\":\""
+       << formatAutoStartStatus(data->state->auto_start_rally_time_minutes, getAutoStartEpochMs())
+       << "\",";
+
+    // Which memory slots hold a stage, so the phone marks them as the Stage
+    // Setup screen does.
+    ss << "\"memory_populated\":[";
+    for (int i = 0; i < RallyState::MAX_MEMORY_SLOTS; i++) {
+        if (i > 0) ss << ',';
+        ss << (data->state->memory_slots[i].empty() ? "false" : "true");
     }
     ss << "]}";
     return ss.str();

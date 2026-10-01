@@ -52,6 +52,7 @@ void refreshSegmentList(AppData* data);
 void updateCalibrationDisplay(AppData* data);
 void updateDateTimeDisplay(AppData* data);
 void refreshWebAccess(AppData* data);
+int64_t getAutoStartEpochMs();   // 2020-01-01 00:00 local, as auto_start_rally_time_minutes counts from
 gboolean update_display(gpointer user_data);
 void on_keypad_digit(GtkWidget* widget, gpointer user_data);
 void on_keypad_clear(GtkWidget* widget, gpointer user_data);
