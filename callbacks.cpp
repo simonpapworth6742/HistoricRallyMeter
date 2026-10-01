@@ -117,6 +117,7 @@ void performStageGo(AppData* data) {
     data->tonesMuted = false;
     
     if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
+    data->currentTone = ToneCadence{};
     
     ConfigFile::save(*data->state);
     notifyWebState(data);
@@ -154,6 +155,7 @@ void on_tone_mute_toggle(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     data->tonesMuted = !data->tonesMuted;
     if (data->tonesMuted && data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
+    if (data->tonesMuted) data->currentTone = ToneCadence{};
     refreshToneMuteButton(data);
 }
 
@@ -311,7 +313,6 @@ void bluetoothAutoconnectOnStartup(AppData* data) {
 static const int RESPONSE_AUTO_START = 99;
 static const int RESPONSE_QUICK_AUTO_START = 98;
 
-static int64_t getAutoStartEpochMs();
 static bool nextWholeMinuteAtLeast(const RallyState& state, int64_t lead_ms,
                                    int& hour, int& min, int64_t& target_ms);
 static bool storeAutoStartAt(AppData* data, int64_t target_ms);
@@ -359,6 +360,7 @@ void on_stage_go(GtkWidget* widget, gpointer user_data) {
         if (response == GTK_RESPONSE_YES) {
             data->state->segment_current_number = -1;
             if (data->toneGen) data->toneGen->setCadence(0, 0, 0.0);
+            data->currentTone = ToneCadence{};
             ConfigFile::save(*data->state);
             notifyWebState(data);
         }
@@ -1772,7 +1774,7 @@ void on_rally_clock_nudge(GtkWidget* widget, gpointer user_data) {
 }
 
 // Epoch for auto_start: 2020-01-01 00:00:00 local time
-static int64_t getAutoStartEpochMs() {
+int64_t getAutoStartEpochMs() {
     struct tm epoch_tm = {};
     epoch_tm.tm_year = 120;  // 2020
     epoch_tm.tm_mon = 0;

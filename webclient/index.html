@@ -8,13 +8,21 @@
 </head>
 <body>
   <header>
-    <h1>Historic Rally Meter</h1>
-    <div id="conn" class="conn">connecting…</div>
+    <!-- No title here: the header is the narrowest row on the phone and the
+         name bought nothing the browser tab does not already say. The space
+         goes to the sound state and connection instead. -->
+    <div class="header-right">
+      <button id="sound-toggle" class="sound-toggle" type="button">Sound is on</button>
+      <!-- Why the phone is silent, when it is: the audio engine's own state. -->
+      <div id="audio-state" class="audio-state"></div>
+      <div id="conn" class="conn">connecting…</div>
+    </div>
   </header>
 
   <nav class="tabs">
     <button id="tab-live" class="tab active" type="button">Live</button>
     <button id="tab-setup" class="tab" type="button">Setup</button>
+    <button id="tab-driver" class="tab" type="button">Driver</button>
   </nav>
 
   <main id="view-live" class="view">
@@ -23,29 +31,63 @@
       <strong id="rally-clock">--:--:--</strong>
     </section>
 
-    <section id="ahead-behind" class="ahead-behind">
-      <div class="label">AHEAD / BEHIND</div>
-      <div id="ahead-value" class="value">0.0 s</div>
+    <section class="actions live-tall">
+      <button id="btn-prev" type="button" disabled>prev</button>
+      <button id="btn-next" type="button" disabled>next</button>
     </section>
 
-    <section class="speed-grid">
-      <div><span>Current</span><strong id="cur-kph">0.0</strong> <small id="unit-label">kph</small></div>
-      <div><span>Target</span><strong id="target-kph">0.0</strong> <small id="unit-label2">kph</small></div>
-    </section>
+    <!-- Ahead/behind, Total and Trip share one grid. Press Total/Trip to reset
+         (same as Driver); the separate Reset buttons are gone. -->
+    <div class="live-boxes">
+      <section id="ahead-behind" class="ahead-behind">
+        <div id="ahead-value" class="value">0.0 s</div>
+      </section>
 
-    <section class="dist-grid">
-      <div><span>Trip</span><strong id="trip-m">0 m</strong><span id="trip-avg">avg 0.0</span></div>
-      <div><span>Total</span><strong id="total-m">0 m</strong><span id="total-avg">avg 0.0</span></div>
+      <section class="dist-box press-reset" id="box-total" role="button" tabindex="0"
+               title="Reset Total" aria-label="Total distance, press to reset">
+        <span class="dl">Total</span><strong id="total-m">0 m</strong>
+        <span class="rt">
+          <span class="avg">avg <b id="total-avg">0.0</b></span>
+          <span class="sp"><span class="sl" id="unit-label">kph</span><strong id="cur-kph">0.0</strong></span>
+        </span>
+      </section>
+
+      <section class="dist-box press-reset" id="box-trip" role="button" tabindex="0"
+               title="Reset Trip" aria-label="Trip distance, press to reset">
+        <span class="dl">Trip</span><strong id="trip-m">0 m</strong>
+        <span class="rt">
+          <span class="avg">avg <b id="trip-avg">0.0</b></span>
+          <span class="sp tgt"><span class="sl">tgt</span><strong id="target-kph">0.0</strong></span>
+        </span>
+      </section>
+    </div>
+
+    <section class="adjust-row live-tall">
+      <span class="adjust-label">Adjust</span>
+      <button id="btn-dist-minus" type="button">&minus;10</button>
+      <input id="dist-set-m" type="number" min="0" max="999999" step="1"
+             inputmode="numeric" placeholder="Total m">
+      <button id="btn-dist-set" type="button">set</button>
+      <button id="btn-dist-plus" type="button">+10</button>
     </section>
 
     <section class="segment-row">
       Segment <strong id="seg-num">0</strong> of <strong id="seg-count">0</strong>
     </section>
 
-    <section class="actions">
-      <button id="btn-next-prev" type="button" disabled>---&gt;</button>
-      <button id="btn-reset-trip" type="button">Reset Trip</button>
+    <!-- The co-pilot's read-only stage panel, same figures in the same order:
+         the roadbook as set, each segment's own length, and the running total
+         the crew read off against the odometer. -->
+    <section class="stage-panel">
+      <div class="stage-autostart">Autostart: <strong id="stage-autostart">none</strong></div>
+      <table id="stage-table">
+        <thead>
+          <tr><th id="stage-speed-head">KPH</th><th colspan="2">Distance (m)</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </section>
+
   </main>
 
   <main id="view-setup" class="view hidden">
@@ -59,14 +101,20 @@
     </div>
     <button id="btn-add-seg" type="button">+ Add segment</button>
     <section class="memory-row">
-      <span>Memory:</span>
-      <button class="mem-slot" data-slot="1" type="button">1</button>
-      <button class="mem-slot" data-slot="2" type="button">2</button>
-      <button class="mem-slot" data-slot="3" type="button">3</button>
-      <button class="mem-slot" data-slot="4" type="button">4</button>
-      <button class="mem-slot" data-slot="5" type="button">5</button>
-      <button id="btn-mem-store" type="button">Store</button>
-      <button id="btn-mem-recall" type="button">Recall</button>
+      <span class="mem-label">Store</span>
+      <button class="mem-slot" data-action="store" data-slot="1" type="button">1</button>
+      <button class="mem-slot" data-action="store" data-slot="2" type="button">2</button>
+      <button class="mem-slot" data-action="store" data-slot="3" type="button">3</button>
+      <button class="mem-slot" data-action="store" data-slot="4" type="button">4</button>
+      <button class="mem-slot" data-action="store" data-slot="5" type="button">5</button>
+    </section>
+    <section class="memory-row">
+      <span class="mem-label">Recall</span>
+      <button class="mem-slot" data-action="recall" data-slot="1" type="button">1</button>
+      <button class="mem-slot" data-action="recall" data-slot="2" type="button">2</button>
+      <button class="mem-slot" data-action="recall" data-slot="3" type="button">3</button>
+      <button class="mem-slot" data-action="recall" data-slot="4" type="button">4</button>
+      <button class="mem-slot" data-action="recall" data-slot="5" type="button">5</button>
     </section>
     <section class="actions">
       <button id="btn-reset-trip2" type="button">Reset Trip</button>
@@ -74,6 +122,51 @@
     </section>
   </main>
 
+  <!-- Sample / side-branch: recognisable twin of the compact driver gauge.
+       Display-only; drawn only while this tab is active (RB-WEB-11). -->
+  <main id="view-driver" class="view view-driver hidden">
+    <canvas id="driver-gauge" width="390" height="360" aria-label="Driver gauge"></canvas>
+    <!-- From the gauge down: same Total/Trip (press to reset) and Adjust as Live. -->
+    <div class="driver-footer">
+      <section class="dist-box press-reset" id="drv-box-total" role="button" tabindex="0"
+               title="Reset Total" aria-label="Total distance, press to reset">
+        <span class="dl">Total</span><strong id="drv-total-m">0 m</strong>
+        <span class="rt">
+          <span class="avg">avg<b id="drv-total-avg">0.0</b></span>
+        </span>
+      </section>
+      <section class="dist-box press-reset" id="drv-box-trip" role="button" tabindex="0"
+               title="Reset Trip" aria-label="Trip distance, press to reset">
+        <span class="dl">Trip</span><strong id="drv-trip-m">0 m</strong>
+        <span class="rt">
+          <span class="avg">avg<b id="drv-trip-avg">0.0</b></span>
+        </span>
+      </section>
+      <section class="adjust-row live-tall">
+        <span class="adjust-label">Adjust</span>
+        <button id="drv-dist-minus" type="button">&minus;10</button>
+        <input id="drv-dist-set-m" type="number" min="0" max="999999" step="1"
+               inputmode="numeric" placeholder="Total m">
+        <button id="drv-dist-set" type="button">set</button>
+        <button id="drv-dist-plus" type="button">+10</button>
+      </section>
+    </div>
+  </main>
+
+  <!-- Reset Total with a stage running (a missed start): the box's question. -->
+  <div id="stage-menu" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-box">
+      <p class="modal-title">A stage is running</p>
+      <p class="modal-note">Total and Trip reset to zero from the press<br>
+        The stage clock keeps running</p>
+      <div class="modal-actions">
+        <button id="menu-abort" type="button">CONFIRM DISTANCE RESET</button>
+        <button id="menu-cancel" type="button">Back</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/gauge.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

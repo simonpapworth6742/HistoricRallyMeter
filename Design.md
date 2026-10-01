@@ -596,30 +596,45 @@ The server-side integration and the browser client are kept in separate director
   "ahead_behind_s": -1.8,
   "segment_number": 2,
   "segment_count": 3,
-  "next_prev_label": "next",
-  "next_prev_enabled": true
+  "next_enabled": true,
+  "prev_enabled": false,
+  "units": "kph",
+  "tone": { "tone_ms": 500, "silence_ms": 200, "freq_hz": 1046.5, "wave": "sine" },
+  "beep": null
 }
 ```
 
-- `next_prev_label` is one of `"next"`, `"prev"`, or `"--->"`, matching the TwinMaster button caption.
-- `next_prev_enabled` is true only when the button would be active on the co-pilot display (within 500 m of the current segment end with a following segment, or within 500 m of the current segment start and not on the first segment); otherwise false and the label is `"--->"`.
+- `next_enabled` is true when the TwinMaster button would read "next" (within 500 m of the current segment end with a following segment); `prev_enabled` when it would read "prev" (within 500 m of the current segment start and not on the first segment). Both false otherwise.
+- Speeds are already in the display units; `units` is `"kph"` or `"mph"`.
+- `tone` is the ahead/behind cadence the meter's speaker is playing at that moment, so the phone can play the same one: `tone_ms` 0 is silence. It is the same three numbers passed to the tone generator, including silence when muted, when past the stage end, or when no stage is running.
+- `beep` is always `null`: this version has no Beep Assist. The client ignores a null beep.
 
-**State snapshot (device → phone)** — sent on connect and after any change, so clients can render/refresh the segment editor:
+**State (device → phone)** — sent on connect and after any change, so clients can render/refresh the segment editor:
 ```json
 {
   "type": "state",
   "segment_current_number": 1,
+  "total_reset_asks": false,
   "segments": [
     { "target_speed_kph": 75.0, "distance_m": 1330, "autoNext": true }
-  ]
+  ],
+  "autostart": "none",
+  "memory_populated": [true, false, false, false, false]
 }
 ```
+
+- `total_reset_asks` is always false in this version: a Reset Total from the phone is applied at once, as the Total button on TwinMaster is.
+- `autostart` is `"none"` or the stored auto start time as hh:mm in rally time.
+- `memory_populated` says which of the five memory slots hold a stage, so the phone marks them as the Stage Setup screen does.
 
 **Commands (phone → device):**
 ```json
 { "type": "reset_trip" }
 { "type": "reset_total" }
-{ "type": "next_prev" }
+{ "type": "next" }
+{ "type": "prev" }
+{ "type": "distance_adjust", "delta_m": -10 }
+{ "type": "distance_set", "meters": 4200 }
 { "type": "segment_set", "index": 0, "target_speed_kph": 75.0, "distance_m": 1330, "autoNext": true }
 { "type": "segment_add", "target_speed_kph": 75.0, "distance_m": 1000, "autoNext": true }
 { "type": "segment_delete", "index": 2 }
@@ -628,12 +643,16 @@ The server-side integration and the browser client are kept in separate director
 ```
 
 - Distances are entered/displayed in metres and speeds in KPH (calibration-independent), matching the stage setup screen; the device recomputes counts against the current calibration.
-- `next_prev` invokes the same logic as the TwinMaster `[next/prev]` button (`on_next_prev_segment` in `callbacks.cpp`): when within 500 m of segment end, shortens the current segment to the distance travelled and advances; when within 500 m of segment start (not the first segment), extends the previous segment and resets the current segment start. No effect if neither condition applies (same as a disabled button on the co-pilot display).
+- `next` and `prev` invoke the same logic as the TwinMaster `[next/prev]` button (`on_next_prev_segment` in `callbacks.cpp`): when within 500 m of segment end, shortens the current segment to the distance travelled and advances; when within 500 m of segment start (not the first segment), extends the previous segment and resets the current segment start. No effect if neither condition applies (same as a disabled button on the co-pilot display).
+- `distance_adjust` and `distance_set` are the phone's Adjust row and change `distance_offset_counts` exactly as the Adjust Distance Traveled screen does: `delta_m` (−1000 to 1000, not 0) is "+N"/"−N", and `meters` (0 to 999,999) is the unsigned entry that makes the total read that many metres (0 clears the adjustment, as "0" does on the screen). Both save and are reflected on every display.
+- `reset_total_capture`, `reset_total_cancel`, `beep_set` and `tone_set` are sent by other builds of the client and are ignored here.
 - The device validates every command and ignores malformed or out-of-range ones. Invalid entries produce no state change.
 
 ### Web client design
 
-The client is a single responsive page that works in portrait or landscape on a phone browser, styled for legibility (large bold values, high contrast). It connects to the WebSocket on load and reconnects automatically if the connection drops. It has two views selectable by a tab bar:
+The client is a single responsive page (`index.html`, `app.css`, `app.js`, `gauge.js`, no build step) that works in portrait or landscape on a phone browser, styled for legibility (large bold values, high contrast). It connects to the WebSocket on load, reconnects automatically if the connection drops, and rebuilds the connection when the page comes back to the foreground after telemetry has stopped. It has three views selectable by a tab bar: Live, Setup and Driver.
+
+The header has no title. It holds a per-phone sound button and the connection state. The phone plays the meter's ahead/behind tone itself from the `tone` field in telemetry, with the same cadence and pitch as the meter's speaker, and clicks on every button pressed on the page. Browsers allow sound only after the page has been touched, so the button reads "Tap for sound" until then, "Sound is on" while playing, and "Sound is off" when that phone has muted itself. The choice is remembered on that phone only and does not affect the meter. The tone stops within three seconds if telemetry stops arriving.
 
 **1) Live view (default)**
 
@@ -641,25 +660,29 @@ The client is a single responsive page that works in portrait or landscape on a 
 +------------------------------------------+
 |  Rally Clock            14:53:07         |
 +------------------------------------------+
-|  AHEAD / BEHIND                          |
-|            -1.8 s                         |   <- large, colour-coded
+|  [ prev ]              [ next ]          |   <- each enabled from telemetry
 +------------------------------------------+
-|  Current      38.0 kph                   |
-|  Target      100.0 kph                   |
+|  -1.8 s        | Total 855,053 m         |   <- ahead/behind colour-coded
+|                |   avg 42.1   kph 38.0   |      Total/Trip boxes reset when pressed
+|                | Trip      537 m         |
+|                |   avg 41.2   tgt 100.0  |
 +------------------------------------------+
-|  Trip     537 m     avg 41.2 kph         |
-|  Total 855,053 m    avg 42.1 kph         |
+|  Adjust  [-10] [ Total m ] [set] [+10]   |
 +------------------------------------------+
 |  Segment 2 of 3                          |
 +------------------------------------------+
-|  [ next ]              [ Reset Trip ]    |   <- next/prev/---> label from telemetry; greyed when disabled
+|  Autostart: none                         |
+|  KPH   | Distance (m) | cumulative       |   <- read-only stage panel
+|  75.00 |   1,330      |   1,330          |
 +------------------------------------------+
 ```
 
-- The ahead/behind value is the most prominent element and is colour-coded (e.g. green when ahead, red when behind) for a glance read.
+- The ahead/behind value is colour-coded (green when ahead, red when behind) for a glance read.
+- `prev` and `next` are enabled from `prev_enabled`/`next_enabled` and send `prev`/`next`, mirroring the TwinMaster `[next/prev]` button rules (500 m window at segment start or end).
+- The Total box shows the total, its average speed and the current speed; the Trip box shows the trip, its average and the target speed. Pressing the Total box asks "Reset total distance?" and sends `reset_total`; pressing the Trip box sends `reset_trip` at once, as the TwinMaster Trip button does.
 - Distances use the same auto-formatting as the TwinMaster (metres, switching to km with a unit label for large values).
-- The **next/prev** button shows the caption from `next_prev_label` (`next`, `prev`, or `--->`) and is enabled only when `next_prev_enabled` is true; it sends a `next_prev` command on press, mirroring the TwinMaster `[next/prev]` button rules (500 m window at segment end or start).
-- `Reset Trip` issues a `reset_trip` command; it may require a short press-and-confirm to avoid accidental taps.
+- The Adjust row is the phone's version of Adjust Distance Traveled: `-10` and `+10` send `distance_adjust` with ±10 m; typing a figure and pressing `set` sends `distance_set` so the total reads that figure. An empty entry does nothing.
+- The stage panel lists the segments as set, each one's speed in the display units, its length and the running total from the stage start, with the stored auto start time above it.
 
 **2) Setup view**
 
@@ -672,15 +695,20 @@ The client is a single responsive page that works in portrait or landscape on a 
 +------------------------------------------+
 |  [ + Add segment ]                       |
 +------------------------------------------+
-|  Memory:  [1][2][3][4][5]                |
-|           [ Store ]   [ Recall ]         |
+|  Store   [1][2][3][4][5]                 |   <- populated slots highlighted
+|  Recall  [1][2][3][4][5]                 |
 +------------------------------------------+
 |  [ Reset Trip ]     [ Reset Total ]      |
 ```
 
 - Each row edits one segment (target speed, distance, autoNext) and sends a `segment_set` command on change; `+ Add segment` and per-row delete send `segment_add`/`segment_delete`.
-- Memory Store/Recall for the five slots mirror the on-device memory behaviour and send `memory_store`/`memory_recall`.
-- The editor is populated and kept current from the `state` snapshot, so edits made on the device or on another phone appear here.
+- Store and Recall each have their own row of slot buttons, highlighted when `memory_populated` says the slot holds a stage. Store asks before overwriting a populated slot; Recall asks before replacing the segments on screen and does nothing for an empty slot. They send `memory_store`/`memory_recall`.
+- The editor is populated and kept current from the `state` message, so edits made on the device or on another phone appear here.
+- This version has no Beep Assist or tone panel on the Setup view; the view ends with the Reset Trip and Reset Total buttons.
+
+**3) Driver view**
+
+A canvas drawing of the compact driver gauge (needle, coloured scale band, digital readout, current and target speed, rally clock), drawn from the same telemetry fields as the Live view and only while this tab is showing. Under it are the same Total and Trip boxes (press to reset) and the same Adjust row as the Live view.
 
 ### Configuration
 
@@ -893,9 +921,12 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Hotspot uses the hostname as an open SSID; Join uses WiFi4 plus the hostname; the chosen NetworkManager connection autoconnects and the other Wi-Fi connections do not
 
 ### Remote Web Access Tests
-- WebSocket telemetry includes `next_prev_label` and `next_prev_enabled` consistent with TwinMaster button state
-- `next_prev` command applies same segment correction as co-pilot `[next/prev]` button; no-op when not in 500 m window
-- Multiple connected phones receive broadcast state after `next_prev`, reset, or segment edit
+- WebSocket telemetry includes `next_enabled` and `prev_enabled` consistent with TwinMaster button state
+- `next` and `prev` commands apply the same segment correction as the co-pilot `[next/prev]` button; no-op when not in the 500 m window
+- Telemetry `tone` carries the cadence last passed to the tone generator: silent as `tone_ms` 0, otherwise the same tone_ms, silence_ms and frequency; `beep` is null
+- `distance_adjust` with delta_m ±10 moves `distance_offset_counts` by 10 m of counts; `distance_set` with meters N makes the total read N; delta_m 0 or beyond ±1000 and meters outside 0–999,999 are ignored
+- State carries `autostart` as "none" or hh:mm and `memory_populated` for the five slots
+- Multiple connected phones receive broadcast state after `next`/`prev`, reset, distance adjustment, or segment edit
 
 ### Rally-Specific Edge Cases
 - Zero counts (stationary vehicle) - speed displays as 0.00 or "--.--"

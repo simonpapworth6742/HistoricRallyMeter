@@ -24,6 +24,14 @@ struct Segment {
     bool autoNext = true;
 };
 
+// The ahead/behind tone cadence as passed to ToneGenerator::setCadence.
+// tone_ms 0 means silence.
+struct ToneCadence {
+    int tone_ms = 0;
+    int silence_ms = 0;
+    double freq_hz = 0.0;
+};
+
 // Counter polling data with 10-second rolling average
 struct CounterPoll {
     uint64_t cntr1;
@@ -173,6 +181,9 @@ struct AppData {
     
     // Tone generator for speed adjustment alerts
     ToneGenerator* toneGen = nullptr;
+    // The cadence last handed to toneGen, so the web telemetry can tell the
+    // phones what the speaker is playing. tone_ms 0 is silence.
+    ToneCadence currentTone;
     
     int updateCount = 0;
     int64_t lastUpdateCountTime_ms = 0;

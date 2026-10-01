@@ -5,6 +5,7 @@
 #include "../calculations.h"
 #include "../rally_state.h"
 #include <chrono>
+#include <ctime>
 
 class TestRallyClock {
 public:
@@ -171,6 +172,22 @@ public:
             
             ASSERT_NEAR(rally_time, system_ms - 3600000, 100);
             
+            return true;
+        });
+
+        // Web state "autostart" line: "none" when unset, else local hh:mm
+        suite->addTest("Auto start status formats none and hh:mm", []() {
+            ASSERT_EQ(formatAutoStartStatus(0, 0), std::string("none"));
+
+            // Epoch of 2020-01-01 00:00 local, as the app uses; 14:35 that day
+            struct tm epoch_tm = {};
+            epoch_tm.tm_year = 120;
+            epoch_tm.tm_mon = 0;
+            epoch_tm.tm_mday = 1;
+            epoch_tm.tm_isdst = -1;
+            int64_t epoch_ms = static_cast<int64_t>(mktime(&epoch_tm)) * 1000;
+            ASSERT_EQ(formatAutoStartStatus(14 * 60 + 35, epoch_ms), std::string("14:35"));
+            ASSERT_EQ(formatAutoStartStatus(7, epoch_ms), std::string("00:07"));
             return true;
         });
         

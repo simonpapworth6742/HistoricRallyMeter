@@ -602,6 +602,7 @@ void updateDriverDisplay(AppData* data) {
 
                 if (data->tonesMuted || past_stage_end || abs_seconds > 30.0 || num_arrows == 0) {
                     data->toneGen->setCadence(0, 0);
+                    data->currentTone = ToneCadence{};
                 } else {
                     bool behind = (speed_diff > 0);
                     double freq = behind ? 1046.50 : 1396.91;
@@ -614,10 +615,12 @@ void updateDriverDisplay(AppData* data) {
                         tone = 100; silence = 100;
                     }
                     data->toneGen->setCadence(tone, silence, freq);
+                    data->currentTone = ToneCadence{tone, silence, freq};
                 }
             }
         } else {
             if (data->toneGen) data->toneGen->setCadence(0, 0);
+            data->currentTone = ToneCadence{};
         }
         
         // Redraw gauge
@@ -627,6 +630,7 @@ void updateDriverDisplay(AppData* data) {
     } else {
         gtk_label_set_text(data->targetSpeedLabel, "--.-");
         if (data->toneGen) data->toneGen->setCadence(0, 0);
+        data->currentTone = ToneCadence{};
         data->aheadBehindSeconds = 0.0;
         data->segmentProgress = 0.0;
         data->inSegment = false;

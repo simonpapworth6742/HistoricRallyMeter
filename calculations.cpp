@@ -173,6 +173,15 @@ std::string formatTime(int64_t time_ms) {
     return std::string(buf);
 }
 
+std::string formatAutoStartStatus(uint64_t auto_start_minutes, int64_t epoch_ms) {
+    if (auto_start_minutes == 0) return "none";
+    time_t target_s = (epoch_ms + static_cast<int64_t>(auto_start_minutes) * 60000) / 1000;
+    struct tm* t = localtime(&target_s);
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%02d:%02d", t->tm_hour, t->tm_min);
+    return std::string(buf);
+}
+
 double calculateCurrentSpeed(const RallyState& state, const CounterPoll& current, 
                             const CounterPoll& tenth) {
     if (tenth.time_ms == 0 || current.time_ms == 0) {

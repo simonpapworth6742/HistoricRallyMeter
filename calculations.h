@@ -72,6 +72,11 @@ int64_t getRallyTime_ms(const RallyState& state);
 // Format time as HH:MM:SS
 std::string formatTime(int64_t time_ms);
 
+// The auto start line for the web stage panel: "none" when no auto start is
+// set (minutes 0), otherwise the stored time as local hh:mm. epoch_ms is the
+// auto start epoch (2020-01-01 local) that the minutes count from.
+std::string formatAutoStartStatus(uint64_t auto_start_minutes, int64_t epoch_ms);
+
 // Calculate current speed from 10-second rolling average
 double calculateCurrentSpeed(const RallyState& state, const CounterPoll& current, 
                             const CounterPoll& tenth);
