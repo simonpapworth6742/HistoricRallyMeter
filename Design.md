@@ -147,7 +147,7 @@ Because the offset is part of CNTR_A, a Trip reset and a segment start (next/pre
 
 The counter chips are simple pulse counters. The application does not change their count mode.
 
-The counter chips stay powered for several minutes after the Pi has shut down, so they cannot lose power while the application is running. Each chip has a power-loss flag that is set only when the whole rally meter has been off for longer than that, in which case both counts have gone back to zero and the stored start readings no longer describe them. On startup the application reads the flag on both chips:
+The counter chips stay powered for several minutes after the Pi has shut down, so they cannot lose power while the application is running. Each chip has a power-loss flag that is set only when the whole rally meter has been off for longer than that, in which case both counts have gone back to zero and the stored start readings no longer describe them. On startup the application reads the flag on both chips. The first I2C read of a chip after a cold boot has been seen to return 0x00 for the status register, with every later read correct, so the application reads the status register twice on each chip and uses the second reading (the first is discarded). Then:
 
 - Neither flag set: the counts are continuous with the stored start readings. Leave total, trip and segment as they are, so distance covered while only the Pi was down stays included.
 - Either flag set: the meter has been off. Set the total, trip and segment start readings on both chips to the live counts, set the three start times to now, set segment_current_number to -1, clear the distance alarm, save the config once, and clear the flag on both chips.
@@ -830,6 +830,7 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Next segment increments segment_current_number
 - Next segment sets segment_start counters and time
 - Counter power-loss flag at startup resets total, trip and segment start counts to the live counts, start times to now, segment_current_number to -1, clears the alarm and zeroes distance_offset_counts; no flag leaves them unchanged
+- The status register is read twice per chip at startup and the second reading is the one used, so a first read of 0x00 after a cold boot does not hide a set flag
 - Stage go zeroes distance_offset_counts
 
 ### Unit Toggle Tests

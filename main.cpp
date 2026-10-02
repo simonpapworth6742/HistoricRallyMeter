@@ -275,6 +275,12 @@ static gboolean on_window_close_save(G_GNUC_UNUSED GtkWidget* widget, G_GNUC_UNU
 // mode alone: these are pulse counters.
 static void handleCounterPowerLoss(I2CCounter& counter1, I2CCounter& counter2,
                                    RallyState& state, uint8_t reg) {
+    // The first read of a chip after a cold boot has returned 0x00 for the
+    // status register while every later read was correct, so read it twice
+    // and trust the second: a missed flag here would leave every distance
+    // wrong by the old count.
+    counter1.powerLost();
+    counter2.powerLost();
     bool lost1 = counter1.powerLost();
     bool lost2 = counter2.powerLost();
     if (!lost1 && !lost2) return;

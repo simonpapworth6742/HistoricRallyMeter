@@ -19,6 +19,8 @@ public:
     void writeRegister(uint8_t reg, uint8_t value);
 
     // SSTR bit 0. Set by the chip when it loses power; CNTR goes back to zero.
+    // The first read after a cold boot can return 0x00; callers that decide
+    // on this flag read it twice and use the second result.
     bool powerLost();
     // Clear the power-loss flag. Does not change CNTR.
     void clearPowerLoss();
