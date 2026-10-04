@@ -224,6 +224,23 @@ public:
             return true;
         });
 
+        suite->addTest("Quick adjustment text subtracts 1x or 2x a positive trip, empty otherwise", []() {
+            ASSERT_STR_EQ(quickAdjustmentText(1234, 1), "-1234");
+            ASSERT_STR_EQ(quickAdjustmentText(1234, 2), "-2468");
+            ASSERT_STR_EQ(quickAdjustmentText(2345, 2), "-4690");
+            ASSERT_STR_EQ(quickAdjustmentText(0, 1), "");
+            ASSERT_STR_EQ(quickAdjustmentText(-50, 2), "");
+            // No trip history reads as 0, so the third button is disabled
+            std::vector<long> none = parseTripHistory("");
+            ASSERT_STR_EQ(quickAdjustmentText(none.empty() ? 0 : none[0], 2), "");
+            // Applying the text removes exactly that many metres of counts
+            long cal = 1000;  // 1 mm per count: 1 m = 1000 counts
+            int64_t new_offset = 0;
+            ASSERT_TRUE(applyDistanceAdjustmentText(quickAdjustmentText(350, 2), 0, 500000, cal, new_offset));
+            ASSERT_EQ(new_offset, -700000);
+            return true;
+        });
+
         suite->addTest("Adjust nudges: empty starts signed, signed passes zero, unsigned stops at 0", []() {
             ASSERT_STR_EQ(nudgeDistanceAdjustmentText("", 10), "+10");
             ASSERT_STR_EQ(nudgeDistanceAdjustmentText("", -100), "-100");

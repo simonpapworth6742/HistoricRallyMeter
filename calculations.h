@@ -56,6 +56,11 @@ bool applyDistanceAdjustmentText(const std::string& text, int64_t current_offset
                                  int64_t current_total_counts, long calibration,
                                  int64_t& new_offset_counts);
 
+// Quick adjustment buttons: the entry text that subtracts times x base_m
+// metres ("-N" for applyDistanceAdjustmentText), or empty when base_m is not
+// positive, in which case the button is disabled.
+std::string quickAdjustmentText(long base_m, int times);
+
 // Nudge the entry text by delta_m metres. Empty is treated as "+0"; a signed
 // entry stays signed through zero; an unsigned entry stays unsigned and stops at 0.
 std::string nudgeDistanceAdjustmentText(const std::string& text, long delta_m);
