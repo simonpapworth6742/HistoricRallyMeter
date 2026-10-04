@@ -83,6 +83,9 @@ struct AppData {
     GtkLabel* adjustDistanceInfoLabel = nullptr;   // live total, trip and offset in metres
     GtkEntry* adjustDistanceEntry = nullptr;       // metres to add/subtract or set
     GtkWidget* adjustDistanceKeypad = nullptr;
+    // Quick adjustment buttons: late start (1x trip), missed turn (2x trip),
+    // missed turn (2x most recent trip history). Captions refreshed live.
+    GtkWidget* adjustQuickButtons[3] = {};
     GtkLabel* totalDistLabel;
     GtkLabel* totalUnitLabel;
     GtkLabel* totalTimeLabel;

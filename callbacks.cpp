@@ -653,6 +653,28 @@ void on_adjust_distance_nudge(GtkWidget* widget, gpointer user_data) {
     gtk_entry_set_text(data->adjustDistanceEntry, text.c_str());
 }
 
+// A quick adjustment button carries its "-N" entry text (set when the caption
+// was refreshed) and applies it at once, as "-N" [apply] would.
+void on_adjust_distance_quick(GtkWidget* widget, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    const char* text = static_cast<const char*>(g_object_get_data(G_OBJECT(widget), "quick-text"));
+    if (!text || !*text) return;
+    auto current_poll = data->poller->getMostRecent();
+    int64_t total_counts = calculateDistanceCounts(*data->state,
+        current_poll.cntr1, current_poll.cntr2,
+        data->state->total_start_cntr1, data->state->total_start_cntr2);
+    int64_t new_offset = data->state->distance_offset_counts;
+    if (!applyDistanceAdjustmentText(text, data->state->distance_offset_counts, total_counts,
+                                     data->state->calibration, new_offset)) {
+        return;
+    }
+    data->state->distance_offset_counts = new_offset;
+    ConfigFile::save(*data->state);
+    if (data->adjustDistanceEntry) gtk_entry_set_text(data->adjustDistanceEntry, "");
+    notifyWebState(data);
+    on_show_twinmaster(nullptr, data);
+}
+
 // "+" or "-" on the keypad sets the leading sign of the entry, replacing one already there.
 void on_keypad_sign(GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);

@@ -131,6 +131,11 @@ bool applyDistanceAdjustmentText(const std::string& text, int64_t current_offset
     return true;
 }
 
+std::string quickAdjustmentText(long base_m, int times) {
+    if (base_m <= 0 || times <= 0) return "";
+    return "-" + std::to_string(base_m * times);
+}
+
 std::string nudgeDistanceAdjustmentText(const std::string& text, long delta_m) {
     char sign = '+'; long metres = 0;
     if (!text.empty() && !parseSignedMetres(text, sign, metres)) return text;
