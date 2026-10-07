@@ -224,6 +224,16 @@ public:
             return true;
         });
 
+        suite->addTest("Driver trip distance text has separators, sign and unit", []() {
+            ASSERT_STR_EQ(formatTripDistanceText(0), "0 m");
+            ASSERT_STR_EQ(formatTripDistanceText(537), "537 m");
+            ASSERT_STR_EQ(formatTripDistanceText(1234), "1,234 m");
+            ASSERT_STR_EQ(formatTripDistanceText(1234567), "1,234,567 m");
+            ASSERT_STR_EQ(formatTripDistanceText(-70), "-70 m");
+            ASSERT_STR_EQ(formatTripDistanceText(-12754), "-12,754 m");
+            return true;
+        });
+
         suite->addTest("Quick adjustment text subtracts 1x or 2x a positive trip, empty otherwise", []() {
             ASSERT_STR_EQ(quickAdjustmentText(1234, 1), "-1234");
             ASSERT_STR_EQ(quickAdjustmentText(1234, 2), "-2468");

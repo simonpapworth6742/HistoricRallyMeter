@@ -131,6 +131,19 @@ bool applyDistanceAdjustmentText(const std::string& text, int64_t current_offset
     return true;
 }
 
+std::string formatTripDistanceText(long meters) {
+    bool negative = meters < 0;
+    std::string digits = std::to_string(negative ? -meters : meters);
+    std::string out;
+    int count = 0;
+    for (auto it = digits.rbegin(); it != digits.rend(); ++it) {
+        if (count > 0 && count % 3 == 0) out.insert(out.begin(), ',');
+        out.insert(out.begin(), *it);
+        count++;
+    }
+    return (negative ? "-" : "") + out + " m";
+}
+
 std::string quickAdjustmentText(long base_m, int times) {
     if (base_m <= 0 || times <= 0) return "";
     return "-" + std::to_string(base_m * times);

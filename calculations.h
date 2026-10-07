@@ -56,6 +56,10 @@ bool applyDistanceAdjustmentText(const std::string& text, int64_t current_offset
                                  int64_t current_total_counts, long calibration,
                                  int64_t& new_offset_counts);
 
+// Driver display trip distance: whole metres with thousands separators and a
+// trailing " m", e.g. "1,234 m" or "-70 m".
+std::string formatTripDistanceText(long meters);
+
 // Quick adjustment buttons: the entry text that subtracts times x base_m
 // metres ("-N" for applyDistanceAdjustmentText), or empty when base_m is not
 // positive, in which case the button is disabled.

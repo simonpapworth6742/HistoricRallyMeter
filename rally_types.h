@@ -54,6 +54,7 @@ struct AppData {
     GtkLabel* tripSpeedLabel;
     GtkLabel* totalSpeedLabel;
     GtkLabel* targetSpeedLabel;
+    GtkLabel* tripDistanceLabel = nullptr;   // "1,234 m", top-right of the driver gauge
     GtkLabel* updatesPerSecLabel;
     GtkLabel* cpuTempLabel;
     GtkButton* unitToggleBtn;

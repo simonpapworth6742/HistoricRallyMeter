@@ -399,6 +399,14 @@ gboolean on_gauge_draw(GtkWidget* widget, cairo_t* cr, gpointer user_data) {
         drawValue(gtk_label_get_text(data->currentSpeedLabel),
                   cur_right, cur_baseline_top, cur_top_size);
 
+        // {trip dist}: top-right, no label, same size as {current}, flush
+        // with the panel edge. Not in single-display mode, where the rally
+        // clock has that corner.
+        if (!data->singleDisplayMode && data->tripDistanceLabel) {
+            drawValue(gtk_label_get_text(data->tripDistanceLabel),
+                      width - 15, cur_baseline_top, cur_top_size);
+        }
+
         // {target}: left of the hub, slightly smaller than before so it stays
         // clear of the scale numbers; small label above, aligned to the value.
         // Combined single display uses a slightly smaller size for target,
@@ -498,6 +506,12 @@ void updateDriverDisplay(AppData* data) {
         ss << std::fixed << std::setprecision(2) << trip_speed;
     }
     gtk_label_set_text(data->tripSpeedLabel, ss.str().c_str());
+
+    // Trip distance, as the TwinMaster Trip row reads it
+    if (data->tripDistanceLabel) {
+        long trip_m = countsToCentimeters(trip_count_diff, data->state->calibration) / 100;
+        gtk_label_set_text(data->tripDistanceLabel, formatTripDistanceText(trip_m).c_str());
+    }
     
     // Total average speed
     int64_t total_count_diff = calculateDistanceCounts(*data->state,
@@ -736,11 +750,13 @@ GtkWidget* createDriverWindow(AppData* data) {
     data->targetSpeedLabel = GTK_LABEL(gtk_label_new("--.-"));
     data->totalSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
     data->tripSpeedLabel = GTK_LABEL(gtk_label_new("--.--"));
+    data->tripDistanceLabel = GTK_LABEL(gtk_label_new("0 m"));
     data->updatesPerSecLabel = GTK_LABEL(gtk_label_new("fps: 0"));
     data->cpuTempLabel = GTK_LABEL(gtk_label_new(readCpuTemp().c_str()));
     for (GtkWidget* label : {
             GTK_WIDGET(data->currentSpeedLabel), GTK_WIDGET(data->targetSpeedLabel),
             GTK_WIDGET(data->totalSpeedLabel), GTK_WIDGET(data->tripSpeedLabel),
+            GTK_WIDGET(data->tripDistanceLabel),
             GTK_WIDGET(data->updatesPerSecLabel), GTK_WIDGET(data->cpuTempLabel)}) {
         holdLabel(label);
     }

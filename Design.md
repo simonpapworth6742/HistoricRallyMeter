@@ -205,12 +205,12 @@ look at the example guage in gaugepilot-rallymaster-display.png
 
 ``` Layout notes for the driver display (800x480, or 480x800 rotated):
 +-----------------------------------------+
-|  {target}                               |
+|  {current}                   {trip dist}|
 |         -10s ←───┬───→ +10s             |
 |            ╱     │     ╲                |
 |          ╱       │ {tot} ╲              |
 |        ╱         │         ╲            |
-|      ╱ {current} ▲  {trip}   ╲          |
+|      ╱ {target}  ▲  {trip}   ╲          |
 |    ╱             ●             ╲        |
 |  fps:xxx       [±ss.s]           cpu:xxC|
 +-----------------------------------------+
@@ -218,6 +218,7 @@ look at the example guage in gaugepilot-rallymaster-display.png
 The gauge fills the window and is reactive to the screen size.
 Current, target, total and trip are drawn inside the gauge area:
 - {current} is the current speed, top-left with no label; it is right-aligned to a fixed anchor wide enough for "###.#" so the digits never shift as the value changes.
+- {trip dist} is the current trip distance, top-right with no label, in the same font size as {current} (50px at full scale) and right-aligned to the panel edge. It is in whole metres with thousands separators and a trailing "m" (e.g. "1,234 m"), the same reading as the TwinMaster Trip row, and goes negative after a negative distance adjustment. It is drawn on the separate driver display only; in single-display mode the top-right corner keeps the rally clock.
 - {tot} and {trip} are the values without labels, shown to two decimal places. Current and target stay at one decimal place.
 - {target} sits left of the hub with a very small "Target" label above it, left-aligned with the value.
 - Target, total and trip share the same font size (56px at full scale); current is slightly smaller (50px). All shrink with the gauge (scaled by gauge radius relative to a 256px full-scale radius). On the combined single display those three values are drawn a little smaller (48px at full scale); current stays at 50px. The driver display has no unit (KPH/MPH) toggle button.
@@ -853,6 +854,7 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Updates per second counts render calls in last full second
 - Rolling count resets each second
 - Driver display updates all speed values each refresh
+- Driver display trip distance text matches the TwinMaster trip reading in whole metres, e.g. 1234 m gives "1,234 m" and -70 m gives "-70 m"
 - Co-pilot TwinMaster updates distance and time values
 
 ### Time Formatting Tests
