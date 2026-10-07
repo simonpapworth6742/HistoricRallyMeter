@@ -1075,11 +1075,15 @@ static void markCalStep(GtkWidget* btn, bool next) {
 }
 
 static void refreshCalWorkflow(AppData* data) {
+    // The distance entry is linked to the pulse count, so it needs a stopped
+    // run with pulses. A known calibration can be typed and Set at any time a
+    // run is not in progress.
     bool edit = data->cal_stopped && data->cal_pulse_count > 0;
+    bool can_type_cal = !data->cal_running;
     if (data->calStopBtn) gtk_widget_set_sensitive(data->calStopBtn, data->cal_running);
-    if (data->calSetBtn) gtk_widget_set_sensitive(data->calSetBtn, edit);
+    if (data->calSetBtn) gtk_widget_set_sensitive(data->calSetBtn, can_type_cal);
     if (data->rallyDistEntry) gtk_widget_set_sensitive(GTK_WIDGET(data->rallyDistEntry), edit);
-    if (data->calNewEntry) gtk_widget_set_sensitive(GTK_WIDGET(data->calNewEntry), edit);
+    if (data->calNewEntry) gtk_widget_set_sensitive(GTK_WIDGET(data->calNewEntry), can_type_cal);
     markCalStep(data->calStartBtn, !data->cal_running && !data->cal_stopped);
     markCalStep(data->calStopBtn, data->cal_running);
     markCalStep(data->calSetBtn, data->cal_stopped);
@@ -1461,13 +1465,20 @@ void on_memory_clear(GtkWidget* widget, gpointer user_data) {
 
 void on_save_calibration(G_GNUC_UNUSED GtkWidget* widget, gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
-    if (!data->cal_stopped || data->cal_pulse_count <= 0) return;
+    if (data->cal_running) return;
 
-    long rally_distance_m = 0;
     long new_calibration = 0;
-    if (!parseLongText(gtk_entry_get_text(data->rallyDistEntry), rally_distance_m)) return;
     if (!parseLongText(gtk_entry_get_text(data->calNewEntry), new_calibration)) return;
-    if (rally_distance_m <= 0 || rally_distance_m > 100000 || new_calibration <= 0) return;
+    if (new_calibration <= 0) return;
+
+    // After a run the distance entry must make sense; with no run the
+    // calibration was typed in directly and the distance is not used.
+    bool from_run = data->cal_stopped && data->cal_pulse_count > 0;
+    if (from_run) {
+        long rally_distance_m = 0;
+        if (!parseLongText(gtk_entry_get_text(data->rallyDistEntry), rally_distance_m)) return;
+        if (rally_distance_m <= 0 || rally_distance_m > 100000) return;
+    }
 
     data->state->calibration = new_calibration;
 

@@ -878,7 +878,8 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     g_signal_connect(data->calSetBtn, "clicked", G_CALLBACK(on_save_calibration), data);
     gtk_style_context_add_class(gtk_widget_get_style_context(data->calStartBtn), "cal-workflow-next");
     gtk_widget_set_sensitive(data->calStopBtn, FALSE);
-    gtk_widget_set_sensitive(data->calSetBtn, FALSE);
+    // Set and the new-calibration entry start enabled: a known calibration
+    // can be typed in without a run. refreshCalWorkflow keeps them in step.
 
     data->calRunLabel = GTK_LABEL(gtk_label_new("Distance: 0 m\nPulses: 0"));
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->calRunLabel)), "cal-setting");
@@ -909,7 +910,6 @@ GtkWidget* createCalibrationScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->calNewEntry)), "cal-setting");
     gtk_entry_set_placeholder_text(data->calNewEntry, "mm/1000p");
     gtk_widget_set_size_request(GTK_WIDGET(data->calNewEntry), 140, -1);
-    gtk_widget_set_sensitive(GTK_WIDGET(data->calNewEntry), FALSE);
     gtk_entry_set_text(data->calNewEntry, std::to_string(data->state->calibration).c_str());
     g_signal_connect(data->calNewEntry, "focus-in-event", G_CALLBACK(on_entry_focus), data);
     g_signal_connect(data->calNewEntry, "changed", G_CALLBACK(on_cal_new_changed), data);

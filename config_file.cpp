@@ -9,28 +9,42 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-static int64_t extractLong(const std::string& line) {
+// The text after the colon, without a trailing comma. Empty if no colon.
+static std::string valueText(const std::string& line) {
     size_t pos = line.find(':');
-    if (pos != std::string::npos) {
-        std::string val = line.substr(pos + 1);
-        // Remove trailing comma if present
-        size_t comma = val.find(',');
-        if (comma != std::string::npos) val = val.substr(0, comma);
-        return std::stoll(val);
-    }
-    return 0;
+    if (pos == std::string::npos) return "";
+    std::string val = line.substr(pos + 1);
+    size_t comma = val.find(',');
+    if (comma != std::string::npos) val = val.substr(0, comma);
+    return val;
 }
 
-static double extractDouble(const std::string& line) {
-    size_t pos = line.find(':');
-    if (pos != std::string::npos) {
-        std::string val = line.substr(pos + 1);
-        // Remove trailing comma if present
-        size_t comma = val.find(',');
-        if (comma != std::string::npos) val = val.substr(0, comma);
-        return std::stod(val);
+// The extractors never throw: a value that will not parse gives the fallback,
+// so a damaged or hand-edited config cannot stop the application starting.
+static int64_t extractLong(const std::string& line, int64_t fallback = 0) {
+    try {
+        return std::stoll(valueText(line));
+    } catch (const std::exception&) {
+        return fallback;
     }
-    return 0.0;
+}
+
+// Counter start readings are uint64 and may be stored wrapped (a negative
+// start after a distance adjustment), which is beyond stoll's range.
+static uint64_t extractCounter(const std::string& line, uint64_t fallback = 0) {
+    try {
+        return std::stoull(valueText(line));
+    } catch (const std::exception&) {
+        return fallback;
+    }
+}
+
+static double extractDouble(const std::string& line, double fallback = 0.0) {
+    try {
+        return std::stod(valueText(line));
+    } catch (const std::exception&) {
+        return fallback;
+    }
 }
 
 static bool extractBool(const std::string& line) {
@@ -140,53 +154,53 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
         } else if (line.find("\"units\"") != std::string::npos) {
             state.units = extractBool(line);
         } else if (line.find("\"calibration\"") != std::string::npos) {
-            state.calibration = extractLong(line);
+            state.calibration = extractLong(line, state.calibration);
         } else if (line.find("\"counters\"") != std::string::npos) {
             state.counters = extractBool(line);
         } else if (line.find("\"total_start_cntr1\"") != std::string::npos) {
-            state.total_start_cntr1 = static_cast<uint32_t>(extractLong(line));
+            state.total_start_cntr1 = extractCounter(line, state.total_start_cntr1);
         } else if (line.find("\"total_start_cntr2\"") != std::string::npos) {
-            state.total_start_cntr2 = static_cast<uint32_t>(extractLong(line));
+            state.total_start_cntr2 = extractCounter(line, state.total_start_cntr2);
         } else if (line.find("\"total_start_time_ms\"") != std::string::npos) {
-            state.total_start_time_ms = extractLong(line);
+            state.total_start_time_ms = extractLong(line, state.total_start_time_ms);
         } else if (line.find("\"trip_start_cntr1\"") != std::string::npos) {
-            state.trip_start_cntr1 = static_cast<uint32_t>(extractLong(line));
+            state.trip_start_cntr1 = extractCounter(line, state.trip_start_cntr1);
         } else if (line.find("\"trip_start_cntr2\"") != std::string::npos) {
-            state.trip_start_cntr2 = static_cast<uint32_t>(extractLong(line));
+            state.trip_start_cntr2 = extractCounter(line, state.trip_start_cntr2);
         } else if (line.find("\"trip_start_time_ms\"") != std::string::npos) {
-            state.trip_start_time_ms = extractLong(line);
+            state.trip_start_time_ms = extractLong(line, state.trip_start_time_ms);
         } else if (line.find("\"segment_start_cntr1\"") != std::string::npos) {
-            state.segment_start_cntr1 = static_cast<uint32_t>(extractLong(line));
+            state.segment_start_cntr1 = extractCounter(line, state.segment_start_cntr1);
         } else if (line.find("\"segment_start_cntr2\"") != std::string::npos) {
-            state.segment_start_cntr2 = static_cast<uint32_t>(extractLong(line));
+            state.segment_start_cntr2 = extractCounter(line, state.segment_start_cntr2);
         } else if (line.find("\"segment_start_time_ms\"") != std::string::npos) {
-            state.segment_start_time_ms = extractLong(line);
+            state.segment_start_time_ms = extractLong(line, state.segment_start_time_ms);
         } else if (line.find("\"segment_current_number\"") != std::string::npos) {
-            state.segment_current_number = static_cast<int32_t>(extractLong(line));
+            state.segment_current_number = static_cast<int32_t>(extractLong(line, state.segment_current_number));
         } else if (line.find("\"rallyTimeOffset_ms\"") != std::string::npos) {
-            state.rallyTimeOffset_ms = extractLong(line);
+            state.rallyTimeOffset_ms = extractLong(line, state.rallyTimeOffset_ms);
         } else if (line.find("\"ahead_behind_zero_offset_ms\"") != std::string::npos) {
-            state.ahead_behind_zero_offset_ms = extractLong(line);
+            state.ahead_behind_zero_offset_ms = extractLong(line, state.ahead_behind_zero_offset_ms);
         } else if (line.find("\"distance_offset_counts\"") != std::string::npos) {
-            state.distance_offset_counts = extractLong(line);
+            state.distance_offset_counts = extractLong(line, state.distance_offset_counts);
         } else if (line.find("\"trip_history_m\"") != std::string::npos) {
             state.trip_history_m = extractString(line);
         } else if (line.find("\"auto_start_rally_time_minutes\"") != std::string::npos) {
-            state.auto_start_rally_time_minutes = static_cast<uint64_t>(extractLong(line));
+            state.auto_start_rally_time_minutes = static_cast<uint64_t>(extractLong(line, state.auto_start_rally_time_minutes));
         } else if (line.find("\"driver_window_x\"") != std::string::npos) {
-            state.driver_window_x = static_cast<int>(extractLong(line));
+            state.driver_window_x = static_cast<int>(extractLong(line, state.driver_window_x));
         } else if (line.find("\"driver_window_y\"") != std::string::npos) {
-            state.driver_window_y = static_cast<int>(extractLong(line));
+            state.driver_window_y = static_cast<int>(extractLong(line, state.driver_window_y));
         } else if (line.find("\"driver_window_width\"") != std::string::npos) {
-            state.driver_window_width = static_cast<int>(extractLong(line));
+            state.driver_window_width = static_cast<int>(extractLong(line, state.driver_window_width));
         } else if (line.find("\"driver_window_height\"") != std::string::npos) {
-            state.driver_window_height = static_cast<int>(extractLong(line));
+            state.driver_window_height = static_cast<int>(extractLong(line, state.driver_window_height));
         } else if (line.find("\"driver_window_monitor\"") != std::string::npos) {
-            state.driver_window_monitor = static_cast<int>(extractLong(line));
+            state.driver_window_monitor = static_cast<int>(extractLong(line, state.driver_window_monitor));
         } else if (line.find("\"alarm_distance_km\"") != std::string::npos) {
-            state.alarm_distance_km = static_cast<int>(extractLong(line));
+            state.alarm_distance_km = static_cast<int>(extractLong(line, state.alarm_distance_km));
         } else if (line.find("\"alarm_target_counts\"") != std::string::npos) {
-            state.alarm_target_counts = extractLong(line);
+            state.alarm_target_counts = extractLong(line, state.alarm_target_counts);
         } else if (line.find("\"force_single_display\"") != std::string::npos) {
             state.force_single_display = extractBool(line);
         } else if (line.find("\"arrival_tone_enabled\"") != std::string::npos) {
@@ -194,7 +208,7 @@ void ConfigFile::load(RallyState& state, const std::string& path) {
         } else if (line.find("\"web_enabled\"") != std::string::npos) {
             state.web_enabled = extractBool(line);
         } else if (line.find("\"web_port\"") != std::string::npos) {
-            state.web_port = static_cast<int>(extractLong(line));
+            state.web_port = static_cast<int>(extractLong(line, state.web_port));
         } else if (line.find("\"bluetooth_audio_name\"") != std::string::npos) {
             state.bluetooth_audio_name = extractString(line);
         } else if (line.find("\"bluetooth_audio_address\"") != std::string::npos) {

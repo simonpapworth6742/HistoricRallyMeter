@@ -4,6 +4,7 @@
 #include "test_framework.h"
 #include "../config_file.h"
 #include "../rally_state.h"
+#include "../calculations.h"
 #include <fstream>
 #include <cstdio>
 
@@ -221,6 +222,55 @@ public:
             ConfigFile::load(loaded, test_config_file);
             ASSERT_STR_EQ(loaded.trip_history_m, "1234,-56,7");
             ASSERT_TRUE(loaded.arrival_tone_enabled);
+            cleanup();
+            return true;
+        });
+
+        suite->addTest("Wrapped negative start reading loads without throwing and reads as -6488", [this]() {
+            cleanup();
+            // From a production config: counter 2 at 19 with offset -6507 gave
+            // a trip start of -6488, stored as uint64. stoll threw on this and
+            // the app crashed at startup.
+            RallyState state;
+            state.counters = true;   // two wheel, so cntr2 is used
+            state.trip_start_cntr2 = static_cast<uint64_t>(static_cast<int64_t>(-6488));
+            state.segment_start_cntr2 = state.trip_start_cntr2;
+            ConfigFile::save(state, test_config_file);
+            RallyState loaded;
+            ConfigFile::load(loaded, test_config_file);
+            ASSERT_EQ(loaded.trip_start_cntr2, 18446744073709545128ULL);
+            ASSERT_EQ(static_cast<int64_t>(loaded.segment_start_cntr2), static_cast<int64_t>(-6488));
+            // Distance arithmetic sees the start as -6488: a live count of 12
+            // on both counters is 6500 counts from that start on counter 2.
+            loaded.trip_start_cntr1 = 12;
+            loaded.distance_offset_counts = 0;
+            int64_t d = calculateDistanceCounts(loaded, 12, 12, loaded.trip_start_cntr1, loaded.trip_start_cntr2);
+            ASSERT_EQ(d, 3250);   // (0 + 6500) / 2
+            cleanup();
+            return true;
+        });
+
+        suite->addTest("Unparseable numeric fields leave defaults and do not throw", [this]() {
+            cleanup();
+            std::ofstream f(test_config_file);
+            f << "{\n"
+                 "  \"calibration\": banana,\n"
+                 "  \"total_start_cntr1\": 99999999999999999999999,\n"
+                 "  \"rallyTimeOffset_ms\": ,\n"
+                 "  \"segments\": [\n"
+                 "    {\n"
+                 "      \"target_speed_kph\": nope,\n"
+                 "      \"distance_m\": 1000.0,\n"
+                 "      \"autoNext\": true\n"
+                 "    }\n"
+                 "  ]\n"
+                 "}\n";
+            f.close();
+            RallyState loaded;
+            ConfigFile::load(loaded, test_config_file);
+            ASSERT_EQ(loaded.calibration, 600000);
+            ASSERT_EQ(loaded.total_start_cntr1, 0u);
+            ASSERT_EQ(loaded.rallyTimeOffset_ms, 0);
             cleanup();
             return true;
         });

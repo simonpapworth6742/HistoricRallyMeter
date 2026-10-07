@@ -679,7 +679,9 @@ void updateDriverDisplay(AppData* data) {
         int64_t diff_ms = target_ms - current_time_ms;
         
         if (diff_ms > 0 && diff_ms <= 24LL * 3600 * 1000) {
-            int total_secs = static_cast<int>(diff_ms / 1000);
+            // Round up, so the last second reads 01 and 00 appears only at
+            // the start itself, in step with the rally clock's seconds.
+            int total_secs = static_cast<int>((diff_ms + 999) / 1000);
             int h = total_secs / 3600;
             int m = (total_secs % 3600) / 60;
             int s = total_secs % 60;

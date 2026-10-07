@@ -154,6 +154,8 @@ The counter chips stay powered for several minutes after the Pi has shut down, s
 
 The application does not store the last count it saw, and does not write the config file on a timer or while the car is moving. The config is written only when a setting, reset or segment change is made, on the power-loss reset above, and on a clean shutdown. Each write goes to a temporary file in the same directory that is then renamed over rally_config.json, so a Pi power cut during a write cannot leave a truncated config.
 
+The six start readings are 64-bit unsigned values. A trip or segment start includes the distance offset, so with a negative offset larger than the live count a start reading goes below zero and is stored wrapped (for example 18446744073709545128 for −6488); the distance arithmetic casts it back to signed and the result is right. The loader therefore reads the start readings as full 64-bit unsigned values, never narrowing them. Loading never throws: a numeric field that will not parse is left at its default, so a damaged or hand-edited config cannot stop the application starting.
+
 Calibration, As the wheels / gearbox rotate and the car moves forward, the amount the car travels in meters per counter increment has to be set via calibration. It is expected that there could be as few as one counter increment per wheel revolution and as many as sixteen. To ensure accuracy the calibration will be stored as the number of millimetres travelled per 1000 counts. Meters travelled = (count_diff * calibration) / 1000 / 1000. Keeping the calibration as a larger number enables integer maths to calculate speeds and distance travelled in centimetres. When updating the calibration new_cal = (input_meters * 1000 * 1000) / total_count_diff (to match mm/1000 counts).
 
  
@@ -184,7 +186,7 @@ The tones should sound from the stage start while within the stage. Once past th
 
 Updates per second is the number of times this display has been updated in a second, Rolling count of driver display render/update calls over the last full second.
 
-If auto_start_stage_at_rally_time relative to rally time is in the future by less than 24 hours, then overlayed on the drivers display in 30px a count down clock "T- hh:mm:ss" with a thick white border, when zero seconds is reached the "stage go" rountine must be triggered once, as if the co-piliot had pressed and confirmed "stage go", and the stored auto start time is cleared. It must not start the stage again on the following updates. Ahead/behind tones then follow the normal stage-go rules from that start.
+If auto_start_stage_at_rally_time relative to rally time is in the future by less than 24 hours, then overlayed on the drivers display in 30px a count down clock "T- hh:mm:ss" with a thick white border. The seconds are rounded up, so with 0.3 s to go it reads 00:00:01 and it reads 00:00:00 only at the instant of the start; this keeps it in step with the rally clock, which reads :59 until the minute turns, rather than showing zero a second early. When zero seconds is reached the "stage go" rountine must be triggered once, as if the co-piliot had pressed and confirmed "stage go", and the stored auto start time is cleared. It must not start the stage again on the following updates. Ahead/behind tones then follow the normal stage-go rules from that start.
 
 **Rally Gauge Display:**
 The ahead/behind timing is displayed as a 180-degree semicircular gauge (rally gauge style):
@@ -294,6 +296,7 @@ If a memory location has a segments stored then the recall button should be a wh
 
 The screen is two columns. The left third shows the current readings in one 20px font: the live sensor counts under the title "Current Sensor counts", "Using Sensor 1 only" or "Using Sensor 1&2 adv.", then total distance, the calculated count and the two counter counts, then the current calibration as mm/1000p and meters per pulse. The right two thirds is the calibration run, also in 20px text: Start, Stop and Set in a vertical column, the counting distance, the actual-distance entry, the new-calibration entry, and the keypad. The next step is shown in white: Start until it is pressed, then Stop, then Set, then Start again after Set. Along the bottom of the screen, as on the other pages: Set sensor 1, set both sensors, reset to 1m per pulse, and back at the right.
 Start remembers CNTR_1 and CNTR_2 and counts distance in metres and pulses up from zero. That distance is copied into the actual-distance entry while the run is going. Stop freezes that count. The rest of the rally meter keeps running. After Stop, the actual metres traveled can be edited, and the new calibration entry below it stays in step: changing the metres recalculates the calibration, and changing the calibration recalculates the metres. Set stores that calibration.
+A known calibration can also be typed in without a run, as when copying the figure from another rally meter: the new-calibration entry and Set are enabled whenever a run is not in progress. The actual-distance entry is enabled only after a Stop that counted pulses, because without pulses there is nothing for it to be linked to. With no run, Set stores the typed calibration (greater than zero) and ignores the distance entry; after a run, Set needs a distance between 1 and 100,000 m as before.
 The display should update the distances and counters every 10 ms while this screen is shown, but not when it is not displayed. After Stop, the calibration-run count does not advance.
 ```
 +------------------------------------------+----------------------------------------------------------------------------+
@@ -752,6 +755,8 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Load config with segments array containing multiple segments
 - Load config with empty segments array
 - Save config and verify all fields written correctly
+- A start reading saved as a wrapped negative (18446744073709545128) loads back to the same value, so the distance arithmetic sees −6488
+- Numeric fields that will not parse (out of range or not a number) leave the default and do not throw
 - Save config with multiple segments and verify JSON structure
 - Segment target_speed_counts_per_hour and distance_counts saved as double with 6 decimal places
 - Verify calibration defaults to 600000 when missing
@@ -879,6 +884,7 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Input validation accepts any distance above zero
 - Input validation rejects values above 100,000 meters
 - Save button calculates and stores new calibration
+- New calibration entry and Set are enabled with no run in progress; a typed calibration is stored by Set without a run; the distance entry stays disabled until a Stop with pulses
 - Back button returns without saving changes
 - Verify calibration update does not modify existing segment target speeds
 
@@ -906,6 +912,7 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Quick adjustment text: trip 1234 gives "-1234" for late start and "-2468" for missed turn; most recent history 2345 gives "-4690"; a trip or history of 0 or negative, or empty history, gives an empty text (button disabled)
 - Pressing a quick adjustment button subtracts that many metres of counts from the offset, saves and returns to TwinMaster
 - Stage Go dialog offers the next whole minute at least 10 seconds ahead, labelled hh:mm; pressing it stores that auto start time the same way as Auto Start Set, and the button disables once that minute is under 10 seconds away
+- The T- countdown rounds seconds up: 0.3 s to go reads 00:00:01, 1.0 s reads 00:00:01, 1.001 s reads 00:00:02; it never shows 00:00:00 while the start is still ahead
 
 ### Date/Time Setup Screen Tests
 - Display system clock in yyyy/mm/dd hh:mm:ss format
