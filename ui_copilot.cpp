@@ -110,8 +110,8 @@ static void applyCopilotCSS() {
         "button.setup-kb label { font-size: 14px; }"
         "button.rally-nudge { font-size: 16px; padding: 2px 4px; min-height: 36px; }"
         "button.rally-nudge label { font-size: 16px; }"
-        "button.adjust-quick { font-size: 16px; padding: 2px 4px; min-height: 48px; }"
-        "button.adjust-quick label { font-size: 16px; }"
+        "button.adjust-quick { font-size: 26px; padding: 2px 6px; }"
+        "button.adjust-quick label { font-size: 26px; }"
         ".adjust-readings { font-size: 28px; font-family: monospace; }"
         ".adjust-entry, .adjust-entry entry, button.adjust-entry, button.adjust-entry label { font-size: 28px; }"
         "button.adj-total { padding: 0; min-width: 40px; min-height: 0; }"
@@ -1456,11 +1456,11 @@ void updateAdjustDistanceDisplay(AppData* data) {
     // a button whose distance is not positive is disabled.
     std::vector<long> history = parseTripHistory(data->state->trip_history_m);
     long last_trip_m = history.empty() ? 0 : history[0];
-    struct Quick { const char* heading; const char* prefix; long base_m; int times; };
+    struct Quick { const char* heading; long base_m; int times; };
     const Quick quick[3] = {
-        {"Late to the start", "minus ", trip_m, 1},
-        {"Missed turn", "2x ", trip_m, 2},
-        {"Missed turn", "2x ", last_trip_m, 2},
+        {"Late to the start", trip_m, 1},
+        {"Missed turn 2x", trip_m, 2},
+        {"Missed turn 2x", last_trip_m, 2},
     };
     for (int i = 0; i < 3; i++) {
         GtkWidget* btn = data->adjustQuickButtons[i];
@@ -1468,7 +1468,7 @@ void updateAdjustDistanceDisplay(AppData* data) {
         std::string entry_text = quickAdjustmentText(quick[i].base_m, quick[i].times);
         // The value is shown negated ("-1,234 m") because that is what the
         // button does to the distance.
-        std::string caption = std::string(quick[i].heading) + "\n" + quick[i].prefix
+        std::string caption = std::string(quick[i].heading) + " "
                             + formatDistance(-quick[i].base_m, 1) + " m";
         gtk_button_set_label(GTK_BUTTON(btn), caption.c_str());
         g_object_set_data_full(G_OBJECT(btn), "quick-text", g_strdup(entry_text.c_str()), g_free);
@@ -1545,39 +1545,35 @@ static GtkWidget* createAdjustDistanceScreen(AppData* data) {
         gtk_box_pack_start(GTK_BOX(nudgeRow), btn, TRUE, TRUE, 0);
     }
 
-    // Quick adjustments: three buttons in the left half, under the nudges,
-    // because they all subtract distance, like the minus end of the nudges.
-    // Captions and sensitivity are set in updateAdjustDistanceDisplay; each
-    // applies at once.
-    GtkWidget* quickRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_box_set_homogeneous(GTK_BOX(quickRow), TRUE);
-    gtk_widget_set_margin_top(quickRow, 16);
-    gtk_box_pack_start(GTK_BOX(leftBox), quickRow, FALSE, FALSE, 0);
-    GtkWidget* quickButtons = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    data->adjustDistanceKeypad = createAdjustDistanceKeypad(data);
+    gtk_widget_set_valign(data->adjustDistanceKeypad, GTK_ALIGN_START);
+    gtk_box_pack_end(GTK_BOX(mainBox), data->adjustDistanceKeypad, FALSE, FALSE, 10);
+
+    // Bottom row: the three quick adjustments spread across the whole width
+    // to the left of back. They all subtract distance, so each caption shows
+    // a minus value. Captions and sensitivity are set in
+    // updateAdjustDistanceDisplay; each applies at once.
+    GtkWidget* bottomRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    gtk_box_pack_end(GTK_BOX(screen), bottomRow, FALSE, FALSE, 0);
+    GtkWidget* quickButtons = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
     gtk_box_set_homogeneous(GTK_BOX(quickButtons), TRUE);
-    gtk_box_pack_start(GTK_BOX(quickRow), quickButtons, TRUE, TRUE, 0);
-    gtk_box_pack_start(GTK_BOX(quickRow), gtk_label_new(""), TRUE, TRUE, 0);   // empty right half
+    gtk_box_pack_start(GTK_BOX(bottomRow), quickButtons, TRUE, TRUE, 0);
     for (int i = 0; i < 3; i++) {
         GtkWidget* btn = gtk_button_new_with_label("");
         gtk_style_context_add_class(gtk_widget_get_style_context(btn), "adjust-quick");
-        gtk_label_set_justify(GTK_LABEL(gtk_bin_get_child(GTK_BIN(btn))), GTK_JUSTIFY_CENTER);
+        gtk_widget_set_size_request(btn, -1, 43);
         gtk_widget_set_sensitive(btn, FALSE);
         g_signal_connect(btn, "clicked", G_CALLBACK(on_adjust_distance_quick), data);
         gtk_box_pack_start(GTK_BOX(quickButtons), btn, TRUE, TRUE, 0);
         data->adjustQuickButtons[i] = btn;
     }
 
-    data->adjustDistanceKeypad = createAdjustDistanceKeypad(data);
-    gtk_widget_set_valign(data->adjustDistanceKeypad, GTK_ALIGN_START);
-    gtk_box_pack_end(GTK_BOX(mainBox), data->adjustDistanceKeypad, FALSE, FALSE, 10);
-
     GtkWidget* backBtn = gtk_button_new_with_label("back");
     gtk_style_context_add_class(gtk_widget_get_style_context(backBtn), "nav-button");
     gtk_widget_set_size_request(backBtn, -1, 43);
     gtk_widget_set_hexpand(backBtn, FALSE);
-    gtk_widget_set_halign(backBtn, GTK_ALIGN_END);
     g_signal_connect(backBtn, "clicked", G_CALLBACK(on_show_twinmaster), data);
-    gtk_box_pack_end(GTK_BOX(screen), backBtn, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(bottomRow), backBtn, FALSE, FALSE, 0);
     return screen;
 }
 

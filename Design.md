@@ -531,10 +531,8 @@ Opened from the vertical [Adj] button on the Total row of TwinMaster. It sets `d
 |                                                                                    1    2    3            |
 |  [-1km] [-100m] [-10m] [-1m]  [+1m] [+10m] [+100m] [+1km]                          +    0    -            |
 |                                                                                 [C]  [   <--   ]          |
-|  [Late to the start] [ Missed turn ] [ Missed turn ]                                                     |
-|  [ minus -1,234 m  ] [ 2x -1,234 m ] [ 2x -2,345 m ]                                                     |
 +----------------------------------------------------------------------------------------------------------+
-|                                                                                              [back]      |
+|  [ Late to the start -1,234 m ] [   Missed turn 2x -1,234 m   ] [   Missed turn 2x -2,345 m   ]  [back]  |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
@@ -552,11 +550,11 @@ An empty entry or one that is not a number does nothing. [apply] converts the me
 
 The nudge buttons change only the entry box. [-1km] [-100m] [-10m] [-1m] subtract from the value in the box and [+1m] [+10m] [+100m] [+1km] add to it. An empty box is treated as "+0", so the first nudge produces a signed entry such as "+10" or "-100" that [apply] will add to the offset. A signed entry stays signed as it passes through zero ("+5" then [-10m] gives "-5"). An unsigned entry stays unsigned, and is held at 0 rather than going below it. The nudge buttons use the same 16px style as the Date/Time clock nudges.
 
-**Quick adjustment buttons.** Below the nudge row, after a gap, three two-line buttons sit in the left half of the area left of the keypad. They are on the left because they all subtract distance, like the minus end of the nudges, and the value on each caption carries a minus sign for the same reason. Each applies at once: it subtracts the metres in its caption from the offset exactly as "-N" [apply] would, saves, clears the entry and returns to TwinMaster. The captions are refreshed with the readings while the screen is visible, so they always name the distance they will remove:
+**Quick adjustment buttons.** Three buttons share the bottom row with [back], spread evenly across the whole screen width to its left, 26px bold on one line and at least the 43px height of [back]. Their captions read "Late to the start -1,234 m", "Missed turn 2x -1,234 m" and "Missed turn 2x -2,345 m"; the value carries a minus sign because, like the minus nudges, they only ever subtract distance. Each applies at once: it subtracts the metres in its caption from the offset exactly as "-N" [apply] would, saves, clears the entry and returns to TwinMaster. The captions are refreshed with the readings while the screen is visible, so they always name the distance they will remove:
 
-- [Late to the start / minus -xxx m] — xxx is the current trip. For when the trip was started (by stage go or the Trip button) before the car actually reached the start: it takes the total back to what it read when the trip started.
-- [Missed turn / 2x -xxx m] — xxx is the current trip. For when the trip was reset at the missed turn: the trip is the distance driven past it, and twice that is the drive out and back.
-- [Missed turn / 2x -yyy m] — yyy is the most recent entry in the trip history. For when the trip was reset again on turning round: the previous trip is the distance driven past the turn, and twice that is the drive out and back.
+- [Late to the start -xxx m] — xxx is the current trip. For when the trip was started (by stage go or the Trip button) before the car actually reached the start: it takes the total back to what it read when the trip started.
+- [Missed turn 2x -xxx m] — xxx is the current trip. For when the trip was reset at the missed turn: the trip is the distance driven past it, and twice that is the drive out and back.
+- [Missed turn 2x -yyy m] — yyy is the most recent entry in the trip history. For when the trip was reset again on turning round: the previous trip is the distance driven past the turn, and twice that is the drive out and back.
 
 A button is disabled when its distance is not positive (trip at or below zero, or no trip history yet), so it cannot add distance or do nothing.
 
