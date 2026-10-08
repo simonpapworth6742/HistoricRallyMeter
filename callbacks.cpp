@@ -1247,6 +1247,10 @@ void updateDateTimeDisplay(AppData* data) {
     snprintf(buf, sizeof(buf), "%02d:%02d:%02d",
              rally_tm->tm_hour, rally_tm->tm_min, rally_tm->tm_sec);
     if (data->rallyTimeLabel) gtk_label_set_text(data->rallyTimeLabel, buf);
+    if (data->rallyOffsetLabel) {
+        std::string text = "offset " + formatOffsetText(data->state->rallyTimeOffset_ms);
+        gtk_label_set_text(data->rallyOffsetLabel, text.c_str());
+    }
 
     refreshWebAccess(data);
     refreshNtpSyncButton(data);

@@ -424,8 +424,8 @@ All fonts to be 20px
 |  DATE/TIME SETUP                                                                                        |
 +----------------------------------------------------------------------------------------------------------+
 |  System Clock:  yyyy/mm/dd  hh:mm:ss                                               7    8    9            |
-|  Rally  Clock:  yyyy/mm/dd  hh:mm:ss                                               4    5    6            |
-|  [+1h][+10m][+1m][+10s][+1s][+10ms][Zero][-10ms][-1s][-10s][-1m][-10m][-1h]       1    2    3            |
+|  Rally  Clock:  yyyy/mm/dd  hh:mm:ss  offset +hh:mm:ss.ss                          4    5    6            |
+|  [+1h][+10m][+1m][+10s][+1s][+100ms][Zero][-100ms][-1s][-10s][-1m][-10m][-1h]     1    2    3            |
 |  Set Rally Clk: [yyyy/mm/dd] [hh:mm:ss] [Set]                                      /    0    :            |
 |                                                                                 [C]  [   <--   ]          |
 +----------------------------------------------------------------------------------------------------------+
@@ -435,7 +435,9 @@ All fonts to be 20px
 Display a numeric keypad for entry on the right, it is a different keypad to other screens as it has "/" and ":" 
 on it, but no ";" and ".".
 
-Under Rally Clock, a row of buttons adjusts `rallyTimeOffset_ms` and saves it. [+1h] [+10m] [+1m] [+10s] [+1s] [+10ms] add that much to the offset. [-10ms] [-1s] [-10s] [-1m] [-10m] [-1h] subtract it. [Zero] sets the offset to 0. The rally clock updates immediately.
+To the right of the rally clock time, the current `rallyTimeOffset_ms` is shown as "offset" followed by a signed hh:mm:ss.ss (hundredths of a second), e.g. "offset +01:00:00.00" or "offset -00:00:00.10", so the nudges can be seen taking effect and the offset read back exactly. It is refreshed with the clocks.
+
+Under Rally Clock, a row of buttons adjusts `rallyTimeOffset_ms` and saves it. [+1h] [+10m] [+1m] [+10s] [+1s] [+100ms] add that much to the offset. [-100ms] [-1s] [-10s] [-1m] [-10m] [-1h] subtract it. [Zero] sets the offset to 0. The rally clock updates immediately.
 
 [Set] sits immediately to the right of the time entry. It stores the rally clock offset and returns to TwinMaster. The bottom row buttons use the same 20px font and 43px height as the TwinMaster navigation buttons, and share the width of the row.
 
@@ -920,7 +922,8 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Input fields accept valid date and time values
 - Calculate rallyTimeOffset = input_rally_time_ms - system_time_ms
 - Set, immediately to the right of the time entry, stores the offset and returns to TwinMaster
-- The row under Rally Clock adds or subtracts 1h, 10m, 1m, 10s, 1s, or 10ms from the rally offset and saves it; Zero sets the offset to 0
+- The row under Rally Clock adds or subtracts 1h, 10m, 1m, 10s, 1s, or 100ms from the rally offset and saves it; Zero sets the offset to 0
+- The offset text is signed hh:mm:ss.ss: 3600000 ms gives "+01:00:00.00", -100 ms gives "-00:00:00.10", 0 gives "+00:00:00.00", 90125 ms gives "+00:01:30.12" (truncated to hundredths)
 - Bottom row buttons are 20px and 43px tall, the same as TwinMaster
 - NTP time sync is enabled only when the internet connection is full, and pressing it syncs the system clock from NTP
 - Back button returns without saving changes

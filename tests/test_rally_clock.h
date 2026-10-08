@@ -175,6 +175,15 @@ public:
             return true;
         });
 
+        suite->addTest("Rally offset text is signed hh:mm:ss.ss", []() {
+            ASSERT_EQ(formatOffsetText(3600000), std::string("+01:00:00.00"));
+            ASSERT_EQ(formatOffsetText(-100), std::string("-00:00:00.10"));
+            ASSERT_EQ(formatOffsetText(0), std::string("+00:00:00.00"));
+            ASSERT_EQ(formatOffsetText(90125), std::string("+00:01:30.12"));
+            ASSERT_EQ(formatOffsetText(-7200130), std::string("-02:00:00.13"));
+            return true;
+        });
+
         // Web state "autostart" line: "none" when unset, else local hh:mm
         suite->addTest("Auto start status formats none and hh:mm", []() {
             ASSERT_EQ(formatAutoStartStatus(0, 0), std::string("none"));

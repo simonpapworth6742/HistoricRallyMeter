@@ -1007,6 +1007,11 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->rallyTimeLabel)), "clock-label");
     gtk_label_set_xalign(data->rallyTimeLabel, 0.0);
     gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->rallyTimeLabel), 2, 1, 1, 1);
+    // The current offset beside the rally time, so nudges can be read back.
+    data->rallyOffsetLabel = GTK_LABEL(gtk_label_new(""));
+    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(data->rallyOffsetLabel)), "clock-label");
+    gtk_label_set_xalign(data->rallyOffsetLabel, 0.0);
+    gtk_grid_attach(GTK_GRID(clockGrid), GTK_WIDGET(data->rallyOffsetLabel), 3, 1, 1, 1);
 
     // Row 2: nudge the rally clock offset. Spans the clock columns so the
     // eleven buttons sit on the line immediately under Rally Clock.
@@ -1015,8 +1020,8 @@ GtkWidget* createDateTimeScreen(AppData* data) {
     struct Nudge { const char* label; int delta_ms; int zero; };
     const Nudge nudges[] = {
         {"+1h", 3600000, 0}, {"+10m", 600000, 0}, {"+1m", 60000, 0},
-        {"+10s", 10000, 0}, {"+1s", 1000, 0}, {"+10ms", 10, 0}, {"Zero", 0, 1},
-        {"-10ms", -10, 0}, {"-1s", -1000, 0}, {"-10s", -10000, 0}, {"-1m", -60000, 0},
+        {"+10s", 10000, 0}, {"+1s", 1000, 0}, {"+100ms", 100, 0}, {"Zero", 0, 1},
+        {"-100ms", -100, 0}, {"-1s", -1000, 0}, {"-10s", -10000, 0}, {"-1m", -60000, 0},
         {"-10m", -600000, 0}, {"-1h", -3600000, 0},
     };
     for (const Nudge& nudge : nudges) {

@@ -81,6 +81,10 @@ int64_t getRallyTime_ms(const RallyState& state);
 // Format time as HH:MM:SS
 std::string formatTime(int64_t time_ms);
 
+// Rally clock offset as signed hh:mm:ss.ss (hundredths, truncated), e.g.
+// "+01:00:00.00" or "-00:00:00.10".
+std::string formatOffsetText(int64_t offset_ms);
+
 // The auto start line for the web stage panel: "none" when no auto start is
 // set (minutes 0), otherwise the stored time as local hh:mm. epoch_ms is the
 // auto start epoch (2020-01-01 local) that the minutes count from.

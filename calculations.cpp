@@ -191,6 +191,20 @@ std::string formatTime(int64_t time_ms) {
     return std::string(buf);
 }
 
+std::string formatOffsetText(int64_t offset_ms) {
+    bool negative = offset_ms < 0;
+    int64_t ms = negative ? -offset_ms : offset_ms;
+    int64_t h = ms / 3600000;
+    int64_t m = (ms % 3600000) / 60000;
+    int64_t s = (ms % 60000) / 1000;
+    int64_t hundredths = (ms % 1000) / 10;
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%c%02lld:%02lld:%02lld.%02lld", negative ? '-' : '+',
+             static_cast<long long>(h), static_cast<long long>(m),
+             static_cast<long long>(s), static_cast<long long>(hundredths));
+    return std::string(buf);
+}
+
 std::string formatAutoStartStatus(uint64_t auto_start_minutes, int64_t epoch_ms) {
     if (auto_start_minutes == 0) return "none";
     time_t target_s = (epoch_ms + static_cast<int64_t>(auto_start_minutes) * 60000) / 1000;

@@ -160,6 +160,7 @@ struct AppData {
     GtkLabel* systemTimeLabel;
     GtkLabel* rallyClockLabel;
     GtkLabel* rallyTimeLabel;
+    GtkLabel* rallyOffsetLabel = nullptr;   // "offset +hh:mm:ss.ss" beside the rally time
     GtkEntry* dateEntry;
     GtkEntry* timeEntry;
     GtkWidget* ntpSyncBtn = nullptr;
