@@ -14,3 +14,7 @@ rally_config.json
 
 # Release tag written by the update script
 version.txt
+
+# Debug logs written when the Setup "Debug logs" option is on
+logs/
+test_debug_logs/

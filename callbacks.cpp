@@ -9,6 +9,7 @@
 #include "counter_poller.h"
 #include "tone_generator.h"
 #include "pi_setup.h"
+#include "debug_log.h"
 #include <cmath>
 #include <sstream>
 #include <iomanip>
@@ -531,7 +532,20 @@ gboolean update_display(gpointer user_data) {
     AppData* data = static_cast<AppData*>(user_data);
     
     // Poll counters (respects 5ms minimum interval)
-    data->poller->poll(data->counter1, data->counter2, data->register_addr);
+    bool polled = data->poller->poll(data->counter1, data->counter2, data->register_addr);
+
+    // Debug log: one row per actual counter read, with the total and trip
+    // as the displays show them.
+    if (polled && data->debugLog && data->debugLog->isRunning()) {
+        auto p = data->poller->getMostRecent();
+        int64_t total_counts = calculateDistanceCounts(*data->state, p.cntr1, p.cntr2,
+            data->state->total_start_cntr1, data->state->total_start_cntr2);
+        int64_t trip_counts = calculateDistanceCounts(*data->state, p.cntr1, p.cntr2,
+            data->state->trip_start_cntr1, data->state->trip_start_cntr2);
+        data->debugLog->record(p.time_ms, static_cast<uint32_t>(p.cntr1), static_cast<uint32_t>(p.cntr2),
+            countsToCentimeters(total_counts, data->state->calibration) / 100,
+            countsToCentimeters(trip_counts, data->state->calibration) / 100);
+    }
     
     // Check for auto-advance segments
     if (data->state->segment_current_number >= 0 && 
@@ -1669,7 +1683,7 @@ static std::string shellQuote(const std::string& s) {
     return out;
 }
 
-static std::string appDirectory() {
+std::string appDirectory() {
     char buf[4096];
     ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
     if (n <= 0) return ".";
@@ -1735,6 +1749,28 @@ gboolean on_arrival_tone_toggle(G_GNUC_UNUSED GtkSwitch* sw, gboolean state, gpo
     AppData* data = static_cast<AppData*>(user_data);
     data->state->arrival_tone_enabled = state;
     ConfigFile::save(*data->state);
+    return FALSE;
+}
+
+// Start a new debug log in logs/ beside the executable, or flush and close
+// the current one.
+void setDebugLogging(AppData* data, bool on) {
+    if (!data->debugLog) return;
+    if (on) {
+        auto now = std::chrono::system_clock::now();
+        int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now.time_since_epoch()).count();
+        data->debugLog->start(appDirectory() + "/logs", now_ms);
+    } else {
+        data->debugLog->stop();
+    }
+}
+
+gboolean on_debug_logs_toggle(G_GNUC_UNUSED GtkSwitch* sw, gboolean state, gpointer user_data) {
+    AppData* data = static_cast<AppData*>(user_data);
+    data->state->debug_logs_enabled = state;
+    ConfigFile::save(*data->state);
+    setDebugLogging(data, state);
     return FALSE;
 }
 

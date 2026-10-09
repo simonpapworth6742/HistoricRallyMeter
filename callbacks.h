@@ -2,6 +2,7 @@
 #define CALLBACKS_H
 
 #include <gtk/gtk.h>
+#include <string>
 #include "rally_types.h"
 
 gboolean on_window_delete(GtkWidget* widget, GdkEvent* event, gpointer user_data);
@@ -49,6 +50,9 @@ void on_rally_clock_nudge(GtkWidget* widget, gpointer user_data);
 void on_ntp_time_sync(GtkWidget* widget, gpointer user_data);
 gboolean on_force_single_display_toggle(GtkSwitch* sw, gboolean state, gpointer user_data);
 gboolean on_arrival_tone_toggle(GtkSwitch* sw, gboolean state, gpointer user_data);
+gboolean on_debug_logs_toggle(GtkSwitch* sw, gboolean state, gpointer user_data);
+void setDebugLogging(AppData* data, bool on);   // start a new logs/*.csv, or flush and close
+std::string appDirectory();                       // directory holding the executable
 void refreshSegmentList(AppData* data);
 void updateCalibrationDisplay(AppData* data);
 void updateDateTimeDisplay(AppData* data);

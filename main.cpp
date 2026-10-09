@@ -9,7 +9,9 @@
 #include <filesystem>
 #include <vector>
 #include <algorithm>
+#include <chrono>
 #include <gtk/gtk.h>
+#include <glib-unix.h>
 #include "i2c_counter.h"
 #include "rally_state.h"
 #include "config_file.h"
@@ -21,6 +23,7 @@
 #include "webserver/rally_web_server.h"
 #include "calculations.h"
 #include "tone_generator.h"
+#include "debug_log.h"
 
 // Structure to hold connector info from DRM
 struct DrmConnector {
@@ -359,6 +362,15 @@ int main(int argc, char* argv[]) {
         app_data.state = &state;
         app_data.poller = new CounterPoller();
         std::cerr << "[DEBUG] Step 7: CounterPoller created OK" << std::endl;
+        app_data.debugLog = new DebugLog();
+        {
+            // Debug logs older than 14 days go at startup (Design.md "Debug logs")
+            int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            int purged = DebugLog::purgeOlderThan(appDirectory() + "/logs", now_ms, 14);
+            if (purged > 0) std::cerr << "[DEBUG] Deleted " << purged << " debug log(s) older than 14 days" << std::endl;
+        }
+        if (state.debug_logs_enabled) setDebugLogging(&app_data, true);
         std::cerr << "[DEBUG] Step 8: Creating ToneGenerator..." << std::endl;
         app_data.toneGen = new ToneGenerator();
         std::cerr << "[DEBUG] Step 8a: ToneGenerator constructed OK" << std::endl;
@@ -597,6 +609,11 @@ int main(int argc, char* argv[]) {
         // Set up timer (10ms = 100Hz)
         std::cerr << "[DEBUG] Step 12: Setting up 10ms timer and entering gtk_main..." << std::endl;
         g_timeout_add(10, update_display, &app_data);
+
+        // SIGTERM/SIGINT (systemctl stop, pkill, Ctrl-C) end gtk_main
+        // normally so the debug log tail is written and servers stop cleanly.
+        g_unix_signal_add(SIGTERM, [](gpointer) -> gboolean { gtk_main_quit(); return G_SOURCE_REMOVE; }, nullptr);
+        g_unix_signal_add(SIGINT,  [](gpointer) -> gboolean { gtk_main_quit(); return G_SOURCE_REMOVE; }, nullptr);
         
         gtk_main();
         std::cerr << "[DEBUG] gtk_main returned normally" << std::endl;
@@ -609,6 +626,11 @@ int main(int argc, char* argv[]) {
             app_data.webServer->stop();
             delete app_data.webServer;
             app_data.webServer = nullptr;
+        }
+        if (app_data.debugLog) {
+            app_data.debugLog->stop();   // write the buffered tail of the run
+            delete app_data.debugLog;
+            app_data.debugLog = nullptr;
         }
         delete app_data.poller;
         return 0;

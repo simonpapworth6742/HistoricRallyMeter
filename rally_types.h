@@ -14,6 +14,7 @@ class RallyState;
 class CounterPoller;
 class ToneGenerator;
 class RallyWebServer;
+class DebugLog;
 
 // Segment structure (high precision)
 struct Segment {
@@ -189,6 +190,9 @@ struct AppData {
     // The cadence last handed to toneGen, so the web telemetry can tell the
     // phones what the speaker is playing. tone_ms 0 is silence.
     ToneCadence currentTone;
+
+    // CSV log of every counter poll while the Debug logs option is on.
+    DebugLog* debugLog = nullptr;
     
     int updateCount = 0;
     int64_t lastUpdateCountTime_ms = 0;

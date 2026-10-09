@@ -1356,6 +1356,17 @@ static GtkWidget* createSetupScreen(AppData* data) {
     gtk_box_pack_start(GTK_BOX(arrivalRow), arrivalSwitch, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(optionsCol), arrivalRow, FALSE, FALSE, 0);
 
+    GtkWidget* debugRow = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    GtkWidget* debugLabel = setupText("Debug logs");
+    gtk_widget_set_valign(debugLabel, GTK_ALIGN_CENTER);
+    GtkWidget* debugSwitch = gtk_switch_new();
+    gtk_switch_set_active(GTK_SWITCH(debugSwitch), data->state->debug_logs_enabled);
+    gtk_widget_set_valign(debugSwitch, GTK_ALIGN_CENTER);
+    g_signal_connect(debugSwitch, "state-set", G_CALLBACK(on_debug_logs_toggle), data);
+    gtk_box_pack_start(GTK_BOX(debugRow), debugLabel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(debugRow), debugSwitch, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(optionsCol), debugRow, FALSE, FALSE, 0);
+
     GtkWidget* networkCol = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
     gtk_widget_set_valign(networkCol, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(lower), networkCol, TRUE, TRUE, 0);

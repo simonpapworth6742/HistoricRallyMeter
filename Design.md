@@ -111,6 +111,7 @@ The purpose of the Historic Car Regulation Rally meter is to enable drivers and 
 
 Boolean units – false = KPH (default), true = MPH
 Boolean arrival_tone_enabled – true = play arrival.wav once when 500 m from the end of the current segment (see Segment arrival tone), default false. Set on the Setup screen.
+Boolean debug_logs_enabled – true = write every counter poll to a CSV file in the app's logs directory (see Debug logs), default false. Set on the Setup screen.
 long calibration = see calibration below, defaults to 600000.
 Boolean counters – false = One gearbox 32 bit counter CNTR_1, True= two wheel 32 bit counters CNTR_1 & CNTR_2, when set the number of counts from the total_start and trip_start is the average of CNTR_1 and CNTR_2
 ulong total_start_cntr1 - Total distance start count for CNTR_1
@@ -153,6 +154,17 @@ The counter chips stay powered for several minutes after the Pi has shut down, s
 - Either flag set: the meter has been off. Set the total, trip and segment start readings on both chips to the live counts, set the three start times to now, set segment_current_number to -1, clear the distance alarm, save the config once, and clear the flag on both chips.
 
 The application does not store the last count it saw, and does not write the config file on a timer or while the car is moving. The config is written only when a setting, reset or segment change is made, on the power-loss reset above, and on a clean shutdown. Each write goes to a temporary file in the same directory that is then renamed over rally_config.json, so a Pi power cut during a write cannot leave a truncated config.
+
+## Debug logs
+
+Some cars suffer RF interference or sensor faults that show as odd counts. To see exactly what the counters delivered, the Setup option "Debug logs" (`debug_logs_enabled`, default off) records every counter poll to a CSV file.
+
+- When the option is turned on, and at startup when it is already on, a new file is created in the `logs` directory beside the executable (created if missing), named for the moment it was created: `yyyy-mm-dd_hh-mm-ss.csv`. The first line is the header `time,time_ms,cntr1,cntr2,total_m,trip_m`.
+- Each time the polling loop makes a counter read (the poll that passes the poller's minimum-interval gate, so about every 10 ms), one row is recorded: the system time as `yyyy-mm-dd hh:mm:ss.mmm`, the same time in milliseconds since the epoch, the raw counter 1 and counter 2 values as read (after the poller's spurious-read substitution), and the total and trip distances in whole metres as the displays show them.
+- Rows go into a buffer of 100. When it is full the buffer is written to the file in one go, so the 10 ms loop is not slowed by a file write per poll. The buffer is also written when the option is turned off and on clean shutdown, so the tail of a run is not lost. SIGTERM and SIGINT (systemctl stop, pkill, Ctrl-C) end the main loop normally and count as a clean shutdown; only a power cut loses the unwritten rows, at most 99 of them (under a second).
+- Turning the option off closes the file. Turning it on again starts a new file. The `logs` directory is ignored by git.
+- At startup, before logging begins, every `.csv` in the `logs` directory whose last-modified time is more than 14 days before now is deleted. Nothing else in the directory is touched. Logs are not deleted at any other time.
+- The phone app's Logs tab lists the files in the `logs` directory, newest first, with their size, and downloads one to the phone on a press. The web server serves `GET /api/logs` (JSON array of `{"name","size","modified_ms"}`) and `GET /logs/<name>.csv` (the file as `text/csv` with a `Content-Disposition: attachment` header so the browser saves it). Only names made of letters, digits, `-`, `_` and `.` that end in `.csv` are served, so nothing outside the directory can be fetched. A file still being written downloads as far as its last flush. The file body is sent from a worker thread so a large download does not stall the polling loop; that thread touches only the socket and the file, never rally state.
 
 The six start readings are 64-bit unsigned values. A trip or segment start includes the distance offset, so with a negative offset larger than the live count a start reading goes below zero and is stored wrapped (for example 18446744073709545128 for −6488); the distance arithmetic casts it back to signed and the result is right. The loader therefore reads the start readings as full 64-bit unsigned values, never narrowing them. Loading never throws: a numeric field that will not parse is left at its default, so a damaged or hand-edited config cannot stop the application starting.
 
@@ -488,12 +500,12 @@ Opened from the cog button to the right of date/time on TwinMaster. Fonts are 16
 |  Options                                            |  Wi-Fi / Bluetooth                                  |
 |  speed units  [ KPH ]                               |  [Remember bluetooth audio]  name  [Connect] [Disconnect] |
 |  Arrival tone 500m before segment end  ( o)         |  [Hotspot: hostname]   [Join WiFi4hostname]         |
-|                                                     |  status line                                        |
+|  Debug logs  ( o)                                   |  status line                                        |
 |                                [exit app]  [Exit & Check for updates]  [back]                          |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
-Below the two lines the screen is split into two equal columns. The left column is headed "Options" and holds the option controls, one per row: speed units, then the Arrival tone switch. The right column is headed "Wi-Fi / Bluetooth" and holds the Bluetooth audio row, the Wi-Fi row and the status line, which wraps within that column. The navigation row stays across the bottom.
+Below the two lines the screen is split into two equal columns. The left column is headed "Options" and holds the option controls, one per row: speed units, then the Arrival tone switch, then the Debug logs switch. The right column is headed "Wi-Fi / Bluetooth" and holds the Bluetooth audio row, the Wi-Fi row and the status line, which wraps within that column. The navigation row stays across the bottom.
 
 The update script writes the checked-out release tag (vX.Y.Z) to `version.txt` in the project directory when it fetches the update. The Setup title reads that file. If the file is missing, the version is shown as unknown. The hostname is the Pi's hostname, without a domain suffix.
 
@@ -512,6 +524,7 @@ Options moved here from Date/Time:
 - force single display mode is a toggle that sets `force_single_display` in the rally config and forces single-display mode even when more than one screen exists. It takes effect the next time the app starts.
 - speed units is a button showing the current unit ("KPH" or "MPH"). Pressing it toggles `units` and saves. This is the only place the units are changed. Driver, co-pilot, and web speeds follow it.
 - Arrival tone 500m before segment end is a switch that sets `arrival_tone_enabled` and saves. See "Segment arrival tone" under TwinMaster for what it does.
+- Debug logs is a switch that sets `debug_logs_enabled` and saves. On starts a new CSV log of every counter poll; off flushes and closes it. See "Debug logs".
 - [Remember bluetooth audio] looks at the Pi's current audio output. If that output is a Bluetooth device, its name and address are written to `bluetooth_audio_name` and `bluetooth_audio_address` and the name is shown beside the button. If the Pi is not using a Bluetooth speaker, both entries are saved empty, the name is blank, and `bluetooth_audio_autoconnect` is cleared. The TwinMaster connect-speaker control is shown only while an address is stored.
 
 [Connect] and [Disconnect] are shown only when a Bluetooth address is recorded. Connect reconnects that speaker, makes it the audio output, trusts it in BlueZ, and sets `bluetooth_audio_autoconnect` so the app connects it again on startup. Disconnect disconnects it, moves the default output off that speaker, untrusts it so BlueZ does not reconnect it at login, and clears `bluetooth_audio_autoconnect`. The remembered name and address stay, so the buttons remain. The TwinMaster connect-speaker control still connects immediately and does not change the saved autoconnect choice.
@@ -664,7 +677,7 @@ The server-side integration and the browser client are kept in separate director
 
 ### Web client design
 
-The client is a single responsive page (`index.html`, `app.css`, `app.js`, `gauge.js`, no build step) that works in portrait or landscape on a phone browser, styled for legibility (large bold values, high contrast). It connects to the WebSocket on load, reconnects automatically if the connection drops, and rebuilds the connection when the page comes back to the foreground after telemetry has stopped. It has three views selectable by a tab bar: Live, Setup and Driver.
+The client is a single responsive page (`index.html`, `app.css`, `app.js`, `gauge.js`, no build step) that works in portrait or landscape on a phone browser, styled for legibility (large bold values, high contrast). It connects to the WebSocket on load, reconnects automatically if the connection drops, and rebuilds the connection when the page comes back to the foreground after telemetry has stopped. It has four views selectable by a tab bar: Live, Setup, Driver and Logs.
 
 The header has no title. It holds a per-phone sound button and the connection state. The phone plays the meter's ahead/behind tone itself from the `tone` field in telemetry, with the same cadence and pitch as the meter's speaker, and clicks on every button pressed on the page. Browsers allow sound only after the page has been touched, so the button reads "Tap for sound" until then, "Sound is on" while playing, and "Sound is off" when that phone has muted itself. The choice is remembered on that phone only and does not affect the meter. The tone stops within three seconds if telemetry stops arriving.
 
@@ -723,6 +736,10 @@ The header has no title. It holds a per-phone sound button and the connection st
 **3) Driver view**
 
 A canvas drawing of the compact driver gauge (needle, coloured scale band, digital readout, current and target speed, rally clock), drawn from the same telemetry fields as the Live view and only while this tab is showing. Under it are the same Total and Trip boxes (press to reset) and the same Adjust row as the Live view.
+
+**4) Logs view**
+
+The debug log files on the meter (see "Debug logs"), fetched from `GET /api/logs` each time the tab is opened and on a Refresh button. One row per file, newest first: the file name (which is its creation date and time) and its size. Pressing a row downloads that file to the phone via `GET /logs/<name>`; the browser's own download handling saves it. When there are no files the view says so. The list does not use the WebSocket; it is plain HTTP so it works even if the live connection is down.
 
 ### Configuration
 
@@ -939,6 +956,11 @@ The server is an unauthenticated service intended for a private, in-car subnet. 
 - Force single display, speed units, and Remember bluetooth audio behave as they did on Date/Time and are no longer on that screen
 - Below the two lines, the Options column on the left holds speed units and the Arrival tone switch; the Wi-Fi / Bluetooth column on the right holds the Bluetooth, Wi-Fi and status rows
 - The Arrival tone switch sets `arrival_tone_enabled` and saves; it round-trips through the config file
+- The Debug logs switch sets `debug_logs_enabled` and saves; it round-trips through the config file and defaults to false
+- Debug log: starting creates `logs/yyyy-mm-dd_hh-mm-ss.csv` with the header line; rows are held until 100 are buffered, then written together; stop writes the remainder and closes; a row reads `yyyy-mm-dd hh:mm:ss.mmm,ms,c1,c2,total,trip`
+- Debug log purge: a `.csv` modified more than 14 days ago is deleted, one modified 13 days ago and a non-`.csv` file of any age are kept; a missing directory is not an error
+- Debug log listing: files are returned newest first with name, size and modified time; non-`.csv` entries are left out
+- Debug log download name check: `2026-10-09_17-49-36.csv` is accepted; `../rally_config.json`, `a/b.csv`, `x.txt` and an empty name are refused
 - Arrival tone is due once per segment start the first time remaining is 500 m or less; not due again for the same start; due immediately for a segment shorter than 500 m; a segment already inside 500 m on the first check is marked sounded without sounding
 - Connect and Disconnect appear only when a Bluetooth address is saved; Connect sets autoconnect, Disconnect clears it and keeps the address
 - Hotspot uses the hostname as an open SSID; Join uses WiFi4 plus the hostname; the chosen NetworkManager connection autoconnects and the other Wi-Fi connections do not

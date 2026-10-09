@@ -226,6 +226,19 @@ public:
             return true;
         });
 
+        suite->addTest("Debug logs option defaults to false and round-trips through the config", [this]() {
+            cleanup();
+            RallyState state;
+            ASSERT_FALSE(state.debug_logs_enabled);
+            state.debug_logs_enabled = true;
+            ConfigFile::save(state, test_config_file);
+            RallyState loaded;
+            ConfigFile::load(loaded, test_config_file);
+            ASSERT_TRUE(loaded.debug_logs_enabled);
+            cleanup();
+            return true;
+        });
+
         suite->addTest("Wrapped negative start reading loads without throwing and reads as -6488", [this]() {
             cleanup();
             // From a production config: counter 2 at 19 with offset -6507 gave
